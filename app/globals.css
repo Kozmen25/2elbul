@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+:root {
+  --orange: #ff6b00;
+  --orange-dark: #db5700;
+  --ink: #161616;
+  --muted: #717171;
+  --line: #e8e8e8;
+  --soft: #f7f7f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: #ffd5b5;
+  color: #161616;
+}
+
+.container-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin-inline: auto;
+}
+
+.orange-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  background: var(--orange);
+  color: #ffffff;
+  font-weight: 700;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.orange-button:hover {
+  background: var(--orange-dark);
+}
+
+.orange-button:active {
+  transform: translateY(1px);
+}
+
+.field {
+  width: 100%;
+  border: 1px solid #dedede;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.field:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgb(255 107 0 / 12%);
+}
+
+@media (max-width: 640px) {
+  .container-shell {
+    width: min(100% - 24px, 1180px);
+  }
+}
