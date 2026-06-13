@@ -217,6 +217,48 @@ Bir ilanın `price` değeri güncellendiğinde trigger eski fiyatı otomatik ola
 
 ## Kaynaklardan İlan Aktarımı
 
+### Admin JSON Import
+
+Giriş yapmış kullanıcılar `/admin/import` sayfasından ortak formattaki JSON
+ilanlarını toplu olarak aktarabilir. Sayfa için şimdilik rol kontrolü yoktur;
+geçerli bir kullanıcı oturumu yeterlidir.
+
+`.env.local` ve Vercel ortam değişkenlerinde
+`SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalıdır. Bu anahtar yalnızca server
+action içinde kullanılır ve tarayıcıya gönderilmez.
+
+Örnek JSON:
+
+```json
+[
+  {
+    "product_name": "iPhone 13",
+    "title": "iPhone 13 128GB Temiz",
+    "price": 21000,
+    "city": "İstanbul",
+    "source": "Sahibinden",
+    "url": "https://example.com",
+    "condition": "İkinci El"
+  }
+]
+```
+
+Kullanım:
+
+1. Uygulamaya giriş yapın.
+2. `/admin/import` sayfasını açın.
+3. İlanları JSON dizisi olarak textarea alanına yapıştırın.
+4. **İlanları içe aktar** butonuna basın.
+5. Eklenen, daha önce var olan ve hatalı ilan sayılarını sonuç panelinden
+   kontrol edin.
+
+Aktarım sırasında `product_name` değeri `products.name` alanında aranır. Ürün
+yoksa oluşturulur, varsa mevcut `product_id` kullanılır. Aynı `listings.url`
+değeri daha önce kaydedilmişse ilan tekrar eklenmez. Fiyat hem number hem de
+sayısal string olarak kabul edilir. Tek seferde en fazla 500 kayıt işlenir.
+
+Hatalı kayıtlar sıra numarası, ilan başlığı ve hata açıklamasıyla listelenir.
+
 Sahibinden, Letgo ve Facebook Marketplace için ortak bir aktarım API'si
 bulunur. Altyapı sitelerin HTML sayfalarını kazımaz; kullanma yetkiniz olan resmi
 API, veri sağlayıcı, CSV dönüştürücü veya şirket içi entegrasyon çıktısını
@@ -315,6 +357,7 @@ npm run start
 - `/kayit` Yeni kullanıcı kaydı
 - `/hesabim` Korumalı kullanıcı hesabı
 - `/favoriler` Korumalı favori ilanlar
+- `/admin/import` Giriş gerektiren toplu JSON ilan aktarımı
 - `/gizlilik` Gizlilik bilgilendirmesi
 - `/kullanim-sartlari` Kullanım şartları
 - `/iletisim` İletişim bilgileri
@@ -339,8 +382,9 @@ olmalıdır:
 https://your-project.vercel.app
 ```
 
-Aşağıdaki server-only değişkenler yalnızca `POST /api/import/listings` ilan
-aktarım API'si kullanılacaksa gereklidir:
+Aşağıdaki server-only değişkenlerden `SUPABASE_SERVICE_ROLE_KEY`,
+`/admin/import` sayfası veya `POST /api/import/listings` API'si kullanılacaksa
+gereklidir. `IMPORT_API_KEY` yalnızca API rotası için gereklidir:
 
 ```text
 SUPABASE_SERVICE_ROLE_KEY
