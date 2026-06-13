@@ -219,9 +219,9 @@ Bir ilanın `price` değeri güncellendiğinde trigger eski fiyatı otomatik ola
 
 ### Admin JSON Import
 
-Giriş yapmış kullanıcılar `/admin/import` sayfasından ortak formattaki JSON
-ilanlarını toplu olarak aktarabilir. Sayfa için şimdilik rol kontrolü yoktur;
-geçerli bir kullanıcı oturumu yeterlidir.
+Yalnızca uygulamada tanımlanan admin e-posta adresleri `/admin/import`
+sayfasından ortak formattaki JSON ilanlarını toplu olarak aktarabilir. Yetki hem
+sayfa açılırken hem de server action çalışırken yeniden doğrulanır.
 
 `.env.local` ve Vercel ortam değişkenlerinde
 `SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalıdır. Bu anahtar yalnızca server

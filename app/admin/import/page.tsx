@@ -1,5 +1,6 @@
 import { DatabaseZap } from "lucide-react";
 import { redirect } from "next/navigation";
+import { isAdminEmail } from "@/lib/admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { AdminImportForm } from "./import-form";
 
@@ -13,6 +14,10 @@ export default async function AdminImportPage() {
 
   if (!data.user) {
     redirect("/giris?next=/admin/import");
+  }
+
+  if (!isAdminEmail(data.user.email)) {
+    redirect("/");
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { isAdminEmail } from "@/lib/admin";
 
 export type ImportError = {
   index: number;
@@ -46,6 +47,17 @@ export async function importAdminListings(
       console.error("Supabase admin import auth failed:", authError);
     }
     return emptyResult("error", "İlan içe aktarmak için giriş yapmalısınız.");
+  }
+
+  if (!isAdminEmail(user.email)) {
+    console.error("Unauthorized admin import attempt:", {
+      userId: user.id,
+      email: user.email ?? null,
+    });
+    return emptyResult(
+      "error",
+      "Bu sayfada ilan içe aktarma yetkiniz yok.",
+    );
   }
 
   const rawJson = String(formData.get("json") ?? "").trim();
