@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
-import type { Listing } from "@/lib/listings";
+import { LISTING_CONDITIONS, type Listing } from "@/lib/listings";
 import { createProductSlug } from "@/lib/product-slug";
 import { recordSearch } from "./actions";
 
@@ -88,13 +88,6 @@ export function SearchResultsClient({
   );
   const sources = useMemo(
     () => [...new Set(initialListings.map((listing) => listing.source))].sort(),
-    [initialListings],
-  );
-  const conditions = useMemo(
-    () =>
-      [...new Set(initialListings.map((listing) => listing.condition))].sort(
-        (a, b) => a.localeCompare(b, "tr"),
-      ),
     [initialListings],
   );
 
@@ -239,7 +232,7 @@ export function SearchResultsClient({
                 onChange={setCondition}
               >
                 <option value="">Tüm durumlar</option>
-                {conditions.map((item) => (
+                {LISTING_CONDITIONS.map((item) => (
                   <option key={item}>{item}</option>
                 ))}
               </FilterSelect>

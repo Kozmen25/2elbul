@@ -84,6 +84,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const cityCounts = [...countBy(listings, (listing) => listing.city).entries()]
     .map(([city, count]) => ({ city, count }))
     .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, "tr"));
+  const conditionCounts = ["İkinci El", "Yenilenmiş"].map((condition) => ({
+    condition,
+    count: listings.filter((listing) => listing.condition === condition).length,
+  }));
 
   const serverSupabase = await createSupabaseServerClient();
   const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
@@ -182,33 +186,67 @@ export default async function ProductPage({ params }: ProductPageProps) {
           emptyMessage="Bu ürün için henüz yeni ilan bulunmuyor."
         />
 
-        <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-          <SectionTitle
-            icon={MapPin}
-            eyebrow="Konum analizi"
-            title="Şehir dağılımı"
-          />
-          {cityCounts.length > 0 ? (
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {cityCounts.map(({ city, count }) => (
+        <div className="mt-8 grid gap-5 lg:grid-cols-2">
+          <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+            <SectionTitle
+              icon={MapPin}
+              eyebrow="Konum analizi"
+              title="Şehir dağılımı"
+            />
+            {cityCounts.length > 0 ? (
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+                {cityCounts.map(({ city, count }) => (
+                  <div
+                    key={city}
+                    className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-4"
+                  >
+                    <p className="truncate text-sm font-black" title={city}>
+                      {city}
+                    </p>
+                    <p className="mt-2 text-2xl font-black text-[#ff6b00]">
+                      {count}
+                    </p>
+                    <p className="text-xs text-black/40">ilan</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState text="Şehir dağılımı için henüz veri yok." />
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+            <SectionTitle
+              icon={Tag}
+              eyebrow="Cihaz durumu"
+              title="Durum dağılımı"
+            />
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              {conditionCounts.map(({ condition, count }) => (
                 <div
-                  key={city}
-                  className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-4"
+                  key={condition}
+                  className={`rounded-2xl border p-5 ${
+                    condition === "Yenilenmiş"
+                      ? "border-sky-200 bg-sky-50"
+                      : "border-black/8 bg-[#fafaf8]"
+                  }`}
                 >
-                  <p className="truncate text-sm font-black" title={city}>
-                    {city}
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-[#ff6b00]">
+                  <p className="text-sm font-black">{condition}</p>
+                  <p
+                    className={`mt-3 text-3xl font-black ${
+                      condition === "Yenilenmiş"
+                        ? "text-sky-700"
+                        : "text-[#ff6b00]"
+                    }`}
+                  >
                     {count}
                   </p>
                   <p className="text-xs text-black/40">ilan</p>
                 </div>
               ))}
             </div>
-          ) : (
-            <EmptyState text="Şehir dağılımı için henüz veri yok." />
-          )}
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   );
@@ -388,7 +426,13 @@ function ListingCard({
         alt={listing.title}
       />
       <div className="mt-4 flex items-start justify-between gap-3">
-        <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-black/50">
+        <span
+          className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+            listing.condition === "Yenilenmiş"
+              ? "border border-sky-200 bg-sky-50 text-sky-700"
+              : "bg-white text-black/50"
+          }`}
+        >
           {listing.condition}
         </span>
         <FavoriteButton

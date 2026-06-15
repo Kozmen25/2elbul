@@ -10,7 +10,9 @@ export default async function AdminStatsPage() {
         supabase.from("products").select("id, name"),
         supabase
           .from("listings")
-          .select("id, product_id, title, price, city, source, created_at"),
+          .select(
+            "id, product_id, title, price, city, source, condition, created_at",
+          ),
         supabase.from("favorites").select("listing_id"),
       ])
     : [null, null, null];
@@ -30,6 +32,18 @@ export default async function AdminStatsPage() {
     .sort((a, b) => a.label.localeCompare(b.label))
     .slice(-14);
   const sources = countBy(listings, (listing) => String(listing.source));
+  const conditionCounts = new Map(
+    countBy(listings, (listing) => String(listing.condition)).map((item) => [
+      item.label,
+      item.value,
+    ]),
+  );
+  const conditions = ["İkinci El", "Yeni gibi", "İyi", "Yenilenmiş"].map(
+    (label) => ({
+      label,
+      value: conditionCounts.get(label) ?? 0,
+    }),
+  );
   const cities = countBy(listings, (listing) => String(listing.city)).slice(
     0,
     12,
@@ -83,6 +97,7 @@ export default async function AdminStatsPage() {
         <div className="grid gap-5 xl:grid-cols-2">
           <StatPanel title="Günlük ilan eklenme sayısı" items={daily} />
           <StatPanel title="Kaynaklara göre ilan sayısı" items={sources} />
+          <StatPanel title="Durum dağılımı" items={conditions} />
           <StatPanel title="Şehirlere göre ilan sayısı" items={cities} />
           <StatPanel title="En çok ilana sahip ürünler" items={productCounts} />
           <StatPanel title="En çok favorilenen ilanlar" items={mostFavorited} />

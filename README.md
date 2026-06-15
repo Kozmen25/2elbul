@@ -292,6 +292,26 @@ action içinde kullanılır ve tarayıcıya gönderilmez.
 ]
 ```
 
+Yenilenmiş cihaz örneği:
+
+```json
+[
+  {
+    "product_name": "Samsung S24",
+    "title": "Samsung S24 256GB Yenilenmiş",
+    "price": 28999,
+    "city": "Ankara",
+    "source": "EasyCep",
+    "url": "https://example.com/yenilenmis-samsung-s24",
+    "condition": "Yenilenmiş",
+    "image_url": "https://example.com/samsung-s24.jpg"
+  }
+]
+```
+
+`condition` alanı ikinci el ilanlarda `İkinci El`, `Yeni gibi` veya `İyi`;
+yenilenmiş cihazlarda `Yenilenmiş` olarak gönderilebilir.
+
 Kullanım:
 
 1. Uygulamaya giriş yapın.
@@ -392,6 +412,12 @@ Desteklenen `source` değerleri:
 - `Sahibinden`
 - `Letgo`
 - `Facebook Marketplace`
+- `EasyCep`
+- `Getmobil`
+- `Yenilenmiş Market`
+- `Teknosa Yenilenmiş`
+- `Hepsiburada Yenilenmiş`
+- `MediaMarkt Yenilenmiş`
 
 Her adaptör kaynak alanlarını ortak ilan modeline dönüştürür. Tek istekte en
 fazla 100 ilan kabul edilir. `source + external_id` benzersiz olduğu için aynı
