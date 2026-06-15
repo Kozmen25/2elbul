@@ -11,9 +11,11 @@ import {
   Tag,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import type { Listing } from "@/lib/listings";
+import { createProductSlug } from "@/lib/product-slug";
 import { recordSearch } from "./actions";
 
 type SortOption = "price-asc" | "price-desc" | "newest";
@@ -270,9 +272,13 @@ export function SearchResultsClient({
                   className="flex min-w-0 flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
                 >
                   <div className="mb-4 flex items-start justify-between gap-4">
-                    <span className="rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700]">
-                      {listing.condition}
-                    </span>
+                    <Link
+                      href={`/product/${createProductSlug(listing.productName)}`}
+                      className="min-w-0 truncate rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700] hover:bg-[#ffe5d2]"
+                      title={`${listing.productName} ürün detayına git`}
+                    >
+                      {listing.productName}
+                    </Link>
                     <FavoriteButton
                       listingId={listing.id}
                       initialIsFavorite={favoriteIds.has(listing.id)}

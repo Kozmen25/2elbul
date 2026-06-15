@@ -104,8 +104,23 @@ Tablolar daha önce boş olarak oluşturulduysa aynı SQL dosyasını tekrar
 
 - `id`
 - `name`
+- `slug`
 - `category`
 - `created_at`
+
+### Ürün Slug Kurulumu
+
+Ürün detay sayfalarında `/product/iphone-13` biçimindeki adresleri kalıcı olarak
+kullanmak için Supabase **SQL Editor** içinde şu dosyayı çalıştırın:
+
+```text
+supabase/product-slugs.sql
+```
+
+Migration mevcut ürünlerin slug değerlerini ürün adından üretir, benzersiz
+indeks ekler ve yeni ürünlerde slug değerini otomatik oluşturan trigger'ı kurar.
+Migration henüz uygulanmamışsa uygulama `products.name` alanından slug üreterek
+ürün detay sayfalarını fallback olarak çalıştırır.
 
 `listings`:
 
@@ -365,6 +380,7 @@ npm run start
 
 - `/` Ana sayfa ve ürün araması
 - `/search?q=iPhone%2013` Supabase arama sonuçları, fiyat analizi ve filtreler
+- `/product/iphone-13` Ürün fiyat özeti, trend grafiği ve ilanlar
 - `/listing-ekle` Supabase ilan gönderme formu
 - `/giris` E-posta ve şifre ile giriş
 - `/kayit` Yeni kullanıcı kaydı

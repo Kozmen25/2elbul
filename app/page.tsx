@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { SearchBar } from "@/components/search-bar";
+import { createProductSlug } from "@/lib/product-slug";
 import {
   getHomeData,
   type HomeListing,
@@ -169,7 +170,7 @@ export default async function Home() {
             {popularListedProducts.map((product) => (
               <Link
                 key={product.productName}
-                href={`/search?q=${encodeURIComponent(product.productName)}`}
+                href={`/product/${createProductSlug(product.productName)}`}
                 className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.05)] sm:p-5"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -216,7 +217,7 @@ export default async function Home() {
             {popularProducts.map((product, index) => (
               <Link
                 key={product.productName}
-                href={`/search?q=${encodeURIComponent(product.productName)}`}
+                href={`/product/${createProductSlug(product.productName)}`}
                 className="rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 sm:p-5"
               >
                 <span className="text-xs font-black text-[#ff6b00]">
