@@ -217,11 +217,12 @@ Bir ilanın `price` değeri güncellendiğinde trigger eski fiyatı otomatik ola
 
 ## Kaynaklardan İlan Aktarımı
 
-### Admin JSON Import
+### Admin JSON, CSV ve Excel Import
 
 Yalnızca uygulamada tanımlanan admin e-posta adresleri `/admin/import`
-sayfasından ortak formattaki JSON ilanlarını toplu olarak aktarabilir. Yetki hem
-sayfa açılırken hem de server action çalışırken yeniden doğrulanır.
+sayfasından ortak formattaki JSON, CSV veya Excel ilanlarını toplu olarak
+aktarabilir. Yetki hem sayfa açılırken hem de server action çalışırken yeniden
+doğrulanır.
 
 `.env.local` ve Vercel ortam değişkenlerinde
 `SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalıdır. Bu anahtar yalnızca server
@@ -247,10 +248,22 @@ Kullanım:
 
 1. Uygulamaya giriş yapın.
 2. `/admin/import` sayfasını açın.
-3. İlanları JSON dizisi olarak textarea alanına yapıştırın.
-4. **İlanları içe aktar** butonuna basın.
-5. Eklenen, daha önce var olan ve hatalı ilan sayılarını sonuç panelinden
+3. İlanları JSON dizisi olarak textarea alanına yapıştırın veya `.csv`/`.xlsx`
+   dosyası seçin.
+4. İlk 10 kaydı ve toplam kayıt sayısını önizleme tablosunda kontrol edin.
+5. **İlanları içe aktar** butonuna basın.
+6. Eklenen, daha önce var olan ve hatalı ilan sayılarını sonuç panelinden
    kontrol edin.
+
+CSV ve Excel dosyalarının ilk satırında şu kolon başlıkları bulunmalıdır:
+
+```csv
+product_name,title,price,city,source,url,condition
+```
+
+Excel aktarımında `.xlsx` dosyasının yalnızca ilk sayfası okunur. CSV ve Excel
+dosyaları tarayıcıda JSON'a dönüştürülerek aynı güvenli server action üzerinden
+işlenir.
 
 Aktarım sırasında `product_name` değeri `products.name` alanında aranır. Ürün
 yoksa oluşturulur, varsa mevcut `product_id` kullanılır. Aynı `listings.url`

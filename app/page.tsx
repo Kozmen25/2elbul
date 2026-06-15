@@ -5,6 +5,7 @@ import {
   Clock3,
   Flame,
   FolderSearch2,
+  PackageSearch,
   MapPin,
   Search,
   Store,
@@ -58,6 +59,7 @@ export default async function Home() {
   const {
     latestListings,
     popularProducts,
+    popularListedProducts,
     priceDrops,
     popularCategories,
     error,
@@ -157,10 +159,57 @@ export default async function Home() {
       </HomeSection>
 
       <HomeSection
+        eyebrow="Piyasa özeti"
+        title="Popüler ürünler"
+        icon={PackageSearch}
+        muted
+      >
+        {popularListedProducts.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+            {popularListedProducts.map((product) => (
+              <Link
+                key={product.productName}
+                href={`/search?q=${encodeURIComponent(product.productName)}`}
+                className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.05)] sm:p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="min-w-0 break-words font-black">
+                    {product.productName}
+                  </h3>
+                  <span className="shrink-0 rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
+                    {product.listingCount} ilan
+                  </span>
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-black/7 pt-4">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
+                      En düşük
+                    </p>
+                    <p className="mt-1 text-sm font-black text-[#ff6b00] sm:text-base">
+                      {formatPrice(product.lowestPrice)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
+                      Ortalama
+                    </p>
+                    <p className="mt-1 text-sm font-black sm:text-base">
+                      {formatPrice(product.averagePrice)}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="Ürün istatistikleri ilanlar eklendikçe burada görünecek." />
+        )}
+      </HomeSection>
+
+      <HomeSection
         eyebrow="Arama trendleri"
         title="En çok aranan ürünler"
         icon={Flame}
-        muted
       >
         {popularProducts.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">

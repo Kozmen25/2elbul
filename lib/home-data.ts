@@ -18,6 +18,13 @@ export type PopularProduct = {
   searchCount: number;
 };
 
+export type PopularListedProduct = {
+  productName: string;
+  listingCount: number;
+  lowestPrice: number;
+  averagePrice: number;
+};
+
 export type PriceDrop = HomeListing & {
   previousPrice: number;
   discountRate: number;
@@ -31,6 +38,7 @@ export type PopularCategory = {
 export type HomeData = {
   latestListings: HomeListing[];
   popularProducts: PopularProduct[];
+  popularListedProducts: PopularListedProduct[];
   priceDrops: PriceDrop[];
   popularCategories: PopularCategory[];
   error: string;
@@ -60,6 +68,7 @@ export async function getHomeData(): Promise<HomeData> {
   const emptyData: HomeData = {
     latestListings: [],
     popularProducts: [],
+    popularListedProducts: [],
     priceDrops: [],
     popularCategories: [],
     error: "",
@@ -192,6 +201,38 @@ export async function getHomeData(): Promise<HomeData> {
     .sort((a, b) => b.searchCount - a.searchCount)
     .slice(0, 5);
 
+  const listedProductStats = new Map<
+    string,
+    { count: number; total: number; lowest: number }
+  >();
+  for (const listing of normalizedListings) {
+    const current = listedProductStats.get(listing.productName) ?? {
+      count: 0,
+      total: 0,
+      lowest: listing.price,
+    };
+    listedProductStats.set(listing.productName, {
+      count: current.count + 1,
+      total: current.total + listing.price,
+      lowest: Math.min(current.lowest, listing.price),
+    });
+  }
+
+  const popularListedProducts = [...listedProductStats.entries()]
+    .map(([productName, stats]) => ({
+      productName,
+      listingCount: stats.count,
+      lowestPrice: stats.lowest,
+      averagePrice: Math.round(stats.total / stats.count),
+    }))
+    .sort(
+      (a, b) =>
+        b.listingCount - a.listingCount ||
+        a.averagePrice - b.averagePrice ||
+        a.productName.localeCompare(b.productName, "tr"),
+    )
+    .slice(0, 8);
+
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const priceDrops = normalizedListings
     .filter(
@@ -226,6 +267,7 @@ export async function getHomeData(): Promise<HomeData> {
   return {
     latestListings: normalizedListings.slice(0, 6),
     popularProducts,
+    popularListedProducts,
     priceDrops,
     popularCategories: [...categoryCounts.entries()]
       .map(([name, listingCount]) => ({ name, listingCount }))
