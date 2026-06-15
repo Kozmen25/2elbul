@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ListingImage } from "@/components/listing-image";
 import type { Listing } from "@/lib/listings";
 import {
   getProductBySlug,
@@ -381,7 +382,12 @@ function ListingCard({
 }) {
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-[#fafaf8] p-5">
-      <div className="flex items-start justify-between gap-3">
+      <ListingImage
+        imageUrl={listing.imageUrl}
+        productName={listing.productName}
+        alt={listing.title}
+      />
+      <div className="mt-4 flex items-start justify-between gap-3">
         <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-black/50">
           {listing.condition}
         </span>

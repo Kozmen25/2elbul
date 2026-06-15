@@ -122,6 +122,18 @@ indeks ekler ve yeni ürünlerde slug değerini otomatik oluşturan trigger'ı k
 Migration henüz uygulanmamışsa uygulama `products.name` alanından slug üreterek
 ürün detay sayfalarını fallback olarak çalıştırır.
 
+### İlan Görseli Kurulumu
+
+İlanlara opsiyonel görsel bağlantısı eklemek için Supabase **SQL Editor** içinde
+şu dosyayı çalıştırın:
+
+```text
+supabase/listing-images.sql
+```
+
+`listings.image_url` boşsa veya uzak görsel yüklenemezse uygulama ürün adına
+göre telefon, ekran kartı, konsol, laptop veya genel SVG görseli gösterir.
+
 `listings`:
 
 - `id`
@@ -135,6 +147,7 @@ Migration henüz uygulanmamışsa uygulama `products.name` alanından slug üret
 - `source`
 - `url`
 - `condition`
+- `image_url`
 - `published_at`
 - `imported_at`
 - `raw_payload`
@@ -254,7 +267,8 @@ action içinde kullanılır ve tarayıcıya gönderilmez.
     "city": "İstanbul",
     "source": "Sahibinden",
     "url": "https://example.com",
-    "condition": "İkinci El"
+    "condition": "İkinci El",
+    "image_url": "https://example.com/iphone-13.jpg"
   }
 ]
 ```
@@ -273,12 +287,12 @@ Kullanım:
 CSV ve Excel dosyalarının ilk satırında şu kolon başlıkları bulunmalıdır:
 
 ```csv
-product_name,title,price,city,source,url,condition
+product_name,title,price,city,source,url,condition,image_url
 ```
 
 Excel aktarımında `.xlsx` dosyasının yalnızca ilk sayfası okunur. CSV ve Excel
 dosyaları tarayıcıda JSON'a dönüştürülerek aynı güvenli server action üzerinden
-işlenir.
+işlenir. `image_url` kolonu boş bırakılabilir.
 
 Aktarım sırasında `product_name` değeri `products.name` alanında aranır. Ürün
 yoksa oluşturulur, varsa mevcut `product_id` kullanılır. Aynı `listings.url`

@@ -21,6 +21,7 @@ export type Listing = {
   source: ListingSource;
   url: string;
   condition: ListingCondition;
+  imageUrl: string | null;
   createdAt: string;
 };
 

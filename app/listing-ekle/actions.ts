@@ -35,6 +35,7 @@ export async function submitListing(
   const city = String(formData.get("city") ?? "").trim();
   const source = String(formData.get("source") ?? "").trim();
   const url = String(formData.get("url") ?? "").trim();
+  const imageUrl = String(formData.get("image_url") ?? "").trim();
   const condition = String(formData.get("condition") ?? "").trim();
 
   if (
@@ -62,6 +63,13 @@ export async function submitListing(
     return {
       status: "error",
       message: "Lütfen geçerli bir ilan bağlantısı girin.",
+    };
+  }
+
+  if (imageUrl && !isHttpUrl(imageUrl)) {
+    return {
+      status: "error",
+      message: "Görsel linki geçerli bir http veya https adresi olmalıdır.",
     };
   }
 
@@ -100,6 +108,7 @@ export async function submitListing(
     source,
     url,
     condition,
+    image_url: imageUrl || null,
   });
 
   if (error) {
@@ -114,6 +123,14 @@ export async function submitListing(
     status: "success",
     message: "İlan başarıyla alındı, onaydan sonra yayınlanacak",
   };
+}
+
+function isHttpUrl(value: string) {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
 }
 
 function parsePrice(value: string) {

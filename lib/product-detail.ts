@@ -76,7 +76,7 @@ export async function getProductDetail(
   const { data, error } = await supabase
     .from("listings")
     .select(
-      "id, title, price, city, source, url, condition, created_at",
+      "id, title, price, city, source, url, condition, image_url, created_at",
     )
     .eq("product_id", product.id);
 
@@ -95,6 +95,7 @@ export async function getProductDetail(
       source: listing.source as ListingSource,
       url: String(listing.url),
       condition: listing.condition as ListingCondition,
+      imageUrl: listing.image_url ? String(listing.image_url) : null,
       createdAt: String(listing.created_at),
     }))
     .filter((listing) => Number.isFinite(listing.price));

@@ -15,7 +15,7 @@ type SearchPageProps = {
 };
 
 const listingColumns =
-  "id, product_id, title, price, city, source, url, condition, created_at";
+  "id, product_id, title, price, city, source, url, condition, image_url, created_at";
 
 type ListingRow = {
   id: string | number;
@@ -26,6 +26,7 @@ type ListingRow = {
   source: ListingSource;
   url: string;
   condition: ListingCondition;
+  image_url: string | null;
   created_at: string;
 };
 
@@ -140,6 +141,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               source: row.source,
               url: String(row.url),
               condition: row.condition,
+              imageUrl: row.image_url ? String(row.image_url) : null,
               createdAt: String(row.created_at),
             }))
             .sort((a, b) => a.price - b.price);

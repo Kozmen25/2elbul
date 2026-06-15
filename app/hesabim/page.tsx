@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
+import { ListingImage } from "@/components/listing-image";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const formatPrice = (price: number) =>
@@ -48,7 +49,7 @@ export default async function AccountPage() {
     supabase
       .from("listings")
       .select(
-        "id, product_id, title, price, city, source, url, condition, created_at",
+        "id, product_id, title, price, city, source, url, condition, image_url, created_at",
       )
       .eq("user_id", data.user.id)
       .order("created_at", { ascending: false })
@@ -146,7 +147,14 @@ export default async function AccountPage() {
                   key={listing.id}
                   className="flex flex-col rounded-2xl border border-black/8 bg-[#fafaf8] p-5"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <ListingImage
+                    imageUrl={
+                      listing.image_url ? String(listing.image_url) : null
+                    }
+                    productName={String(listing.title)}
+                    alt={String(listing.title)}
+                  />
+                  <div className="mt-4 flex items-start justify-between gap-3">
                     <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-black/50">
                       {String(listing.condition)}
                     </span>

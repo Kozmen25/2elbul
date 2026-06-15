@@ -23,7 +23,8 @@ const exampleJson = `[
     "city": "İstanbul",
     "source": "Sahibinden",
     "url": "https://example.com",
-    "condition": "İkinci El"
+    "condition": "İkinci El",
+    "image_url": ""
   }
 ]`;
 
@@ -44,6 +45,7 @@ const columns = [
   "source",
   "url",
   "condition",
+  "image_url",
 ] as const;
 
 type PreviewRecord = Record<string, unknown>;

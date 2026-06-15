@@ -10,6 +10,7 @@ export type HomeListing = {
   source: ListingSource;
   url: string;
   condition: ListingCondition;
+  imageUrl: string | null;
   createdAt: string;
 };
 
@@ -59,6 +60,7 @@ type ListingRow = {
   source: ListingSource;
   url: string;
   condition: ListingCondition;
+  image_url?: string | null;
   created_at: string;
   previous_price?: number | string | null;
   price_updated_at?: string | null;
@@ -94,7 +96,7 @@ export async function getHomeData(): Promise<HomeData> {
       supabase
         .from("listings")
         .select(
-          "id, product_id, title, price, city, source, url, condition, created_at",
+          "id, product_id, title, price, city, source, url, condition, image_url, created_at",
         )
         .order("created_at", { ascending: false }),
       supabase.from("products").select("id, category"),
@@ -174,6 +176,7 @@ export async function getHomeData(): Promise<HomeData> {
         source: listing.source,
         url: listing.url,
         condition: listing.condition,
+        imageUrl: listing.image_url ? String(listing.image_url) : null,
         createdAt: listing.created_at,
         previousPrice:
           listing.previous_price == null

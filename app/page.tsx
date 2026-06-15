@@ -13,6 +13,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { ListingImage } from "@/components/listing-image";
 import { SearchBar } from "@/components/search-bar";
 import { createProductSlug } from "@/lib/product-slug";
 import {
@@ -326,7 +327,12 @@ function HomeSection({
 function ListingPreview({ listing }: { listing: HomeListing }) {
   return (
     <article className="flex flex-col rounded-2xl border border-black/8 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.06)]">
-      <div className="flex items-center justify-between gap-3">
+      <ListingImage
+        imageUrl={listing.imageUrl}
+        productName={listing.productName}
+        alt={listing.title}
+      />
+      <div className="mt-4 flex items-center justify-between gap-3">
         <span className="rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700]">
           {listing.productName}
         </span>
@@ -361,7 +367,12 @@ function ListingPreview({ listing }: { listing: HomeListing }) {
 function PriceDropCard({ listing }: { listing: PriceDrop }) {
   return (
     <article className="rounded-2xl border border-green-200 bg-green-50/50 p-5">
-      <div className="flex items-center justify-between gap-3">
+      <ListingImage
+        imageUrl={listing.imageUrl}
+        productName={listing.productName}
+        alt={listing.title}
+      />
+      <div className="mt-4 flex items-center justify-between gap-3">
         <span className="rounded-full bg-green-100 px-3 py-1.5 text-xs font-black text-green-700">
           %{listing.discountRate} düştü
         </span>

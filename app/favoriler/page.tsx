@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ListingImage } from "@/components/listing-image";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const formatPrice = (price: number) =>
@@ -49,7 +50,7 @@ export default async function FavoritesPage() {
         supabase
           .from("listings")
           .select(
-            "id, product_id, title, price, city, source, url, condition, created_at",
+            "id, product_id, title, price, city, source, url, condition, image_url, created_at",
           )
           .in("id", listingIds),
         supabase.from("products").select("id, name"),
@@ -82,6 +83,7 @@ export default async function FavoritesPage() {
       source: String(listing.source),
       url: String(listing.url),
       condition: String(listing.condition),
+      imageUrl: listing.image_url ? String(listing.image_url) : null,
       createdAt: String(listing.created_at),
     }))
     .sort(
@@ -120,7 +122,12 @@ export default async function FavoritesPage() {
                 key={listing.id}
                 className="flex flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
               >
-                <div className="flex items-start justify-between gap-3">
+                <ListingImage
+                  imageUrl={listing.imageUrl}
+                  productName={listing.productName}
+                  alt={listing.title}
+                />
+                <div className="mt-4 flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold text-[#ff6b00]">
                       {listing.productName}

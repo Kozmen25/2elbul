@@ -27,6 +27,7 @@ type ImportListing = {
   source: string;
   url: string;
   condition: string;
+  imageUrl: string | null;
 };
 
 export async function importAdminListings(
@@ -176,6 +177,7 @@ export async function importAdminListings(
         source: listing.source,
         url: listing.url,
         condition: listing.condition,
+        image_url: listing.imageUrl,
       });
 
     if (listingInsertError) {
@@ -208,6 +210,7 @@ function normalizeListing(value: unknown): ImportListing {
   const condition = readRequiredString(record, "condition");
   const url = readRequiredString(record, "url");
   const price = parsePrice(record.price);
+  const imageUrl = readOptionalString(record, "image_url");
 
   let parsedUrl: URL;
   try {
@@ -220,6 +223,17 @@ function normalizeListing(value: unknown): ImportListing {
     throw new Error("url yalnızca http veya https olabilir.");
   }
 
+  if (imageUrl) {
+    try {
+      const parsedImageUrl = new URL(imageUrl);
+      if (!["http:", "https:"].includes(parsedImageUrl.protocol)) {
+        throw new Error();
+      }
+    } catch {
+      throw new Error("image_url geçerli bir http veya https bağlantısı olmalıdır.");
+    }
+  }
+
   return {
     productName,
     title,
@@ -228,6 +242,7 @@ function normalizeListing(value: unknown): ImportListing {
     source,
     url,
     condition,
+    imageUrl,
   };
 }
 
@@ -237,6 +252,15 @@ function readRequiredString(record: Record<string, unknown>, field: string) {
     throw new Error(`${field} alanı eksik.`);
   }
   return value.trim();
+}
+
+function readOptionalString(record: Record<string, unknown>, field: string) {
+  const value = record[field];
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new Error(`${field} metin olmalıdır.`);
+  }
+  return value.trim() || null;
 }
 
 function parsePrice(value: unknown) {

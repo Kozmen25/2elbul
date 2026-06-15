@@ -165,6 +165,16 @@ export function AddListingForm({
                   required
                 />
               </div>
+
+              <div className="sm:col-span-2">
+                <FormInput
+                  label="Görsel linki"
+                  name="image_url"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://..."
+                />
+              </div>
             </fieldset>
 
             <div className="mt-7 border-t border-black/8 pt-6">
