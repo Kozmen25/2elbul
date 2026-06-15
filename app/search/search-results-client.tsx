@@ -34,7 +34,7 @@ type PriceRating = {
     | "İyi fırsat"
     | "Normal fiyat"
     | "Pahalı"
-    | "Tek ilan, karşılaştırma için daha fazla veri gerekli";
+    | "Karşılaştırma için daha fazla veri gerekli";
   className: string;
 };
 
@@ -129,7 +129,7 @@ export function SearchResultsClient({
   }
 
   return (
-    <section className="container-shell py-10 sm:py-14">
+    <section className="container-shell min-w-0 py-10 sm:py-14">
       <div className="mb-8">
         <p className="text-sm font-bold text-[#ff6b00]">Aranan ürün</p>
         <h1 className="mt-2 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
@@ -191,7 +191,7 @@ export function SearchResultsClient({
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <FilterSelect label="Şehir" value={city} onChange={setCity}>
                 <option value="">Tüm şehirler</option>
                 {cities.map((item) => (
@@ -232,7 +232,7 @@ export function SearchResultsClient({
             </div>
           </div>
 
-          <div className="mb-10 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mb-10 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Bulunan ilan" value={`${results.length}`} />
             <StatCard
               label="En düşük fiyat"
@@ -267,7 +267,7 @@ export function SearchResultsClient({
               {results.map((listing) => (
                 <article
                   key={listing.id}
-                  className="flex flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
+                  className="flex min-w-0 flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
                 >
                   <div className="mb-4 flex items-start justify-between gap-4">
                     <span className="rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700]">
@@ -282,7 +282,7 @@ export function SearchResultsClient({
                     />
                   </div>
 
-                  <h3 className="min-h-12 text-base font-black leading-6">
+                  <h3 className="min-h-12 break-words text-base font-black leading-6">
                     {listing.title}
                   </h3>
                   <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
@@ -340,10 +340,9 @@ export function SearchResultsClient({
         </>
       ) : query ? (
         <div className="rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-16 text-center">
-          <h2 className="text-xl font-black">Eşleşen ilan bulunamadı.</h2>
-          <p className="mt-2 text-sm text-black/45">
-            Ürün adını kontrol ederek tekrar arayabilirsin.
-          </p>
+          <h2 className="text-xl font-black">
+            Bu arama için henüz ilan bulunamadı.
+          </h2>
         </div>
       ) : null}
     </section>
@@ -357,7 +356,7 @@ function getPriceRating(
 ): PriceRating {
   if (listingCount <= 1) {
     return {
-      label: "Tek ilan, karşılaştırma için daha fazla veri gerekli",
+      label: "Karşılaştırma için daha fazla veri gerekli",
       className: "border-blue-200 bg-blue-50 text-blue-700",
     };
   }
@@ -430,7 +429,7 @@ function FilterSelect({
   wide?: boolean;
 }) {
   return (
-    <label className={wide ? "col-span-2 lg:col-span-1" : ""}>
+    <label className={wide ? "sm:col-span-2 lg:col-span-1" : ""}>
       <span className="mb-1.5 block text-xs font-bold text-black/50">{label}</span>
       <select
         value={value}
