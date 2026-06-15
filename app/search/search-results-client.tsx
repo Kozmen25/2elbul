@@ -66,6 +66,7 @@ export function SearchResultsClient({
 }: SearchResultsClientProps) {
   const [city, setCity] = useState("");
   const [source, setSource] = useState("");
+  const [condition, setCondition] = useState("");
   const [minimumPrice, setMinimumPrice] = useState("");
   const [maximumPrice, setMaximumPrice] = useState("");
   const [sort, setSort] = useState<SortOption>("price-asc");
@@ -89,6 +90,13 @@ export function SearchResultsClient({
     () => [...new Set(initialListings.map((listing) => listing.source))].sort(),
     [initialListings],
   );
+  const conditions = useMemo(
+    () =>
+      [...new Set(initialListings.map((listing) => listing.condition))].sort(
+        (a, b) => a.localeCompare(b, "tr"),
+      ),
+    [initialListings],
+  );
 
   const results = useMemo(() => {
     const min = minimumPrice === "" ? null : Number(minimumPrice);
@@ -99,6 +107,7 @@ export function SearchResultsClient({
         (listing) =>
           (!city || listing.city === city) &&
           (!source || listing.source === source) &&
+          (!condition || listing.condition === condition) &&
           (min === null || listing.price >= min) &&
           (max === null || listing.price <= max),
       )
@@ -109,7 +118,15 @@ export function SearchResultsClient({
         }
         return a.price - b.price;
       });
-  }, [city, initialListings, maximumPrice, minimumPrice, sort, source]);
+  }, [
+    city,
+    condition,
+    initialListings,
+    maximumPrice,
+    minimumPrice,
+    sort,
+    source,
+  ]);
 
   const prices = results.map((listing) => listing.price);
   const lowestPrice = prices.length ? Math.min(...prices) : 0;
@@ -117,7 +134,13 @@ export function SearchResultsClient({
   const averagePrice = prices.length
     ? Math.round(prices.reduce((total, price) => total + price, 0) / prices.length)
     : 0;
-  const activeFilterCount = [city, source, minimumPrice, maximumPrice].filter(Boolean).length;
+  const activeFilterCount = [
+    city,
+    source,
+    condition,
+    minimumPrice,
+    maximumPrice,
+  ].filter(Boolean).length;
   const favoriteIds = useMemo(
     () => new Set(favoriteListingIds),
     [favoriteListingIds],
@@ -127,6 +150,7 @@ export function SearchResultsClient({
   function resetFilters() {
     setCity("");
     setSource("");
+    setCondition("");
     setMinimumPrice("");
     setMaximumPrice("");
   }
@@ -194,7 +218,7 @@ export function SearchResultsClient({
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
               <FilterSelect label="Şehir" value={city} onChange={setCity}>
                 <option value="">Tüm şehirler</option>
                 {cities.map((item) => (
@@ -205,6 +229,17 @@ export function SearchResultsClient({
               <FilterSelect label="Kaynak" value={source} onChange={setSource}>
                 <option value="">Tüm kaynaklar</option>
                 {sources.map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </FilterSelect>
+
+              <FilterSelect
+                label="Durum"
+                value={condition}
+                onChange={setCondition}
+              >
+                <option value="">Tüm durumlar</option>
+                {conditions.map((item) => (
                   <option key={item}>{item}</option>
                 ))}
               </FilterSelect>
@@ -317,7 +352,7 @@ export function SearchResultsClient({
                     </p>
                     <p className="flex items-center gap-2">
                       <Tag size={16} className="text-black/35" />
-                      {listing.condition}
+                      <ConditionBadge condition={listing.condition} />
                     </p>
                     <p className="flex items-center gap-2">
                       <CalendarDays size={16} className="text-black/35" />
@@ -358,6 +393,20 @@ export function SearchResultsClient({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ConditionBadge({ condition }: { condition: string }) {
+  return (
+    <span
+      className={
+        condition === "Yenilenmiş"
+          ? "rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700"
+          : ""
+      }
+    >
+      {condition}
+    </span>
   );
 }
 

@@ -1,27 +1,16 @@
 "use server";
 
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { isMissingStatusColumn } from "@/lib/listing-status";
+import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 
 export type SubmissionState = {
   status: "idle" | "success" | "error";
   message: string;
 };
 
-const allowedSources = new Set([
-  "Sahibinden",
-  "Letgo",
-  "Facebook Marketplace",
-  "Dolap",
-]);
-
-const allowedConditions = new Set([
-  "Sıfır",
-  "Yeni gibi",
-  "Çok iyi",
-  "İyi",
-  "İkinci El",
-  "Kullanılmış",
-]);
+const allowedSources = new Set<string>(LISTING_SOURCES);
+const allowedConditions = new Set<string>(LISTING_CONDITIONS);
 
 export async function submitListing(
   _previousState: SubmissionState,
@@ -100,7 +89,7 @@ export async function submitListing(
     };
   }
 
-  const { error } = await supabase.from("listings").insert({
+  const listingPayload = {
     product_id: productId,
     title,
     price,
@@ -109,13 +98,21 @@ export async function submitListing(
     url,
     condition,
     image_url: imageUrl || null,
+  };
+  let insertResult = await supabase.from("listings").insert({
+    ...listingPayload,
+    status: "pending",
   });
 
-  if (error) {
-    console.error("Supabase listing insert failed:", error);
+  if (insertResult.error && isMissingStatusColumn(insertResult.error)) {
+    insertResult = await supabase.from("listings").insert(listingPayload);
+  }
+
+  if (insertResult.error) {
+    console.error("Supabase listing insert failed:", insertResult.error);
     return {
       status: "error",
-      message: `İlan kaydedilemedi: ${error.message}`,
+      message: `İlan kaydedilemedi: ${insertResult.error.message}`,
     };
   }
 

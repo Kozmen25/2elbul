@@ -1,8 +1,8 @@
 "use server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isAdminEmail } from "@/lib/admin";
+import { requireAdminUser } from "@/lib/admin";
+import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 
 export type ImportError = {
   index: number;
@@ -30,36 +30,14 @@ type ImportListing = {
   imageUrl: string | null;
 };
 
+const allowedConditions = new Set<string>(LISTING_CONDITIONS);
+const allowedSources = new Set<string>(LISTING_SOURCES);
+
 export async function importAdminListings(
   _previousState: AdminImportState,
   formData: FormData,
 ): Promise<AdminImportState> {
-  const serverSupabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError,
-  } = (await serverSupabase?.auth.getUser()) ?? {
-    data: { user: null },
-    error: null,
-  };
-
-  if (authError || !user) {
-    if (authError) {
-      console.error("Supabase admin import auth failed:", authError);
-    }
-    return emptyResult("error", "İlan içe aktarmak için giriş yapmalısınız.");
-  }
-
-  if (!isAdminEmail(user.email)) {
-    console.error("Unauthorized admin import attempt:", {
-      userId: user.id,
-      email: user.email ?? null,
-    });
-    return emptyResult(
-      "error",
-      "Bu sayfada ilan içe aktarma yetkiniz yok.",
-    );
-  }
+  await requireAdminUser("/admin/import");
 
   const rawJson = String(formData.get("json") ?? "").trim();
   if (!rawJson) {
@@ -211,6 +189,18 @@ function normalizeListing(value: unknown): ImportListing {
   const url = readRequiredString(record, "url");
   const price = parsePrice(record.price);
   const imageUrl = readOptionalString(record, "image_url");
+
+  if (!allowedConditions.has(condition)) {
+    throw new Error(
+      `condition desteklenmiyor. Geçerli değerler: ${LISTING_CONDITIONS.join(", ")}.`,
+    );
+  }
+
+  if (!allowedSources.has(source)) {
+    throw new Error(
+      `source desteklenmiyor. Geçerli değerler: ${LISTING_SOURCES.join(", ")}.`,
+    );
+  }
 
   let parsedUrl: URL;
   try {

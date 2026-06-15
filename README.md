@@ -58,6 +58,10 @@ publishable key (`sb_publishable_...`) veya eski anon key değeri yazılabilir.
 Bu anahtarı `.env.local` veya Vercel Environment Variables içinde tutun; repoya
 commit etmeyin ve anahtara `NEXT_PUBLIC_` ön eki eklemeyin.
 
+Admin panelindeki sayaçlar, kullanıcı yönetimi ve veri düzenleme işlemleri de
+bu server-only anahtarı kullanır. Anahtar hiçbir client component içine
+aktarılmaz.
+
 Projedeki `.gitignore`, `.env*` dosyalarını yok sayar ve yalnızca
 `.env.example` dosyasının repoya eklenmesine izin verir. `.vercelignore` da
 Vercel CLI ile doğrudan deploy sırasında yerel ortam dosyalarını dışarıda tutar.
@@ -134,6 +138,20 @@ supabase/listing-images.sql
 `listings.image_url` boşsa veya uzak görsel yüklenemezse uygulama ürün adına
 göre telefon, ekran kartı, konsol, laptop veya genel SVG görseli gösterir.
 
+### İlan Onay Sistemi
+
+Admin panelinde ilanları beklemeye alma, yayınlama ve reddetme özelliklerini
+etkinleştirmek için Supabase **SQL Editor** içinde şu dosyayı çalıştırın:
+
+```text
+supabase/listing-status.sql
+```
+
+Migration `listings.status` kolonunu oluşturur. Desteklenen değerler:
+`pending`, `published` ve `rejected`. Mevcut ilanlar `published` olarak
+işaretlenir. Migration uygulanana kadar uygulama eski şemaya otomatik düşer ve
+tüm ilanları göstermeye devam eder.
+
 `listings`:
 
 - `id`
@@ -148,6 +166,7 @@ göre telefon, ekran kartı, konsol, laptop veya genel SVG görseli gösterir.
 - `url`
 - `condition`
 - `image_url`
+- `status`
 - `published_at`
 - `imported_at`
 - `raw_payload`
@@ -300,6 +319,41 @@ değeri daha önce kaydedilmişse ilan tekrar eklenmez. Fiyat hem number hem de
 sayısal string olarak kabul edilir. Tek seferde en fazla 500 kayıt işlenir.
 
 Hatalı kayıtlar sıra numarası, ilan başlığı ve hata açıklamasıyla listelenir.
+
+## Admin Paneli
+
+Admin paneli aşağıdaki rotalardan oluşur:
+
+- `/admin`: genel sayaçlar
+- `/admin/listings`: ilan filtreleme, düzenleme, silme ve moderasyon
+- `/admin/products`: ürün ve fiyat istatistikleri
+- `/admin/users`: Supabase Auth kullanıcıları ve favori sayıları
+- `/admin/import`: JSON, CSV ve Excel içe aktarma
+- `/admin/stats`: platform istatistikleri
+- `/admin/settings`: site ayarları taslağı
+
+Erişim yalnızca `lib/admin.ts` içinde tanımlı admin e-posta adreslerine açıktır:
+
+```text
+kozmen25@gmail.com
+ozmebomer9@gmail.com
+```
+
+Admin güvenliği hem ortak `/admin` layout katmanında hem de veri değiştiren
+server action fonksiyonlarında tekrar doğrulanır. Yetkisiz kullanıcılar admin
+işlemlerini doğrudan çağırsa bile işlem yapılmaz.
+
+Kurulum:
+
+1. Admin e-posta adreslerinden biriyle Supabase Auth üzerinden kayıt olun.
+2. `.env.local` ve Vercel ortamına `SUPABASE_SERVICE_ROLE_KEY` ekleyin.
+3. `supabase/product-slugs.sql`, `supabase/listing-images.sql` ve
+   `supabase/listing-status.sql` migration dosyalarını SQL Editor'da çalıştırın.
+4. Oturum açtıktan sonra `/admin` adresine gidin.
+
+Kullanıcı silme işlemi Supabase Auth Admin API üzerinden kalıcı olarak yapılır
+ve işlem öncesinde onay penceresi gösterilir. Admin hesapları kullanıcı
+listesinden silinmeye karşı korumalıdır.
 
 Sahibinden, Letgo ve Facebook Marketplace için ortak bir aktarım API'si
 bulunur. Altyapı sitelerin HTML sayfalarını kazımaz; kullanma yetkiniz olan resmi

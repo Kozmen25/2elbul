@@ -1,4 +1,5 @@
 import type { ListingCondition, ListingSource } from "@/lib/listings";
+import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createSupabaseClient } from "@/lib/supabase";
 
 export type HomeListing = {
@@ -93,12 +94,7 @@ export async function getHomeData(): Promise<HomeData> {
   ] =
     await Promise.all([
       supabase.from("products").select("id, name"),
-      supabase
-        .from("listings")
-        .select(
-          "id, product_id, title, price, city, source, url, condition, image_url, created_at",
-        )
-        .order("created_at", { ascending: false }),
+      getPublishedHomeListings(supabase),
       supabase.from("products").select("id, category"),
       supabase
         .from("listings")
@@ -278,4 +274,24 @@ export async function getHomeData(): Promise<HomeData> {
       .slice(0, 6),
     error: "",
   };
+}
+
+async function getPublishedHomeListings(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+) {
+  const columns =
+    "id, product_id, title, price, city, source, url, condition, image_url, created_at";
+  const publishedResult = await supabase
+    .from("listings")
+    .select(columns)
+    .eq("status", "published")
+    .order("created_at", { ascending: false });
+
+  if (!publishedResult.error) return publishedResult;
+  if (!isMissingStatusColumn(publishedResult.error)) return publishedResult;
+
+  return supabase
+    .from("listings")
+    .select(columns)
+    .order("created_at", { ascending: false });
 }

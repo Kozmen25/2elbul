@@ -27,6 +27,15 @@ body {
   overflow-x: hidden;
 }
 
+body:has(.admin-shell) > header,
+body:has(.admin-shell) > footer {
+  display: none;
+}
+
+body:has(.admin-shell) > main {
+  min-height: 100vh;
+}
+
 button,
 input,
 select,

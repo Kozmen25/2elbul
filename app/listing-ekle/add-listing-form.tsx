@@ -3,27 +3,15 @@
 import { CheckCircle2, ClipboardPlus, Send, TriangleAlert } from "lucide-react";
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
-import type { ProductOption } from "@/lib/listings";
+import {
+  LISTING_CONDITIONS,
+  LISTING_SOURCES,
+  type ProductOption,
+} from "@/lib/listings";
 import {
   submitListing,
   type SubmissionState,
 } from "./actions";
-
-const sources = [
-  "Sahibinden",
-  "Letgo",
-  "Facebook Marketplace",
-  "Dolap",
-];
-
-const conditions = [
-  "Sıfır",
-  "Yeni gibi",
-  "Çok iyi",
-  "İyi",
-  "İkinci El",
-  "Kullanılmış",
-];
 
 const cities = [
   "İstanbul",
@@ -143,14 +131,14 @@ export function AddListingForm({
 
               <FormSelect label="Kaynak" name="source" required>
                 <option value="">Kaynak seç</option>
-                {sources.map((source) => (
+                {LISTING_SOURCES.map((source) => (
                   <option key={source}>{source}</option>
                 ))}
               </FormSelect>
 
               <FormSelect label="Durum" name="condition" required>
                 <option value="">Durum seç</option>
-                {conditions.map((condition) => (
+                {LISTING_CONDITIONS.map((condition) => (
                   <option key={condition}>{condition}</option>
                 ))}
               </FormSelect>

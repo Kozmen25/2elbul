@@ -4,6 +4,7 @@ import type {
   ListingCondition,
   ListingSource,
 } from "@/lib/listings";
+import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SearchResultsClient } from "./search-results-client";
@@ -57,10 +58,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         .from("products")
         .select("id, name")
         .ilike("name", searchPattern),
-      supabase
-        .from("listings")
-        .select(listingColumns)
-        .ilike("title", searchPattern),
+      searchPublishedListingsByTitle(supabase, searchPattern),
     ]);
 
     if (matchingProductsResult.error) {
@@ -83,10 +81,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         (product) => product.id,
       );
       const productListingsResult = matchingProductIds.length
-        ? await supabase
-            .from("listings")
-            .select(listingColumns)
-            .in("product_id", matchingProductIds)
+        ? await searchPublishedListingsByProduct(
+            supabase,
+            matchingProductIds,
+          )
         : { data: [], error: null };
 
       if (productListingsResult.error) {
@@ -215,4 +213,38 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       />
     </>
   );
+}
+
+async function searchPublishedListingsByTitle(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  pattern: string,
+) {
+  const result = await supabase
+    .from("listings")
+    .select(listingColumns)
+    .eq("status", "published")
+    .ilike("title", pattern);
+  if (!result.error || !isMissingStatusColumn(result.error)) return result;
+
+  return supabase
+    .from("listings")
+    .select(listingColumns)
+    .ilike("title", pattern);
+}
+
+async function searchPublishedListingsByProduct(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  productIds: (string | number)[],
+) {
+  const result = await supabase
+    .from("listings")
+    .select(listingColumns)
+    .eq("status", "published")
+    .in("product_id", productIds);
+  if (!result.error || !isMissingStatusColumn(result.error)) return result;
+
+  return supabase
+    .from("listings")
+    .select(listingColumns)
+    .in("product_id", productIds);
 }

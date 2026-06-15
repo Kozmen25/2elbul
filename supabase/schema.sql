@@ -25,6 +25,8 @@ create table if not exists public.listings (
   url text not null,
   condition text not null,
   image_url text,
+  status text not null default 'published'
+    check (status in ('pending', 'published', 'rejected')),
   published_at timestamptz,
   imported_at timestamptz,
   raw_payload jsonb,
@@ -44,6 +46,7 @@ alter table public.listings
   add column if not exists url text,
   add column if not exists condition text,
   add column if not exists image_url text,
+  add column if not exists status text default 'published',
   add column if not exists published_at timestamptz,
   add column if not exists imported_at timestamptz,
   add column if not exists raw_payload jsonb,

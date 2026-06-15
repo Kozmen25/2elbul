@@ -2,7 +2,15 @@ import type { ListingCondition, ListingSource } from "@/lib/listings";
 
 export type ImportSource = Extract<
   ListingSource,
-  "Sahibinden" | "Letgo" | "Facebook Marketplace"
+  | "Sahibinden"
+  | "Letgo"
+  | "Facebook Marketplace"
+  | "EasyCep"
+  | "Getmobil"
+  | "Yenilenmiş Market"
+  | "Teknosa Yenilenmiş"
+  | "Hepsiburada Yenilenmiş"
+  | "MediaMarkt Yenilenmiş"
 >;
 
 export type RawImportListing = Record<string, unknown>;

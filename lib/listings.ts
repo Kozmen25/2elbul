@@ -2,7 +2,13 @@ export type ListingSource =
   | "Sahibinden"
   | "Letgo"
   | "Facebook Marketplace"
-  | "Dolap";
+  | "Dolap"
+  | "EasyCep"
+  | "Getmobil"
+  | "Yenilenmiş Market"
+  | "Teknosa Yenilenmiş"
+  | "Hepsiburada Yenilenmiş"
+  | "MediaMarkt Yenilenmiş";
 
 export type ListingCondition =
   | "Sıfır"
@@ -10,7 +16,31 @@ export type ListingCondition =
   | "Çok iyi"
   | "İyi"
   | "İkinci El"
-  | "Kullanılmış";
+  | "Kullanılmış"
+  | "Yenilenmiş";
+
+export const LISTING_SOURCES: ListingSource[] = [
+  "Sahibinden",
+  "Letgo",
+  "Facebook Marketplace",
+  "Dolap",
+  "EasyCep",
+  "Getmobil",
+  "Yenilenmiş Market",
+  "Teknosa Yenilenmiş",
+  "Hepsiburada Yenilenmiş",
+  "MediaMarkt Yenilenmiş",
+];
+
+export const LISTING_CONDITIONS: ListingCondition[] = [
+  "İkinci El",
+  "Yeni gibi",
+  "İyi",
+  "Yenilenmiş",
+  "Sıfır",
+  "Çok iyi",
+  "Kullanılmış",
+];
 
 export type Listing = {
   id: string;

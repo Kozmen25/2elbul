@@ -14,6 +14,8 @@ const conditionAliases: Record<string, ListingCondition> = {
   iyi: "İyi",
   "ikinci el": "İkinci El",
   kullanılmış: "Kullanılmış",
+  yenilenmiş: "Yenilenmiş",
+  refurbished: "Yenilenmiş",
 };
 
 function readString(
@@ -77,6 +79,12 @@ function readUrl(payload: RawImportListing, source: ImportSource): string {
     Sahibinden: ["sahibinden.com"],
     Letgo: ["letgo.com"],
     "Facebook Marketplace": ["facebook.com", "fb.com"],
+    EasyCep: ["easycep.com"],
+    Getmobil: ["getmobil.com"],
+    "Yenilenmiş Market": ["yenilenmismarket.com"],
+    "Teknosa Yenilenmiş": ["teknosa.com"],
+    "Hepsiburada Yenilenmiş": ["hepsiburada.com"],
+    "MediaMarkt Yenilenmiş": ["mediamarkt.com.tr"],
   };
 
   if (
@@ -162,4 +170,35 @@ export const importAdapters: Record<ImportSource, ImportAdapter> = {
         city: ["city", "location", "marketplace_city"],
       }),
   },
+  EasyCep: createRefurbishedAdapter("EasyCep"),
+  Getmobil: createRefurbishedAdapter("Getmobil"),
+  "Yenilenmiş Market": createRefurbishedAdapter("Yenilenmiş Market"),
+  "Teknosa Yenilenmiş": createRefurbishedAdapter("Teknosa Yenilenmiş"),
+  "Hepsiburada Yenilenmiş": createRefurbishedAdapter(
+    "Hepsiburada Yenilenmiş",
+  ),
+  "MediaMarkt Yenilenmiş": createRefurbishedAdapter(
+    "MediaMarkt Yenilenmiş",
+  ),
 };
+
+function createRefurbishedAdapter(source: ImportSource): ImportAdapter {
+  return {
+    source,
+    normalize: (payload) => {
+      const normalized = normalizeCommon(source, payload, {
+        id: ["externalId", "external_id", "listingId", "sku", "id"],
+        productName: ["productName", "product_name", "model", "name"],
+        title: ["title", "name", "listing_title"],
+        city: ["city", "location", "region"],
+      });
+      return {
+        ...normalized,
+        condition:
+          normalized.condition === "İkinci El"
+            ? "Yenilenmiş"
+            : normalized.condition,
+      };
+    },
+  };
+}

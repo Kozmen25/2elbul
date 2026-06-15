@@ -9,6 +9,12 @@ const supportedSources = new Set<ImportSource>([
   "Sahibinden",
   "Letgo",
   "Facebook Marketplace",
+  "EasyCep",
+  "Getmobil",
+  "Yenilenmiş Market",
+  "Teknosa Yenilenmiş",
+  "Hepsiburada Yenilenmiş",
+  "MediaMarkt Yenilenmiş",
 ]);
 
 export async function POST(request: Request) {

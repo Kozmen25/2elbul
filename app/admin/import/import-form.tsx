@@ -24,7 +24,17 @@ const exampleJson = `[
     "source": "Sahibinden",
     "url": "https://example.com",
     "condition": "İkinci El",
-    "image_url": ""
+    "image_url": "https://example.com/image.jpg"
+  },
+  {
+    "product_name": "Samsung S24",
+    "title": "Samsung S24 256GB Yenilenmiş",
+    "price": 28999,
+    "city": "Ankara",
+    "source": "EasyCep",
+    "url": "https://example.com/yenilenmis-samsung-s24",
+    "condition": "Yenilenmiş",
+    "image_url": "https://example.com/samsung-s24.jpg"
   }
 ]`;
 
@@ -124,7 +134,7 @@ export function AdminImportForm() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.6fr)]">
+    <div className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.45fr)]">
       <form
         action={formAction}
         className="min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-8"
@@ -275,7 +285,7 @@ function PreviewTable({
         </p>
       ) : preview.records.length > 0 ? (
         <div className="mt-3 max-w-full overflow-x-auto rounded-xl border border-black/8">
-          <table className="min-w-[900px] w-full border-collapse text-left text-xs">
+          <table className="w-full min-w-[1200px] border-collapse text-left text-xs">
             <thead className="bg-[#fafaf8]">
               <tr>
                 {columns.map((column) => (
@@ -291,7 +301,7 @@ function PreviewTable({
                   {columns.map((column) => (
                     <td
                       key={column}
-                      className="max-w-52 truncate px-3 py-3 text-black/60"
+                      className="max-w-64 truncate px-4 py-3.5 text-black/60"
                       title={String(record[column] ?? "")}
                     >
                       {String(record[column] ?? "—")}

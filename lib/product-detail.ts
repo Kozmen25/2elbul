@@ -4,6 +4,7 @@ import type {
   ListingCondition,
   ListingSource,
 } from "@/lib/listings";
+import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createProductSlug } from "@/lib/product-slug";
 import { createSupabaseClient } from "@/lib/supabase";
 
@@ -73,19 +74,35 @@ export async function getProductDetail(
   const supabase = createSupabaseClient();
   if (!product || !supabase) return null;
 
-  const { data, error } = await supabase
+  let listingsResult = await supabase
     .from("listings")
     .select(
       "id, title, price, city, source, url, condition, image_url, created_at",
     )
-    .eq("product_id", product.id);
+    .eq("product_id", product.id)
+    .eq("status", "published");
 
-  if (error) {
-    console.error("Supabase product listings query failed:", error);
+  if (
+    listingsResult.error &&
+    isMissingStatusColumn(listingsResult.error)
+  ) {
+    listingsResult = await supabase
+      .from("listings")
+      .select(
+        "id, title, price, city, source, url, condition, image_url, created_at",
+      )
+      .eq("product_id", product.id);
+  }
+
+  if (listingsResult.error) {
+    console.error(
+      "Supabase product listings query failed:",
+      listingsResult.error,
+    );
     return { product, listings: [] };
   }
 
-  const listings = (data ?? [])
+  const listings = (listingsResult.data ?? [])
     .map((listing) => ({
       id: String(listing.id),
       title: String(listing.title),
