@@ -304,6 +304,36 @@ Bu altyapı doğrudan üçüncü taraf siteleri kazımaz. Resmi API, izinli veri
 sağlayıcı, webhook veya ayrı bir bot worker çıktısının güvenli şekilde
 kaydedilmesi için yönetim ve kayıt katmanını hazırlar.
 
+### Demo Bot Testi
+
+Gerçek kaynaklara bağlanmadan bot ve moderasyon akışını test etmek için admin
+panelindeki demo bot kullanılabilir:
+
+1. Admin hesabıyla giriş yapın ve `/admin/sources` sayfasını açın.
+2. Test etmek istediğiniz kaynağın **Test çekimi yap** butonuna basın.
+3. Onaydan sonra sistem seçilen kaynak adına 10 adet sahte fakat gerçekçi ilan
+   üretir.
+4. Eksik ürünler `products` tablosuna eklenir, mevcut ürünlerin kimliği tekrar
+   kullanılır.
+5. Benzersiz demo URL'leri `https://demo.2elbul.com/{kaynak}/{çalışma}-{sıra}`
+   formatında oluşturulur.
+6. İlanlar `listings.status = 'pending'` olarak kaydedilir ve admin tarafından
+   yayınlanana kadar ziyaretçi sayfalarında gösterilmez.
+7. Eklenen ilanları `/admin/listings`, çalışma sonucunu
+   `/admin/bot-runs` sayfasından kontrol edin.
+
+Demo çalışması başlarken `bot_runs.status = 'running'` ve
+`run_type = 'test'` kaydedilir. İşlem sonunda bulunan, eklenen, atlanan ve
+hatalı kayıt sayaçlarıyla birlikte durum `success` veya `failed` olarak
+güncellenir. Kaynağın `last_run_at` ve `total_imported` alanları da otomatik
+güncellenir.
+
+EasyCep, Getmobil ve yenilenmiş cihaz mağazalarında üretilen demo ilanların
+çoğu `Yenilenmiş`; diğer kaynaklarda ise `İkinci El`, `Yeni gibi`, `İyi` veya
+`Yenilenmiş` durumlarından biri olur. Demo bot yalnızca server action içinde
+çalışır, admin yetkisini tekrar doğrular ve gerçek üçüncü taraf sitelere istek
+göndermez.
+
 ### Admin JSON, CSV ve Excel Import
 
 Yalnızca uygulamada tanımlanan admin e-posta adresleri `/admin/import`

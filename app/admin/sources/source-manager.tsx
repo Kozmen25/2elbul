@@ -1,11 +1,20 @@
 "use client";
 
-import { ExternalLink, Pencil, Plus, Power, Trash2, X } from "lucide-react";
+import {
+  Bot,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Power,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState, useTransition } from "react";
 import {
   createSource,
   deleteSource,
+  runDemoBot,
   toggleSource,
   updateSource,
   type SourceActionResult,
@@ -102,7 +111,7 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
-        <table className="w-full min-w-[1050px] text-left text-sm">
+        <table className="w-full min-w-[1220px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
               <th className="px-4 py-3">Kaynak</th>
@@ -163,6 +172,23 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `${source.name} için 10 adet demo ilan üretilsin mi?`,
+                          )
+                        ) {
+                          runAction(() => runDemoBot(source.id));
+                        }
+                      }}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] px-3 text-xs font-black text-[#d95700] disabled:opacity-50"
+                    >
+                      <Bot size={15} />
+                      Test çekimi yap
+                    </button>
                     <button
                       type="button"
                       disabled={pending}

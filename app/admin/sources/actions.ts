@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createDemoListings } from "./demo-data";
 
 export type SourceInput = {
   id?: number;
@@ -121,6 +122,210 @@ export async function deleteSource(id: number): Promise<SourceActionResult> {
   return { ok: true, message: "Kaynak silindi." };
 }
 
+export async function runDemoBot(
+  sourceId: number,
+): Promise<SourceActionResult> {
+  await requireAdminUser("/admin/sources");
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return missingAdminClient();
+  if (!Number.isInteger(sourceId)) {
+    return { ok: false, message: "Geçersiz kaynak kimliği." };
+  }
+
+  const { data: source, error: sourceError } = await supabase
+    .from("sources")
+    .select("id, name, slug, total_imported")
+    .eq("id", sourceId)
+    .maybeSingle();
+
+  if (sourceError || !source) {
+    if (sourceError) console.error("Demo bot source lookup failed:", sourceError);
+    return {
+      ok: false,
+      message: sourceError
+        ? `Kaynak okunamadı: ${sourceError.message}`
+        : "Kaynak bulunamadı.",
+    };
+  }
+
+  const startedAt = new Date();
+  const { data: botRun, error: runInsertError } = await supabase
+    .from("bot_runs")
+    .insert({
+      source_id: sourceId,
+      status: "running",
+      run_type: "test",
+      started_at: startedAt.toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (runInsertError || !botRun) {
+    if (runInsertError) {
+      console.error("Demo bot run insert failed:", runInsertError);
+    }
+    return {
+      ok: false,
+      message: runInsertError
+        ? `Bot çalışması başlatılamadı: ${runInsertError.message}`
+        : "Bot çalışma kaydı oluşturulamadı.",
+    };
+  }
+
+  const runId = Number(botRun.id);
+  const runToken = `${Date.now()}-${runId}`;
+  const listings = createDemoListings(
+    String(source.name),
+    String(source.slug),
+    runToken,
+  );
+  let imported = 0;
+  let skipped = 0;
+  let errorCount = 0;
+  const errors: string[] = [];
+
+  try {
+    const productNames = [
+      ...new Set(listings.map((listing) => listing.productName)),
+    ];
+    const { data: existingProducts, error: productLookupError } = await supabase
+      .from("products")
+      .select("id, name")
+      .in("name", productNames);
+
+    if (productLookupError) throw productLookupError;
+
+    const productIds = new Map(
+      (existingProducts ?? []).map((product) => [
+        String(product.name),
+        product.id as string | number,
+      ]),
+    );
+
+    for (const productName of productNames) {
+      if (productIds.has(productName)) continue;
+      const { data: createdProduct, error: productInsertError } = await supabase
+        .from("products")
+        .insert({ name: productName })
+        .select("id")
+        .single();
+
+      if (productInsertError || !createdProduct) {
+        const message =
+          productInsertError?.message ?? `${productName} oluşturulamadı.`;
+        console.error("Demo bot product insert failed:", productInsertError);
+        errors.push(`${productName}: ${message}`);
+        continue;
+      }
+      productIds.set(productName, createdProduct.id);
+    }
+
+    const urls = listings.map((listing) => listing.url);
+    const { data: existingListings, error: duplicateError } = await supabase
+      .from("listings")
+      .select("url")
+      .in("url", urls);
+
+    if (duplicateError) throw duplicateError;
+    const existingUrls = new Set(
+      (existingListings ?? []).map((listing) => String(listing.url)),
+    );
+
+    for (const listing of listings) {
+      if (existingUrls.has(listing.url)) {
+        skipped += 1;
+        continue;
+      }
+
+      const productId = productIds.get(listing.productName);
+      if (!productId) {
+        errorCount += 1;
+        errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
+        continue;
+      }
+
+      const { error: listingInsertError } = await supabase
+        .from("listings")
+        .insert({
+          product_id: productId,
+          title: listing.title,
+          price: listing.price,
+          city: listing.city,
+          source: listing.source,
+          url: listing.url,
+          condition: listing.condition,
+          image_url: listing.imageUrl,
+          status: listing.status,
+        });
+
+      if (listingInsertError) {
+        console.error("Demo bot listing insert failed:", listingInsertError);
+        errorCount += 1;
+        errors.push(`${listing.title}: ${listingInsertError.message}`);
+        continue;
+      }
+      imported += 1;
+    }
+  } catch (error) {
+    console.error("Demo bot execution failed:", error);
+    errorCount += Math.max(listings.length - imported - skipped, 1);
+    errors.push(getErrorMessage(error));
+  }
+
+  const finishedAt = new Date().toISOString();
+  const finalStatus = errorCount > 0 ? "failed" : "success";
+  const errorMessage = errors.length ? errors.join(" | ").slice(0, 4000) : null;
+
+  const { error: runUpdateError } = await supabase
+    .from("bot_runs")
+    .update({
+      status: finalStatus,
+      found_count: listings.length,
+      imported_count: imported,
+      skipped_count: skipped,
+      error_count: errorCount,
+      error_message: errorMessage,
+      finished_at: finishedAt,
+    })
+    .eq("id", runId);
+
+  if (runUpdateError) {
+    console.error("Demo bot run finalization failed:", runUpdateError);
+  }
+
+  const { error: sourceUpdateError } = await supabase
+    .from("sources")
+    .update({
+      last_run_at: finishedAt,
+      total_imported: Number(source.total_imported ?? 0) + imported,
+    })
+    .eq("id", sourceId);
+
+  if (sourceUpdateError) {
+    console.error("Demo bot source stats update failed:", sourceUpdateError);
+  }
+
+  revalidateSources();
+  revalidatePath("/admin/listings");
+  revalidatePath("/admin");
+
+  if (runUpdateError || sourceUpdateError) {
+    return {
+      ok: false,
+      message:
+        "İlanlar işlendi ancak bot istatistiklerinin bir bölümü güncellenemedi.",
+    };
+  }
+
+  return {
+    ok: finalStatus === "success",
+    message:
+      finalStatus === "success"
+        ? `Test çekimi tamamlandı: ${imported} eklendi, ${skipped} atlandı.`
+        : `Test çekimi hatayla tamamlandı: ${imported} eklendi, ${skipped} atlandı, ${errorCount} hata.`,
+  };
+}
+
 function validateSource(input: SourceInput): SourceActionResult {
   const name = input.name.trim();
   const slug = normalizeSlug(input.slug);
@@ -159,6 +364,19 @@ function missingAdminClient(): SourceActionResult {
     ok: false,
     message: "Supabase service-role bağlantısı yapılandırılmamış.",
   };
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return "Bilinmeyen bot hatası";
 }
 
 function revalidateSources() {
