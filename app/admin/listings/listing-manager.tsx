@@ -1,11 +1,12 @@
 "use client";
 
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ListingImage } from "@/components/listing-image";
 import {
   bulkDeleteListings,
+  bulkPublishListings,
   deleteListing,
   setListingStatus,
   updateListing,
@@ -37,6 +38,7 @@ export function ListingManager({
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<number[]>([]);
+  const [bulkMessage, setBulkMessage] = useState("");
   const [pending, startTransition] = useTransition();
 
   function bulkDelete() {
@@ -49,25 +51,57 @@ export function ListingManager({
     startTransition(async () => {
       await bulkDeleteListings(selected);
       setSelected([]);
+      setBulkMessage("");
       router.refresh();
+    });
+  }
+
+  function bulkPublish() {
+    if (selected.length === 0) return;
+    startTransition(async () => {
+      const result = await bulkPublishListings(selected);
+      setBulkMessage(result.message);
+      if (result.ok) {
+        setSelected([]);
+        router.refresh();
+      }
     });
   }
 
   return (
     <div className="min-w-0">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <p className="text-sm font-bold text-black/45">
           {listings.length} ilan gösteriliyor
         </p>
-        <button
-          type="button"
-          disabled={selected.length === 0 || pending}
-          onClick={bulkDelete}
-          className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-        >
-          Seçilenleri sil ({selected.length})
-        </button>
+        <div className="flex flex-col gap-2 min-[430px]:flex-row">
+          {statusAvailable && (
+            <button
+              type="button"
+              disabled={selected.length === 0 || pending}
+              onClick={bulkPublish}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+            >
+              <CheckCircle2 size={17} />
+              Seçilenleri Yayında yap ({selected.length})
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={selected.length === 0 || pending}
+            onClick={bulkDelete}
+            className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          >
+            Seçilenleri sil ({selected.length})
+          </button>
+        </div>
       </div>
+
+      {bulkMessage && (
+        <p className="mb-3 rounded-xl border border-black/8 bg-white px-4 py-3 text-sm font-bold">
+          {bulkMessage}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
         <table className="w-full min-w-[1180px] text-left text-sm">

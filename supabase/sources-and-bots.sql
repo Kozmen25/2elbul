@@ -5,6 +5,8 @@ create table if not exists public.sources (
   base_url text null,
   type text not null default 'marketplace',
   is_active boolean not null default true,
+  bot_listing_status text not null default 'pending'
+    check (bot_listing_status in ('pending', 'published')),
   last_run_at timestamptz null,
   total_imported bigint not null default 0,
   created_at timestamptz not null default now()
@@ -37,17 +39,33 @@ create index if not exists bot_runs_status_created_at_idx
 alter table public.sources enable row level security;
 alter table public.bot_runs enable row level security;
 
-insert into public.sources (name, slug, base_url, type)
+alter table public.sources
+  add column if not exists bot_listing_status text not null default 'pending';
+
+alter table public.sources
+  drop constraint if exists sources_bot_listing_status_check;
+
+alter table public.sources
+  add constraint sources_bot_listing_status_check
+  check (bot_listing_status in ('pending', 'published'));
+
+insert into public.sources (
+  name,
+  slug,
+  base_url,
+  type,
+  bot_listing_status
+)
 values
-  ('Sahibinden', 'sahibinden', 'https://www.sahibinden.com', 'marketplace'),
-  ('Letgo', 'letgo', 'https://www.letgo.com', 'marketplace'),
-  ('Facebook Marketplace', 'facebook-marketplace', 'https://www.facebook.com/marketplace', 'marketplace'),
-  ('EasyCep', 'easycep', 'https://easycep.com', 'refurbished'),
-  ('Getmobil', 'getmobil', 'https://getmobil.com', 'refurbished'),
-  ('Yenilenmiş Market', 'yenilenmis-market', 'https://yenilenmismarket.com', 'refurbished'),
-  ('Teknosa Yenilenmiş', 'teknosa-yenilenmis', 'https://www.teknosa.com', 'refurbished'),
-  ('Hepsiburada Yenilenmiş', 'hepsiburada-yenilenmis', 'https://www.hepsiburada.com', 'refurbished'),
-  ('MediaMarkt Yenilenmiş', 'mediamarkt-yenilenmis', 'https://www.mediamarkt.com.tr', 'refurbished')
+  ('Sahibinden', 'sahibinden', 'https://www.sahibinden.com', 'marketplace', 'pending'),
+  ('Letgo', 'letgo', 'https://www.letgo.com', 'marketplace', 'pending'),
+  ('Facebook Marketplace', 'facebook-marketplace', 'https://www.facebook.com/marketplace', 'marketplace', 'pending'),
+  ('EasyCep', 'easycep', 'https://easycep.com', 'refurbished', 'published'),
+  ('Getmobil', 'getmobil', 'https://getmobil.com', 'refurbished', 'pending'),
+  ('Yenilenmiş Market', 'yenilenmis-market', 'https://yenilenmismarket.com', 'refurbished', 'pending'),
+  ('Teknosa Yenilenmiş', 'teknosa-yenilenmis', 'https://www.teknosa.com', 'refurbished', 'pending'),
+  ('Hepsiburada Yenilenmiş', 'hepsiburada-yenilenmis', 'https://www.hepsiburada.com', 'refurbished', 'pending'),
+  ('MediaMarkt Yenilenmiş', 'mediamarkt-yenilenmis', 'https://www.mediamarkt.com.tr', 'refurbished', 'pending')
 on conflict (slug) do update
 set
   name = excluded.name,

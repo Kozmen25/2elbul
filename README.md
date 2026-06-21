@@ -274,6 +274,22 @@ sonuçlarını saklamak için Supabase **SQL Editor** içinde şu migration dosy
 supabase/sources-and-bots.sql
 ```
 
+Kaynak ve bot tabloları daha önce kurulduysa bot ilanlarının yayın davranışını
+eklemek için ayrıca şu migration dosyasını çalıştırın:
+
+```text
+supabase/source-bot-publish-mode.sql
+```
+
+Bu migration `sources.bot_listing_status` kolonunu ekler. Değerler:
+
+- `pending`: Bot ilanlarını yönetici onayına gönderir.
+- `published`: Bot ilanlarını doğrudan arama sonuçlarında yayınlar.
+
+EasyCep kaynağı migration sonrasında varsayılan olarak `published`, diğer
+kaynaklar `pending` olarak ayarlanır. Ayar `/admin/sources` sayfasındaki kaynak
+düzenleme penceresinden değiştirilebilir.
+
 Migration şu tabloları oluşturur:
 
 - `sources`: kaynak adı, slug, site adresi, kaynak tipi, aktiflik durumu, son
@@ -317,8 +333,8 @@ panelindeki demo bot kullanılabilir:
    kullanılır.
 5. Benzersiz demo URL'leri `https://demo.2elbul.com/{kaynak}/{çalışma}-{sıra}`
    formatında oluşturulur.
-6. İlanlar `listings.status = 'pending'` olarak kaydedilir ve admin tarafından
-   yayınlanana kadar ziyaretçi sayfalarında gösterilmez.
+6. İlanlar kaynağın bot ayarına göre `pending` veya `published` olarak
+   kaydedilir. EasyCep varsayılan olarak doğrudan yayınlanır.
 7. Eklenen ilanları `/admin/listings`, çalışma sonucunu
    `/admin/bot-runs` sayfasından kontrol edin.
 
@@ -333,6 +349,16 @@ EasyCep, Getmobil ve yenilenmiş cihaz mağazalarında üretilen demo ilanların
 `Yenilenmiş` durumlarından biri olur. Demo bot yalnızca server action içinde
 çalışır, admin yetkisini tekrar doğrular ve gerçek üçüncü taraf sitelere istek
 göndermez.
+
+Pending ilanları toplu yayınlamak için:
+
+1. `/admin/listings` sayfasını açın.
+2. Satır seçim kutularından ilanları seçin veya başlıktaki kutuyla tüm görünen
+   ilanları seçin.
+3. **Seçilenleri Yayında yap** butonuna basın.
+
+Toplu işlem yalnızca admin server action üzerinden çalışır ve seçilen ilanların
+`status` değerini `published` olarak günceller.
 
 ### Admin JSON, CSV ve Excel Import
 
@@ -440,8 +466,9 @@ Kurulum:
 1. Admin e-posta adreslerinden biriyle Supabase Auth üzerinden kayıt olun.
 2. `.env.local` ve Vercel ortamına `SUPABASE_SERVICE_ROLE_KEY` ekleyin.
 3. `supabase/product-slugs.sql`, `supabase/listing-images.sql`,
-   `supabase/listing-status.sql` ve `supabase/sources-and-bots.sql` migration
-   dosyalarını SQL Editor'da çalıştırın.
+   `supabase/listing-status.sql`, `supabase/sources-and-bots.sql` ve
+   `supabase/source-bot-publish-mode.sql` migration dosyalarını SQL Editor'da
+   çalıştırın.
 4. Oturum açtıktan sonra `/admin` adresine gidin.
 
 Kullanıcı silme işlemi Supabase Auth Admin API üzerinden kalıcı olarak yapılır

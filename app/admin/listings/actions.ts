@@ -90,6 +90,34 @@ export async function bulkDeleteListings(ids: number[]) {
   return { ok: true };
 }
 
+export async function bulkPublishListings(ids: number[]) {
+  await requireAdminUser("/admin/listings");
+  const supabase = createSupabaseAdminClient();
+  const validIds = [...new Set(ids.filter(Number.isInteger))];
+  if (!supabase || validIds.length === 0) {
+    return { ok: false, message: "Yayınlanacak ilan seçilmedi." };
+  }
+
+  const { error } = await supabase
+    .from("listings")
+    .update({ status: "published" })
+    .in("id", validIds);
+
+  if (error) {
+    console.error("Admin bulk listing publish failed:", error);
+    return {
+      ok: false,
+      message: `İlanlar yayınlanamadı: ${error.message}`,
+    };
+  }
+
+  revalidateAdminListings();
+  return {
+    ok: true,
+    message: `${validIds.length} ilan yayına alındı.`,
+  };
+}
+
 function revalidateAdminListings() {
   revalidatePath("/admin");
   revalidatePath("/admin/listings");

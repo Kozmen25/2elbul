@@ -11,6 +11,7 @@ export type SourceInput = {
   slug: string;
   baseUrl: string;
   type: string;
+  botListingStatus: "pending" | "published";
 };
 
 export type SourceActionResult = {
@@ -28,16 +29,29 @@ export async function createSource(
   const validated = validateSource(input);
   if (!validated.ok) return validated;
 
-  const { error } = await supabase.from("sources").insert({
+  const payload = {
     name: input.name.trim(),
     slug: normalizeSlug(input.slug),
     base_url: normalizeOptionalUrl(input.baseUrl),
     type: input.type.trim() || "marketplace",
-  });
+    bot_listing_status: input.botListingStatus,
+  };
+  let insertResult = await supabase.from("sources").insert(payload);
 
-  if (error) {
-    console.error("Admin source create failed:", error);
-    return { ok: false, message: `Kaynak eklenemedi: ${error.message}` };
+  if (
+    insertResult.error &&
+    isMissingBotListingStatusColumn(insertResult.error)
+  ) {
+    const { bot_listing_status: _status, ...legacyPayload } = payload;
+    insertResult = await supabase.from("sources").insert(legacyPayload);
+  }
+
+  if (insertResult.error) {
+    console.error("Admin source create failed:", insertResult.error);
+    return {
+      ok: false,
+      message: `Kaynak eklenemedi: ${insertResult.error.message}`,
+    };
   }
 
   revalidateSources();
@@ -57,19 +71,35 @@ export async function updateSource(
     return { ok: false, message: "Geçersiz kaynak kimliği." };
   }
 
-  const { error } = await supabase
+  const payload = {
+    name: input.name.trim(),
+    slug: normalizeSlug(input.slug),
+    base_url: normalizeOptionalUrl(input.baseUrl),
+    type: input.type.trim() || "marketplace",
+    bot_listing_status: input.botListingStatus,
+  };
+  let updateResult = await supabase
     .from("sources")
-    .update({
-      name: input.name.trim(),
-      slug: normalizeSlug(input.slug),
-      base_url: normalizeOptionalUrl(input.baseUrl),
-      type: input.type.trim() || "marketplace",
-    })
+    .update(payload)
     .eq("id", input.id!);
 
-  if (error) {
-    console.error("Admin source update failed:", error);
-    return { ok: false, message: `Kaynak güncellenemedi: ${error.message}` };
+  if (
+    updateResult.error &&
+    isMissingBotListingStatusColumn(updateResult.error)
+  ) {
+    const { bot_listing_status: _status, ...legacyPayload } = payload;
+    updateResult = await supabase
+      .from("sources")
+      .update(legacyPayload)
+      .eq("id", input.id!);
+  }
+
+  if (updateResult.error) {
+    console.error("Admin source update failed:", updateResult.error);
+    return {
+      ok: false,
+      message: `Kaynak güncellenemedi: ${updateResult.error.message}`,
+    };
   }
 
   revalidateSources();
@@ -134,7 +164,7 @@ export async function runDemoBot(
 
   const { data: source, error: sourceError } = await supabase
     .from("sources")
-    .select("id, name, slug, total_imported")
+    .select("id, name, slug, total_imported, bot_listing_status")
     .eq("id", sourceId)
     .maybeSingle();
 
@@ -178,6 +208,7 @@ export async function runDemoBot(
     String(source.name),
     String(source.slug),
     runToken,
+    source.bot_listing_status === "published" ? "published" : "pending",
   );
   let imported = 0;
   let skipped = 0;
@@ -330,8 +361,14 @@ function validateSource(input: SourceInput): SourceActionResult {
   const name = input.name.trim();
   const slug = normalizeSlug(input.slug);
   const type = input.type.trim();
+  const botListingStatus = input.botListingStatus;
 
-  if (!name || !slug || !type) {
+  if (
+    !name ||
+    !slug ||
+    !type ||
+    !["pending", "published"].includes(botListingStatus)
+  ) {
     return { ok: false, message: "Ad, slug ve kaynak tipi zorunludur." };
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
@@ -377,6 +414,18 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
   return "Bilinmeyen bot hatası";
+}
+
+function isMissingBotListingStatusColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "42703" ||
+    record.code === "PGRST204" ||
+    (text.includes("bot_listing_status") &&
+      (text.includes("column") || text.includes("schema cache")))
+  );
 }
 
 function revalidateSources() {

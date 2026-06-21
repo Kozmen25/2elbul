@@ -14,7 +14,7 @@ export type DemoListing = {
   url: string;
   condition: string;
   imageUrl: string;
-  status: "pending";
+  status: "pending" | "published";
 };
 
 const products: DemoProduct[] = [
@@ -83,6 +83,7 @@ export function createDemoListings(
   sourceName: string,
   sourceSlug: string,
   runToken: string,
+  listingStatus: "pending" | "published",
 ): DemoListing[] {
   return Array.from({ length: 10 }, (_, index) => {
     const product = randomItem(products);
@@ -98,7 +99,7 @@ export function createDemoListings(
       url: `https://demo.2elbul.com/${sourceSlug}/${runToken}-${index + 1}`,
       condition,
       imageUrl: `https://placehold.co/800x450/F5F3EF/FF6B00?text=${encodeURIComponent(product.name)}`,
-      status: "pending",
+      status: listingStatus,
     };
   });
 }

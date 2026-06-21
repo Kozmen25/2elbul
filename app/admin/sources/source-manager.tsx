@@ -27,6 +27,7 @@ export type AdminSource = {
   slug: string;
   baseUrl: string | null;
   type: string;
+  botListingStatus: "pending" | "published";
   isActive: boolean;
   lastRunAt: string | null;
   totalImported: number;
@@ -38,9 +39,16 @@ const emptySource: SourceInput = {
   slug: "",
   baseUrl: "",
   type: "marketplace",
+  botListingStatus: "pending",
 };
 
-export function SourceManager({ sources }: { sources: AdminSource[] }) {
+export function SourceManager({
+  sources,
+  publishModeAvailable,
+}: {
+  sources: AdminSource[];
+  publishModeAvailable: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState<SourceInput | null>(null);
   const [message, setMessage] = useState<SourceActionResult | null>(null);
@@ -59,6 +67,7 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
       slug: source.slug,
       baseUrl: source.baseUrl ?? "",
       type: source.type,
+      botListingStatus: source.botListingStatus,
     });
   }
 
@@ -117,6 +126,7 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
               <th className="px-4 py-3">Kaynak</th>
               <th className="px-4 py-3">Tip</th>
               <th className="px-4 py-3">Durum</th>
+              <th className="px-4 py-3">Bot ilan modu</th>
               <th className="px-4 py-3">Son çalışma</th>
               <th className="px-4 py-3">Toplam aktarılan</th>
               <th className="px-4 py-3">Kaynak linki</th>
@@ -148,6 +158,19 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
                     {source.isActive ? "Aktif" : "Pasif"}
                   </span>
                 </td>
+                <td className="px-4 py-4">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                      source.botListingStatus === "published"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {source.botListingStatus === "published"
+                      ? "Direkt yayınla"
+                      : "Pending olarak ekle"}
+                  </span>
+                </td>
                 <td className="px-4 py-4 text-black/55">
                   {source.lastRunAt
                     ? formatDate(source.lastRunAt)
@@ -174,7 +197,7 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
-                      disabled={pending}
+                      disabled={pending || !publishModeAvailable}
                       onClick={() => {
                         if (
                           window.confirm(
@@ -315,6 +338,29 @@ export function SourceManager({ sources }: { sources: AdminSource[] }) {
                   <option value="retailer">Perakendeci</option>
                   <option value="other">Diğer</option>
                 </select>
+              </SourceField>
+              <SourceField label="Bot ilan ayarı">
+                <select
+                  disabled={!publishModeAvailable}
+                  value={editing.botListingStatus}
+                  onChange={(event) =>
+                    setEditing({
+                      ...editing,
+                      botListingStatus: event.target.value as
+                        | "pending"
+                        | "published",
+                    })
+                  }
+                  className="field px-3 py-3"
+                >
+                  <option value="pending">Pending olarak ekle</option>
+                  <option value="published">Direkt yayınla</option>
+                </select>
+                {!publishModeAvailable && (
+                  <span className="mt-2 block text-xs font-semibold text-amber-700">
+                    Önce yayın modu migration dosyasını çalıştırın.
+                  </span>
+                )}
               </SourceField>
               <SourceField label="Kaynak linki" wide>
                 <input
