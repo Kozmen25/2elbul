@@ -2,9 +2,11 @@
 
 import {
   BarChart3,
+  Bot,
   Boxes,
   ChevronLeft,
   DatabaseZap,
+  Globe2,
   LayoutDashboard,
   Menu,
   PackageSearch,
@@ -21,6 +23,8 @@ const links = [
   { href: "/admin", label: "Genel Bakış", icon: LayoutDashboard },
   { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
   { href: "/admin/products", label: "Ürünler", icon: Boxes },
+  { href: "/admin/sources", label: "Kaynaklar", icon: Globe2 },
+  { href: "/admin/bot-runs", label: "Bot Çalışmaları", icon: Bot },
   { href: "/admin/users", label: "Kullanıcılar", icon: Users },
   { href: "/admin/import", label: "İçe Aktar", icon: DatabaseZap },
   { href: "/admin/stats", label: "İstatistikler", icon: BarChart3 },

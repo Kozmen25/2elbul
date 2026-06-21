@@ -264,6 +264,46 @@ Bir ilanın `price` değeri güncellendiğinde trigger eski fiyatı otomatik ola
 
 ## Kaynaklardan İlan Aktarımı
 
+### Kaynak ve Bot Altyapısı
+
+Otomatik veya zamanlanmış ilan toplayıcılarının kaynaklarını ve çalışma
+sonuçlarını saklamak için Supabase **SQL Editor** içinde şu migration dosyasını
+çalıştırın:
+
+```text
+supabase/sources-and-bots.sql
+```
+
+Migration şu tabloları oluşturur:
+
+- `sources`: kaynak adı, slug, site adresi, kaynak tipi, aktiflik durumu, son
+  çalışma zamanı ve toplam aktarılan ilan sayısı
+- `bot_runs`: bot çalışma durumu, çalışma tipi, başlangıç/bitiş zamanları,
+  bulunan/eklenen/atlanan ilan ve hata sayıları
+
+Migration Sahibinden, Letgo, Facebook Marketplace, EasyCep, Getmobil,
+Yenilenmiş Market, Teknosa Yenilenmiş, Hepsiburada Yenilenmiş ve MediaMarkt
+Yenilenmiş kaynaklarını otomatik ekler.
+
+Her iki tabloda RLS aktiftir ve public erişim politikası tanımlanmaz. Admin
+sayfaları tablolara yalnızca server tarafındaki `SUPABASE_SERVICE_ROLE_KEY`
+üzerinden erişir.
+
+Admin kullanımı:
+
+1. `/admin/sources` sayfasından kaynak ekleyin, düzenleyin, silin veya
+   aktif/pasif durumunu değiştirin.
+2. Bot çalışmaya başladığında `bot_runs` tablosuna `running` veya `pending`
+   durumunda kayıt oluşturun.
+3. Çalışma bittiğinde sayaçları, `finished_at`, `status` ve varsa
+   `error_message` alanını güncelleyin.
+4. Kaynağın `last_run_at` ve `total_imported` değerlerini güncelleyin.
+5. Sonuçları `/admin/bot-runs` sayfasından takip edin.
+
+Bu altyapı doğrudan üçüncü taraf siteleri kazımaz. Resmi API, izinli veri
+sağlayıcı, webhook veya ayrı bir bot worker çıktısının güvenli şekilde
+kaydedilmesi için yönetim ve kayıt katmanını hazırlar.
+
 ### Admin JSON, CSV ve Excel Import
 
 Yalnızca uygulamada tanımlanan admin e-posta adresleri `/admin/import`
@@ -347,6 +387,8 @@ Admin paneli aşağıdaki rotalardan oluşur:
 - `/admin`: genel sayaçlar
 - `/admin/listings`: ilan filtreleme, düzenleme, silme ve moderasyon
 - `/admin/products`: ürün ve fiyat istatistikleri
+- `/admin/sources`: ilan kaynakları ve aktiflik yönetimi
+- `/admin/bot-runs`: bot çalışma geçmişi ve hata kayıtları
 - `/admin/users`: Supabase Auth kullanıcıları ve favori sayıları
 - `/admin/import`: JSON, CSV ve Excel içe aktarma
 - `/admin/stats`: platform istatistikleri
@@ -367,8 +409,9 @@ Kurulum:
 
 1. Admin e-posta adreslerinden biriyle Supabase Auth üzerinden kayıt olun.
 2. `.env.local` ve Vercel ortamına `SUPABASE_SERVICE_ROLE_KEY` ekleyin.
-3. `supabase/product-slugs.sql`, `supabase/listing-images.sql` ve
-   `supabase/listing-status.sql` migration dosyalarını SQL Editor'da çalıştırın.
+3. `supabase/product-slugs.sql`, `supabase/listing-images.sql`,
+   `supabase/listing-status.sql` ve `supabase/sources-and-bots.sql` migration
+   dosyalarını SQL Editor'da çalıştırın.
 4. Oturum açtıktan sonra `/admin` adresine gidin.
 
 Kullanıcı silme işlemi Supabase Auth Admin API üzerinden kalıcı olarak yapılır
