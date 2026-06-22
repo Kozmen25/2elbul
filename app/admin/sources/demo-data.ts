@@ -8,9 +8,7 @@ type DemoProduct = {
   imageUrls: string[];
 };
 
-export type DemoListing = BotAdapterListing & {
-  status: "pending" | "published";
-};
+export type DemoListing = BotAdapterListing;
 
 const phoneImages = [
   "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1200&q=80",

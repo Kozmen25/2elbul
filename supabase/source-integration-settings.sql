@@ -16,3 +16,11 @@ alter table public.sources
 create index if not exists sources_cron_enabled_idx
   on public.sources(cron_enabled)
   where cron_enabled = true;
+
+update public.sources
+set scrape_url = 'https://easycep.com/kategori/cep-telefonu-1'
+where slug = 'easycep' and scrape_url is null;
+
+update public.sources
+set scrape_url = 'https://getmobil.com/satin-al/cep-telefonu/'
+where slug = 'getmobil' and scrape_url is null;

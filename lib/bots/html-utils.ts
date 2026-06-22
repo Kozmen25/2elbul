@@ -1,4 +1,8 @@
 import type { ListingCondition } from "@/lib/listings";
+import type { CheerioAPI } from "cheerio";
+
+const DEFAULT_USER_AGENT =
+  "Mozilla/5.0 (compatible; 2ElBulBot/1.0; +https://2elbul.com)";
 
 export type HtmlElementLike = {
   textContent?: string | null;
@@ -23,6 +27,92 @@ export function absoluteUrl(baseUrl: string, src: string | null | undefined) {
     return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
   } catch {
     return null;
+  }
+}
+
+export function cleanText(value: unknown) {
+  return String(value ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function extractMetaImages($: CheerioAPI, baseUrl: string) {
+  const images = new Set<string>();
+  $(
+    "meta[property='og:image'], meta[property='og:image:url'], meta[name='twitter:image'], meta[name='twitter:image:src']",
+  ).each((_, element) => {
+    const url = absoluteUrl(baseUrl, $(element).attr("content"));
+    if (url) images.add(url);
+  });
+  return [...images];
+}
+
+export async function safeFetchHtml(
+  url: string,
+  options: {
+    timeoutMs?: number;
+    userAgent?: string;
+    maxBytes?: number;
+  } = {},
+) {
+  const parsedUrl = new URL(url);
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error("Kaynak adresi HTTP veya HTTPS olmalıdır.");
+  }
+
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const maxBytes = options.maxBytes ?? 5_000_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(parsedUrl, {
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.7",
+        "User-Agent": options.userAgent ?? DEFAULT_USER_AGENT,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Kaynak HTTP ${response.status} yanıtı verdi.`);
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (
+      contentType &&
+      !contentType.includes("text/html") &&
+      !contentType.includes("application/xhtml+xml")
+    ) {
+      throw new Error(`Beklenmeyen içerik türü: ${contentType}`);
+    }
+
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
+    }
+
+    const html = await response.text();
+    if (Buffer.byteLength(html, "utf8") > maxBytes) {
+      throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
+    }
+
+    return {
+      html,
+      finalUrl: response.url || parsedUrl.toString(),
+      status: response.status,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Kaynak isteği ${timeoutMs} ms içinde tamamlanamadı.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -66,8 +156,8 @@ export function extractImageUrls(
   return [...urls];
 }
 
-export function normalizePrice(text: string | null | undefined) {
-  const raw = String(text ?? "").trim();
+export function normalizePrice(text: unknown) {
+  const raw = cleanText(text);
   if (!raw) return Number.NaN;
 
   const cleaned = raw.replace(/[^\d,.-]/g, "");

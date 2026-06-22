@@ -275,6 +275,7 @@ function statusLabel(status: string) {
 
 function runTypeLabel(runType: string) {
   if (runType === "test") return "Test çekimi";
+  if (runType === "real_test") return "Gerçek test çekimi";
   if (runType === "manual") return "Manuel";
   if (runType === "scheduled") return "Zamanlanmış";
   if (runType === "webhook") return "Webhook";

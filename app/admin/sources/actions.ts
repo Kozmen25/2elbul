@@ -2,6 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
+import {
+  EASYCEP_PHONE_CATEGORY_URL,
+  fetchEasyCepListings,
+  fetchGetmobilListings,
+  GETMOBIL_PHONE_CATEGORY_URL,
+} from "@/lib/bots/adapters";
+import type { BotAdapterListing } from "@/lib/bots/types";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createDemoListings } from "./demo-data";
 
@@ -408,6 +415,300 @@ export async function runDemoBot(
   };
 }
 
+export async function runRealBot(
+  sourceId: number,
+): Promise<SourceActionResult> {
+  await requireAdminUser("/admin/sources");
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return missingAdminClient();
+  if (!Number.isInteger(sourceId)) {
+    return { ok: false, message: "Geçersiz kaynak kimliği." };
+  }
+
+  let sourceResult = await supabase
+    .from("sources")
+    .select("id, name, slug, total_imported, scrape_url, product_limit")
+    .eq("id", sourceId)
+    .maybeSingle();
+
+  if (
+    sourceResult.error &&
+    isMissingIntegrationSettingsColumn(sourceResult.error)
+  ) {
+    sourceResult = await supabase
+      .from("sources")
+      .select("id, name, slug, total_imported")
+      .eq("id", sourceId)
+      .maybeSingle();
+  }
+
+  const source = sourceResult.data as {
+    id: number;
+    name: string;
+    slug: string;
+    total_imported: number | null;
+    scrape_url?: string | null;
+    product_limit?: number | null;
+  } | null;
+
+  if (sourceResult.error || !source) {
+    if (sourceResult.error) {
+      console.error("Real bot source lookup failed:", sourceResult.error);
+    }
+    return {
+      ok: false,
+      message: sourceResult.error
+        ? `Kaynak okunamadı: ${sourceResult.error.message}`
+        : "Kaynak bulunamadı.",
+    };
+  }
+
+  if (!["easycep", "getmobil"].includes(source.slug)) {
+    return {
+      ok: false,
+      message: "Gerçek test çekimi şu anda yalnızca EasyCep ve Getmobil için hazır.",
+    };
+  }
+
+  const startedAt = new Date().toISOString();
+  const { data: botRun, error: runInsertError } = await supabase
+    .from("bot_runs")
+    .insert({
+      source_id: sourceId,
+      status: "running",
+      run_type: "real_test",
+      started_at: startedAt,
+    })
+    .select("id")
+    .single();
+
+  if (runInsertError || !botRun) {
+    if (runInsertError) {
+      console.error("Real bot run insert failed:", runInsertError);
+    }
+    return {
+      ok: false,
+      message: runInsertError
+        ? `Bot çalışması başlatılamadı: ${runInsertError.message}`
+        : "Bot çalışma kaydı oluşturulamadı.",
+    };
+  }
+
+  const runId = Number(botRun.id);
+  let listings: BotAdapterListing[] = [];
+  let imported = 0;
+  let skipped = 0;
+  let errorCount = 0;
+  const errors: string[] = [];
+  let finalStatus = "success";
+
+  try {
+    const limit = Math.min(
+      Math.max(Number(source.product_limit ?? 10), 1),
+      10,
+    );
+    if (source.slug === "easycep") {
+      listings = await fetchEasyCepListings(
+        source.scrape_url || EASYCEP_PHONE_CATEGORY_URL,
+        limit,
+      );
+    } else {
+      listings = await fetchGetmobilListings(
+        source.scrape_url || GETMOBIL_PHONE_CATEGORY_URL,
+        limit,
+      );
+    }
+
+    if (!listings.length) {
+      errors.push("Ürün bulunamadı veya HTML yapısı değişmiş olabilir");
+    } else {
+      const result = await importRealListings(supabase, listings);
+      imported = result.imported;
+      skipped = result.skipped;
+      errorCount = result.errorCount;
+      errors.push(...result.errors);
+      if (errorCount > 0) finalStatus = "failed";
+    }
+  } catch (error) {
+    console.error("Real bot execution failed:", error);
+    finalStatus = "failed";
+    errorCount = 1;
+    errors.push(getErrorMessage(error));
+  }
+
+  const finishedAt = new Date().toISOString();
+  const errorMessage = errors.length ? errors.join(" | ").slice(0, 4000) : null;
+  const { error: runUpdateError } = await supabase
+    .from("bot_runs")
+    .update({
+      status: finalStatus,
+      found_count: listings.length,
+      imported_count: imported,
+      skipped_count: skipped,
+      error_count: errorCount,
+      error_message: errorMessage,
+      finished_at: finishedAt,
+    })
+    .eq("id", runId);
+
+  if (runUpdateError) {
+    console.error("Real bot run finalization failed:", runUpdateError);
+  }
+
+  const sourceStatsPayload = {
+    last_run_at: finishedAt,
+    total_imported: Number(source.total_imported ?? 0) + imported,
+    ...(finalStatus === "success" ? { last_success: finishedAt } : {}),
+  };
+  let sourceUpdateResult = await supabase
+    .from("sources")
+    .update(sourceStatsPayload)
+    .eq("id", sourceId);
+
+  if (
+    sourceUpdateResult.error &&
+    isMissingIntegrationSettingsColumn(sourceUpdateResult.error)
+  ) {
+    const { last_success: _lastSuccess, ...legacyStatsPayload } =
+      sourceStatsPayload;
+    sourceUpdateResult = await supabase
+      .from("sources")
+      .update(legacyStatsPayload)
+      .eq("id", sourceId);
+  }
+
+  if (sourceUpdateResult.error) {
+    console.error(
+      "Real bot source stats update failed:",
+      sourceUpdateResult.error,
+    );
+  }
+
+  revalidateSources();
+  revalidatePath("/admin/listings");
+  revalidatePath("/admin");
+
+  if (runUpdateError || sourceUpdateResult.error) {
+    return {
+      ok: false,
+      message:
+        "İlanlar işlendi ancak bot istatistiklerinin bir bölümü güncellenemedi.",
+    };
+  }
+
+  if (!listings.length && finalStatus === "success") {
+    return {
+      ok: true,
+      message: "Çekim tamamlandı ancak ürün bulunamadı. HTML yapısı değişmiş olabilir.",
+    };
+  }
+
+  return {
+    ok: finalStatus === "success",
+    message:
+      finalStatus === "success"
+        ? `Gerçek test çekimi tamamlandı: ${imported} eklendi, ${skipped} atlandı.`
+        : `Gerçek test çekimi hatayla tamamlandı: ${imported} eklendi, ${skipped} atlandı, ${errorCount} hata.`,
+  };
+}
+
+async function importRealListings(
+  supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  listings: BotAdapterListing[],
+) {
+  let imported = 0;
+  let skipped = 0;
+  let errorCount = 0;
+  const errors: string[] = [];
+  const productNames = [
+    ...new Set(listings.map((listing) => listing.product_name)),
+  ];
+  const { data: existingProducts, error: productLookupError } = await supabase
+    .from("products")
+    .select("id, name")
+    .in("name", productNames);
+
+  if (productLookupError) throw productLookupError;
+
+  const productIds = new Map(
+    (existingProducts ?? []).map((product) => [
+      String(product.name),
+      product.id as string | number,
+    ]),
+  );
+
+  for (const productName of productNames) {
+    if (productIds.has(productName)) continue;
+    const { data: createdProduct, error: productInsertError } = await supabase
+      .from("products")
+      .insert({ name: productName })
+      .select("id")
+      .single();
+
+    if (productInsertError || !createdProduct) {
+      const message =
+        productInsertError?.message ?? `${productName} oluşturulamadı.`;
+      console.error("Real bot product insert failed:", productInsertError);
+      errors.push(`${productName}: ${message}`);
+      continue;
+    }
+    productIds.set(productName, createdProduct.id);
+  }
+
+  const { data: existingListings, error: duplicateError } = await supabase
+    .from("listings")
+    .select("url")
+    .in(
+      "url",
+      listings.map((listing) => listing.url),
+    );
+
+  if (duplicateError) throw duplicateError;
+  const existingUrls = new Set(
+    (existingListings ?? []).map((listing) => String(listing.url)),
+  );
+
+  for (const listing of listings) {
+    if (existingUrls.has(listing.url)) {
+      skipped += 1;
+      continue;
+    }
+
+    const productId = productIds.get(listing.product_name);
+    if (!productId) {
+      errorCount += 1;
+      errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
+      continue;
+    }
+
+    const { error: listingInsertError } = await supabase
+      .from("listings")
+      .insert({
+        product_id: productId,
+        title: listing.title,
+        price: listing.price,
+        city: listing.city,
+        source: listing.source,
+        url: listing.url,
+        condition: listing.condition,
+        image_url: listing.image_url ?? listing.image_urls[0] ?? null,
+        status: "pending",
+      });
+
+    if (listingInsertError) {
+      console.error("Real bot listing insert failed:", listingInsertError);
+      errorCount += 1;
+      errors.push(`${listing.title}: ${listingInsertError.message}`);
+      continue;
+    }
+
+    existingUrls.add(listing.url);
+    imported += 1;
+  }
+
+  return { imported, skipped, errorCount, errors };
+}
+
 function validateSource(input: SourceInput): SourceActionResult {
   const name = input.name.trim();
   const slug = normalizeSlug(input.slug);
@@ -500,7 +801,14 @@ function isMissingIntegrationSettingsColumn(error: unknown) {
   return (
     record.code === "42703" ||
     record.code === "PGRST204" ||
-    ["api_url", "scrape_url", "cron_enabled", "cron_schedule", "product_limit"]
+    [
+      "api_url",
+      "scrape_url",
+      "cron_enabled",
+      "cron_schedule",
+      "product_limit",
+      "last_success",
+    ]
       .some((column) => text.includes(column))
   );
 }

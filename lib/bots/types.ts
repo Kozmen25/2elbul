@@ -21,6 +21,7 @@ export type BotAdapterListing = {
   condition: string;
   image_url: string | null;
   image_urls: string[];
+  status: "pending" | "published";
 };
 
 export type SourceConnector = {

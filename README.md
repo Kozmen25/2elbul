@@ -336,9 +336,10 @@ Admin kullanımı:
 4. Kaynağın `last_run_at` ve `total_imported` değerlerini güncelleyin.
 5. Sonuçları `/admin/bot-runs` sayfasından takip edin.
 
-Bu altyapı doğrudan üçüncü taraf siteleri kazımaz. Resmi API, izinli veri
-sağlayıcı, webhook veya ayrı bir bot worker çıktısının güvenli şekilde
-kaydedilmesi için yönetim ve kayıt katmanını hazırlar.
+Genel kaynak altyapısı resmi API, izinli veri sağlayıcı, webhook veya ayrı bir
+bot worker çıktısının güvenli şekilde kaydedilmesi için yönetim ve kayıt
+katmanını hazırlar. Buna ek olarak EasyCep ve Getmobil için aşağıda açıklanan
+tek sayfalık, en fazla 10 ürünle sınırlı yönetici test çekimi bulunur.
 
 ### Gerçek Kaynak Connector Altyapısı
 
@@ -362,7 +363,8 @@ Her kaynak adaptörü ilanları şu ortak formatta döndürmelidir:
   "image_urls": [
     "https://cdn.example.com/main.jpg",
     "https://cdn.example.com/side.jpg"
-  ]
+  ],
+  "status": "pending"
 }
 ```
 
@@ -381,12 +383,12 @@ Gerçek HTML görsel ayrıştırma altyapısı:
 - `lib/bots/adapters/getmobil.ts`: Getmobil ürün adı, fiyat, ürün linki ve
   galeri parser iskeleti
 
-Adapter parser'ları DOM-benzeri `HtmlRootLike` arayüzü kullanır. Gerçek fetch
-katmanı izinli ürün HTML'ini Cheerio veya eşdeğer güvenli bir sunucu parser'ına
-aktarıp ilgili parser fonksiyonunu çağırmalıdır. Relative `src`, `data-src`,
-`srcset`, lazy-load ve Open Graph görselleri mutlak URL'ye çevrilir. Kaynak
-sayfada geçerli görsel varsa bu URL korunur; yalnızca görsel yoksa kartların
-mevcut ürün fallback SVG'si devreye girer.
+EasyCep ve Getmobil kategori adaptörleri Cheerio ile sunucu tarafında çalışır.
+Önce sayfadaki Schema.org `ItemList` / JSON-LD ürün verisini okur, gerektiğinde
+DOM ürün şemasına düşer. Relative `src`, `data-src`, `srcset`, lazy-load ve Open
+Graph görselleri mutlak URL'ye çevrilir. Kaynak sayfada geçerli görsel varsa bu
+URL korunur; yalnızca görsel yoksa kartların mevcut ürün fallback SVG'si devreye
+girer.
 
 Gerçek entegrasyon eklerken:
 
@@ -403,13 +405,52 @@ Gerçek entegrasyon eklerken:
 Cron'u gerçekten tetiklemek için Vercel Cron, Supabase Scheduled Functions veya
 ayrı bir worker kullanılmalıdır.
 
+### EasyCep ve Getmobil Gerçek Test Çekimi
+
+Admin paneli EasyCep ve Getmobil telefon kategori sayfaları için sınırlı gerçek
+test çekimini destekler:
+
+```text
+EasyCep: https://easycep.com/kategori/cep-telefonu-1
+Getmobil: https://getmobil.com/satin-al/cep-telefonu/
+```
+
+Kullanım:
+
+1. `supabase/source-integration-settings.sql` migration dosyasını çalıştırın.
+2. Admin hesabıyla giriş yapıp `/admin/sources` sayfasını açın.
+3. EasyCep veya Getmobil satırındaki **Gerçek test çekimi** butonuna basın.
+4. Çalışmayı `/admin/bot-runs`, eklenen ilanları `/admin/listings` sayfasından
+   kontrol edin.
+5. İlanları kontrol ettikten sonra admin ilan yönetiminden yayınlayın.
+
+Gerçek test çekimi yalnızca tek kategori sayfasına bir HTTP isteği gönderir,
+ürün detay sayfalarını ayrıca açmaz ve en fazla 10 ürünü işler. İstekte açık bir
+User-Agent, 15 saniyelik timeout ve 5 MB HTML sınırı kullanılır. Çekilen ilanlar
+kaynak ayarından bağımsız olarak `pending` kaydedilir.
+
+Aynı URL daha önce `listings` tablosunda varsa kayıt atlanır. Eksik ürünler
+`products` tablosunda oluşturulur. Çalışma sonunda `bot_runs` sayaçları ile
+`sources.last_run_at`, `sources.last_success` ve `sources.total_imported`
+alanları güncellenir.
+
+Kaynak HTTP hatası döndürür, isteği engeller veya timeout oluşursa çalışma
+`failed` olarak kaydedilir ve gerçek hata `bot_runs.error_message` alanında
+gösterilir. Sayfa erişilebilir olduğu halde ürün bulunamazsa çalışma `success`
+kalır; `error_message` alanına
+`Ürün bulunamadı veya HTML yapısı değişmiş olabilir` uyarısı yazılır.
+
+Bu özellik düşük hacimli yönetici testi içindir. Otomatik periyodik ve yüksek
+hacimli çekim başlatmaz; üretim entegrasyonunda sağlayıcının kullanım şartları,
+robots politikası ve resmi API seçenekleri ayrıca doğrulanmalıdır.
+
 ### Demo Bot Testi
 
 Gerçek kaynaklara bağlanmadan bot ve moderasyon akışını test etmek için admin
 panelindeki demo bot kullanılabilir:
 
 1. Admin hesabıyla giriş yapın ve `/admin/sources` sayfasını açın.
-2. Test etmek istediğiniz kaynağın **Test çekimi yap** butonuna basın.
+2. Test etmek istediğiniz kaynağın **Demo test çekimi** butonuna basın.
 3. Onaydan sonra sistem seçilen kaynak adına 10 adet sahte fakat gerçekçi ilan
    üretir.
 4. Eksik ürünler `products` tablosuna eklenir, mevcut ürünlerin kimliği tekrar
@@ -566,9 +607,11 @@ ve işlem öncesinde onay penceresi gösterilir. Admin hesapları kullanıcı
 listesinden silinmeye karşı korumalıdır.
 
 Sahibinden, Letgo ve Facebook Marketplace için ortak bir aktarım API'si
-bulunur. Altyapı sitelerin HTML sayfalarını kazımaz; kullanma yetkiniz olan resmi
-API, veri sağlayıcı, CSV dönüştürücü veya şirket içi entegrasyon çıktısını
-normalize ederek Supabase'e aktarır.
+bulunur. Bu üç kaynak için uygulama HTML çekimi yapmaz; kullanma yetkiniz olan
+resmi API, veri sağlayıcı, CSV dönüştürücü veya şirket içi entegrasyon çıktısını
+normalize ederek Supabase'e aktarır. EasyCep ve Getmobil’in sınırlı kategori
+testi ayrı olarak **EasyCep ve Getmobil Gerçek Test Çekimi** bölümünde
+açıklanmıştır.
 
 ```text
 POST /api/import/listings

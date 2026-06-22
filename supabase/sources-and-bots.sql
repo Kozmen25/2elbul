@@ -91,3 +91,11 @@ set
   name = excluded.name,
   base_url = excluded.base_url,
   type = excluded.type;
+
+update public.sources
+set scrape_url = 'https://easycep.com/kategori/cep-telefonu-1'
+where slug = 'easycep' and scrape_url is null;
+
+update public.sources
+set scrape_url = 'https://getmobil.com/satin-al/cep-telefonu/'
+where slug = 'getmobil' and scrape_url is null;

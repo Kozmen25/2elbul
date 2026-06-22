@@ -3,6 +3,7 @@
 import {
   Bot,
   ExternalLink,
+  Globe2,
   Pencil,
   Plus,
   Power,
@@ -15,6 +16,7 @@ import {
   createSource,
   deleteSource,
   runDemoBot,
+  runRealBot,
   toggleSource,
   updateSource,
   type SourceActionResult,
@@ -138,7 +140,7 @@ export function SourceManager({
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
-        <table className="w-full min-w-[1420px] text-left text-sm">
+        <table className="w-full min-w-[1580px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
               <th className="px-4 py-3">Kaynak</th>
@@ -246,7 +248,7 @@ export function SourceManager({
                   )}
                 </td>
                 <td className="px-4 py-4">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
                       disabled={pending || !publishModeAvailable}
@@ -262,7 +264,35 @@ export function SourceManager({
                       className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] px-3 text-xs font-black text-[#d95700] disabled:opacity-50"
                     >
                       <Bot size={15} />
-                      Test çekimi yap
+                      Demo test çekimi
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        pending ||
+                        !publishModeAvailable ||
+                        !["easycep", "getmobil"].includes(source.slug)
+                      }
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `${source.name} kategori sayfasından en fazla 10 gerçek ürün çekilsin mi?`,
+                          )
+                        ) {
+                          runAction(() => runRealBot(source.id));
+                        }
+                      }}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-black text-purple-700 disabled:cursor-not-allowed disabled:opacity-45"
+                      title={
+                        ["easycep", "getmobil"].includes(source.slug)
+                          ? "Tek sayfalık sınırlı gerçek test çekimi"
+                          : "Bu kaynak adaptörü hazırlanıyor"
+                      }
+                    >
+                      <Globe2 size={15} />
+                      {["easycep", "getmobil"].includes(source.slug)
+                        ? "Gerçek test çekimi"
+                        : "Hazırlanıyor"}
                     </button>
                     <button
                       type="button"
