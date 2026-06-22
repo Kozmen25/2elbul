@@ -599,16 +599,17 @@ export async function runRealBot(
   if (!listings.length && finalStatus === "success") {
     return {
       ok: true,
-      message: "Çekim tamamlandı ancak ürün bulunamadı. HTML yapısı değişmiş olabilir.",
+      message: `${source.name} çekimi tamamlandı ancak ürün bulunamadı. Kaynak HTML yapısı değişmiş veya ürün verisini geçici olarak kaldırmış olabilir.`,
     };
   }
 
+  const firstError = errors[0];
   return {
     ok: finalStatus === "success",
     message:
       finalStatus === "success"
         ? `Gerçek test çekimi tamamlandı: ${imported} eklendi, ${skipped} atlandı.`
-        : `Gerçek test çekimi hatayla tamamlandı: ${imported} eklendi, ${skipped} atlandı, ${errorCount} hata.`,
+        : `Gerçek test çekimi tamamlanamadı: ${firstError ?? `${errorCount} hata oluştu.`}`,
   };
 }
 

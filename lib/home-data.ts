@@ -179,13 +179,14 @@ export async function getHomeData(): Promise<HomeData> {
   const normalizedListings = listings
     .map((listing) => {
       const product = productMap.get(String(listing.product_id));
-      if (!product) return null;
+      const price = Number(listing.price);
+      if (!product || !Number.isFinite(price) || price <= 0) return null;
 
       return {
         id: String(listing.id),
         productName: product.name,
         title: listing.title,
-        price: Number(listing.price),
+        price,
         city: listing.city,
         source: listing.source,
         url: listing.url,
@@ -260,13 +261,13 @@ export async function getHomeData(): Promise<HomeData> {
   const last24HourListings = (
     last24HourMatches.length > 0 ? last24HourMatches : normalizedListings
   ).slice(0, 8);
-  const priceOpportunities = normalizedListings
+  const analyzedPriceOpportunities = normalizedListings
     .map((listing) => {
       const stats = listedProductStats.get(listing.productName);
       if (!stats || stats.count < 2) return null;
 
       const averagePrice = stats.total / stats.count;
-      if (listing.price > averagePrice * 0.9) return null;
+      if (listing.price >= averagePrice) return null;
 
       return {
         ...listing,
@@ -281,11 +282,37 @@ export async function getHomeData(): Promise<HomeData> {
     )
     .sort(
       (a, b) =>
-        b.discountRate - a.discountRate ||
         a.price - b.price ||
+        b.discountRate - a.discountRate ||
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     .slice(0, 8);
+  const opportunityIds = new Set(
+    analyzedPriceOpportunities.map((listing) => listing.id),
+  );
+  const fallbackOpportunities: PriceOpportunity[] = normalizedListings
+    .filter((listing) => !opportunityIds.has(listing.id))
+    .sort(
+      (a, b) =>
+        a.price - b.price ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .map((listing) => {
+      const stats = listedProductStats.get(listing.productName);
+      const averagePrice = stats ? stats.total / stats.count : listing.price;
+      return {
+        ...listing,
+        averagePrice: Math.round(averagePrice),
+        discountRate: Math.max(
+          0,
+          Math.round(((averagePrice - listing.price) / averagePrice) * 100),
+        ),
+      };
+    });
+  const priceOpportunities = [
+    ...analyzedPriceOpportunities,
+    ...fallbackOpportunities,
+  ].slice(0, 8);
   const priceDrops = normalizedListings
     .filter(
       (listing) =>

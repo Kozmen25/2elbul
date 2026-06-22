@@ -168,7 +168,7 @@ export default async function Home() {
 
       <HomeSection
         eyebrow="Kontrollü alternatifler"
-        title="Yenilenmiş cihazlar"
+        title="Yenilenmiş cihaz fırsatları"
         icon={Smartphone}
         muted
       >
@@ -189,7 +189,7 @@ export default async function Home() {
 
       <HomeSection
         eyebrow="Piyasanın altında"
-        title="En ucuz fırsatlar"
+        title="En ucuz ilanlar"
         icon={BadgePercent}
       >
         {priceOpportunities.length > 0 ? (
@@ -199,7 +199,7 @@ export default async function Home() {
             ))}
           </div>
         ) : (
-          <EmptyState text="Fırsat analizi için her üründe en az iki ilan gerekli." />
+          <EmptyState text="Fiyat karşılaştırması için henüz yeterli ilan bulunmuyor." />
         )}
       </HomeSection>
 
@@ -434,6 +434,9 @@ function CompactListingCard({
         <span className="flex items-center gap-1.5">
           <MapPin size={13} /> {listing.city}
         </span>
+        <span className="flex items-center gap-1.5">
+          <Clock3 size={13} /> {formatDate(listing.createdAt)}
+        </span>
       </div>
       <a
         href={listing.url}
@@ -448,6 +451,8 @@ function CompactListingCard({
 }
 
 function OpportunityCard({ listing }: { listing: PriceOpportunity }) {
+  const hasDiscount = listing.discountRate > 0;
+
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-green-200 bg-green-50/45 p-4">
       <Link
@@ -464,7 +469,9 @@ function OpportunityCard({ listing }: { listing: PriceOpportunity }) {
             {listing.productName}
           </span>
           <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-black text-green-700">
-            Ortalamanın %{listing.discountRate} altında
+            {hasDiscount
+              ? `Ortalamanın %${listing.discountRate} altında`
+              : "Düşük fiyat"}
           </span>
         </div>
         <h3 className="mt-3 line-clamp-2 min-h-10 text-sm font-black leading-5">
@@ -474,9 +481,11 @@ function OpportunityCard({ listing }: { listing: PriceOpportunity }) {
       <p className="mt-3 text-xl font-black tracking-[-0.035em] text-green-700">
         {formatPrice(listing.price)}
       </p>
-      <p className="mt-1 text-xs text-black/45">
-        Ürün ortalaması: {formatPrice(listing.averagePrice)}
-      </p>
+      {hasDiscount && (
+        <p className="mt-1 text-xs text-black/45">
+          Ürün ortalaması: {formatPrice(listing.averagePrice)}
+        </p>
+      )}
       <div className="mt-3 flex items-center gap-1.5 text-xs text-black/45">
         <Store size={13} /> {listing.source}
       </div>

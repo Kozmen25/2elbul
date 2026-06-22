@@ -27,6 +27,7 @@ type JsonLdProduct = {
     price?: string | number;
     url?: string;
   };
+  hasVariant?: JsonLdProduct[];
 };
 
 type JsonLdListItem = {
@@ -124,22 +125,27 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
   $("script[type='application/ld+json']").each((_, element) => {
     if (listings.length >= 10) return;
     try {
-      const data = JSON.parse($(element).text()) as {
-        "@type"?: string;
-        itemListElement?: JsonLdListItem[];
-      };
-      if (data["@type"] !== "ItemList" || !Array.isArray(data.itemListElement)) {
-        return;
-      }
-
-      for (const listItem of data.itemListElement) {
-        if (listings.length >= 10) break;
-        const product = listItem.item;
-        if (!product || !["Product", "ProductGroup"].includes(product["@type"] ?? "")) {
+      const parsed = JSON.parse($(element).text()) as unknown;
+      for (const data of collectJsonLdObjects(parsed)) {
+        if (
+          data["@type"] !== "ItemList" ||
+          !Array.isArray(data.itemListElement)
+        ) {
           continue;
         }
-        const listing = toGetmobilListing(product, pageUrl);
-        if (listing) listings.push(listing);
+
+        for (const listItem of data.itemListElement as JsonLdListItem[]) {
+          if (listings.length >= 10) break;
+          const product = listItem.item;
+          if (
+            !product ||
+            !["Product", "ProductGroup"].includes(product["@type"] ?? "")
+          ) {
+            continue;
+          }
+          const listing = toGetmobilListing(product, pageUrl);
+          if (listing) listings.push(listing);
+        }
       }
     } catch {
       // Continue with other JSON-LD blocks or the DOM fallback.
@@ -168,9 +174,17 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
       card.find("img").first().attr("data-src") ||
         card.find("img").first().attr("src"),
     );
-    if (!title || !url || !Number.isFinite(price)) return;
+    if (
+      !title ||
+      !url ||
+      !isGetmobilProductUrl(url) ||
+      !imageUrl ||
+      !Number.isFinite(price)
+    ) {
+      return;
+    }
     listings.push(
-      createListing(title, price, url, imageUrl ? [imageUrl] : metaImages),
+      createListing(title, price, url, [imageUrl, ...metaImages]),
     );
   });
 
@@ -178,12 +192,37 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
 }
 
 function toGetmobilListing(product: JsonLdProduct, pageUrl: string) {
-  const title = cleanText(product.name);
-  const price = normalizePrice(product.offers?.price);
-  const url = absoluteUrl(pageUrl, product.url || product.offers?.url);
-  if (!title || !url || !Number.isFinite(price)) return null;
+  const variant = product.hasVariant?.find((item) => {
+    const price = normalizePrice(item.offers?.price);
+    const url = absoluteUrl(pageUrl, item.url || item.offers?.url);
+    return Number.isFinite(price) && Boolean(url);
+  });
+  const title = cleanText(product.name || variant?.name);
+  const price = normalizePrice(product.offers?.price ?? variant?.offers?.price);
+  const url = absoluteUrl(
+    pageUrl,
+    product.url ||
+      product.offers?.url ||
+      variant?.url ||
+      variant?.offers?.url,
+  );
+  const imageUrls = [
+    ...new Set([
+      ...normalizeImages(product.image, pageUrl),
+      ...normalizeImages(variant?.image, pageUrl),
+    ]),
+  ];
+  if (
+    !title ||
+    !url ||
+    !isGetmobilProductUrl(url) ||
+    !imageUrls.length ||
+    !Number.isFinite(price)
+  ) {
+    return null;
+  }
 
-  return createListing(title, price, url, normalizeImages(product.image, pageUrl));
+  return createListing(title, price, url, imageUrls);
 }
 
 function createListing(
@@ -214,14 +253,44 @@ function normalizeImages(value: unknown, pageUrl: string) {
         .map((item) =>
           typeof item === "string"
             ? item
-            : item && typeof item === "object" && "contentUrl" in item
-              ? String(item.contentUrl)
+            : item && typeof item === "object"
+              ? "contentUrl" in item
+                ? String(item.contentUrl)
+                : "url" in item
+                  ? String(item.url)
+                  : ""
               : "",
         )
         .map((item) => absoluteUrl(pageUrl, item))
         .filter((item): item is string => Boolean(item)),
     ),
   ];
+}
+
+function collectJsonLdObjects(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectJsonLdObjects);
+  }
+  if (!value || typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  const graph = Array.isArray(record["@graph"])
+    ? record["@graph"].flatMap(collectJsonLdObjects)
+    : [];
+  return [record, ...graph];
+}
+
+function isGetmobilProductUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      (url.hostname === "getmobil.com" ||
+        url.hostname.endsWith(".getmobil.com")) &&
+      url.pathname.startsWith("/satin-al/")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function deriveProductName(title: string) {
