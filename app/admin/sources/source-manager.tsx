@@ -28,6 +28,12 @@ export type AdminSource = {
   baseUrl: string | null;
   type: string;
   botListingStatus: "pending" | "published";
+  apiUrl: string | null;
+  scrapeUrl: string | null;
+  cronEnabled: boolean;
+  cronSchedule: string;
+  productLimit: number;
+  lastSuccess: string | null;
   isActive: boolean;
   lastRunAt: string | null;
   totalImported: number;
@@ -40,14 +46,21 @@ const emptySource: SourceInput = {
   baseUrl: "",
   type: "marketplace",
   botListingStatus: "pending",
+  apiUrl: "",
+  scrapeUrl: "",
+  cronEnabled: false,
+  cronSchedule: "0 */6 * * *",
+  productLimit: 100,
 };
 
 export function SourceManager({
   sources,
   publishModeAvailable,
+  integrationSettingsAvailable,
 }: {
   sources: AdminSource[];
   publishModeAvailable: boolean;
+  integrationSettingsAvailable: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<SourceInput | null>(null);
@@ -68,6 +81,11 @@ export function SourceManager({
       baseUrl: source.baseUrl ?? "",
       type: source.type,
       botListingStatus: source.botListingStatus,
+      apiUrl: source.apiUrl ?? "",
+      scrapeUrl: source.scrapeUrl ?? "",
+      cronEnabled: source.cronEnabled,
+      cronSchedule: source.cronSchedule,
+      productLimit: source.productLimit,
     });
   }
 
@@ -120,13 +138,15 @@ export function SourceManager({
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
-        <table className="w-full min-w-[1220px] text-left text-sm">
+        <table className="w-full min-w-[1420px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
               <th className="px-4 py-3">Kaynak</th>
               <th className="px-4 py-3">Tip</th>
               <th className="px-4 py-3">Durum</th>
               <th className="px-4 py-3">Bot ilan modu</th>
+              <th className="px-4 py-3">Entegrasyon</th>
+              <th className="px-4 py-3">Çekim planı</th>
               <th className="px-4 py-3">Son çalışma</th>
               <th className="px-4 py-3">Toplam aktarılan</th>
               <th className="px-4 py-3">Kaynak linki</th>
@@ -171,10 +191,42 @@ export function SourceManager({
                       : "Pending olarak ekle"}
                   </span>
                 </td>
+                <td className="px-4 py-4">
+                  <div className="flex flex-wrap gap-1.5">
+                    {source.apiUrl && (
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-black text-blue-700">
+                        API
+                      </span>
+                    )}
+                    {source.scrapeUrl && (
+                      <span className="rounded-full bg-purple-100 px-2 py-1 text-[10px] font-black text-purple-700">
+                        SCRAPE
+                      </span>
+                    )}
+                    {!source.apiUrl && !source.scrapeUrl && (
+                      <span className="text-xs text-black/35">Yapılandırılmadı</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-xs font-bold">
+                    {source.cronEnabled
+                      ? cronScheduleLabel(source.cronSchedule)
+                      : "Kapalı"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-black/40">
+                    Limit: {source.productLimit}
+                  </p>
+                </td>
                 <td className="px-4 py-4 text-black/55">
                   {source.lastRunAt
                     ? formatDate(source.lastRunAt)
                     : "Henüz çalışmadı"}
+                  {source.lastSuccess && (
+                    <p className="mt-1 text-[11px] font-semibold text-green-700">
+                      Son başarı: {formatDate(source.lastSuccess)}
+                    </p>
+                  )}
                 </td>
                 <td className="px-4 py-4 text-lg font-black">
                   {source.totalImported.toLocaleString("tr-TR")}
@@ -373,6 +425,96 @@ export function SourceManager({
                   placeholder="https://..."
                 />
               </SourceField>
+              <SourceField label="API adresi" wide>
+                <input
+                  type="url"
+                  disabled={!integrationSettingsAvailable}
+                  value={editing.apiUrl}
+                  onChange={(event) =>
+                    setEditing({ ...editing, apiUrl: event.target.value })
+                  }
+                  className="field px-3 py-3 disabled:bg-black/3"
+                  placeholder="https://api.example.com/listings"
+                />
+              </SourceField>
+              <SourceField label="Tarama adresi" wide>
+                <input
+                  type="url"
+                  disabled={!integrationSettingsAvailable}
+                  value={editing.scrapeUrl}
+                  onChange={(event) =>
+                    setEditing({ ...editing, scrapeUrl: event.target.value })
+                  }
+                  className="field px-3 py-3 disabled:bg-black/3"
+                  placeholder="https://example.com/ikinci-el"
+                />
+              </SourceField>
+              <SourceField label="Çekim sıklığı">
+                <select
+                  disabled={!integrationSettingsAvailable}
+                  value={editing.cronSchedule}
+                  onChange={(event) =>
+                    setEditing({
+                      ...editing,
+                      cronSchedule: event.target.value,
+                    })
+                  }
+                  className="field px-3 py-3 disabled:bg-black/3"
+                >
+                  <option value="0 * * * *">Her saat</option>
+                  <option value="0 */3 * * *">3 saatte bir</option>
+                  <option value="0 */6 * * *">6 saatte bir</option>
+                  <option value="0 */12 * * *">12 saatte bir</option>
+                  <option value="0 3 * * *">Günde bir</option>
+                </select>
+              </SourceField>
+              <SourceField label="Ürün limiti">
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  disabled={!integrationSettingsAvailable}
+                  value={editing.productLimit}
+                  onChange={(event) =>
+                    setEditing({
+                      ...editing,
+                      productLimit: Number(event.target.value),
+                    })
+                  }
+                  className="field px-3 py-3 disabled:bg-black/3"
+                />
+              </SourceField>
+              <SourceField label="Zamanlanmış çekim" wide>
+                <label className="flex items-center justify-between rounded-xl border border-black/8 bg-[#fafaf8] p-4">
+                  <span>
+                    <span className="block text-sm font-black">
+                      Cron çalışmasını etkinleştir
+                    </span>
+                    <span className="mt-1 block text-xs text-black/45">
+                      Harici scheduler bu ayarı okuyarak çalıştırabilir.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    disabled={!integrationSettingsAvailable}
+                    checked={editing.cronEnabled}
+                    onChange={(event) =>
+                      setEditing({
+                        ...editing,
+                        cronEnabled: event.target.checked,
+                      })
+                    }
+                    className="size-5 accent-[#ff6b00]"
+                  />
+                </label>
+              </SourceField>
+              {!integrationSettingsAvailable && (
+                <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-700 sm:col-span-2">
+                  Entegrasyon alanlarını kullanmak için
+                  `supabase/source-integration-settings.sql` dosyasını
+                  çalıştırın.
+                </p>
+              )}
             </div>
 
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -427,6 +569,17 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function cronScheduleLabel(value: string) {
+  const labels: Record<string, string> = {
+    "0 * * * *": "Her saat",
+    "0 */3 * * *": "3 saatte bir",
+    "0 */6 * * *": "6 saatte bir",
+    "0 */12 * * *": "12 saatte bir",
+    "0 3 * * *": "Günde bir",
+  };
+  return labels[value] ?? value;
 }
 
 function createSlug(value: string) {

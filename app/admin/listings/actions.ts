@@ -6,6 +6,17 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const statuses = new Set(["pending", "published", "rejected"]);
 
+export type BulkListingAction =
+  | "publish"
+  | "pending"
+  | "reject"
+  | "delete";
+
+export type BulkListingResult = {
+  ok: boolean;
+  message: string;
+};
+
 export async function updateListing(formData: FormData) {
   await requireAdminUser("/admin/listings");
   const supabase = createSupabaseAdminClient();
@@ -75,46 +86,63 @@ export async function deleteListing(formData: FormData) {
   revalidateAdminListings();
 }
 
-export async function bulkDeleteListings(ids: number[]) {
-  await requireAdminUser("/admin/listings");
-  const supabase = createSupabaseAdminClient();
-  const validIds = ids.filter(Number.isInteger);
-  if (!supabase || validIds.length === 0) return { ok: false };
-
-  const { error } = await supabase.from("listings").delete().in("id", validIds);
-  if (error) {
-    console.error("Admin bulk listing delete failed:", error);
-    return { ok: false };
-  }
-  revalidateAdminListings();
-  return { ok: true };
-}
-
-export async function bulkPublishListings(ids: number[]) {
+export async function bulkListingAction(
+  ids: number[],
+  action: BulkListingAction,
+): Promise<BulkListingResult> {
   await requireAdminUser("/admin/listings");
   const supabase = createSupabaseAdminClient();
   const validIds = [...new Set(ids.filter(Number.isInteger))];
-  if (!supabase || validIds.length === 0) {
-    return { ok: false, message: "Yayınlanacak ilan seçilmedi." };
-  }
 
-  const { error } = await supabase
-    .from("listings")
-    .update({ status: "published" })
-    .in("id", validIds);
-
-  if (error) {
-    console.error("Admin bulk listing publish failed:", error);
+  if (!supabase) {
     return {
       ok: false,
-      message: `İlanlar yayınlanamadı: ${error.message}`,
+      message: "Supabase service-role bağlantısı yapılandırılmamış.",
+    };
+  }
+  if (validIds.length === 0) {
+    return { ok: false, message: "İşlem yapılacak ilan seçilmedi." };
+  }
+
+  const statusByAction = {
+    publish: "published",
+    pending: "pending",
+    reject: "rejected",
+  } as const;
+  const result =
+    action === "delete"
+      ? await supabase.from("listings").delete().in("id", validIds)
+      : action in statusByAction
+        ? await supabase
+            .from("listings")
+            .update({
+              status:
+                statusByAction[action as keyof typeof statusByAction],
+            })
+            .in("id", validIds)
+        : null;
+
+  if (!result) {
+    return { ok: false, message: "Geçersiz toplu işlem." };
+  }
+  if (result.error) {
+    console.error(`Admin bulk listing ${action} failed:`, result.error);
+    return {
+      ok: false,
+      message: `Toplu işlem tamamlanamadı: ${result.error.message}`,
     };
   }
 
   revalidateAdminListings();
+  const labels: Record<BulkListingAction, string> = {
+    publish: "yayına alındı",
+    pending: "beklemeye alındı",
+    reject: "reddedildi",
+    delete: "silindi",
+  };
   return {
     ok: true,
-    message: `${validIds.length} ilan yayına alındı.`,
+    message: `${validIds.length} ilan ${labels[action]}.`,
   };
 }
 

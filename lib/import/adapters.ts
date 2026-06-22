@@ -5,6 +5,7 @@ import type {
   RawImportListing,
 } from "@/lib/import/types";
 import type { ListingCondition } from "@/lib/listings";
+import { normalizeImageUrls } from "@/lib/bots/image-urls";
 
 const conditionAliases: Record<string, ListingCondition> = {
   sıfır: "Sıfır",
@@ -118,6 +119,23 @@ function normalizeCommon(
     city: string[];
   },
 ): NormalizedImportListing {
+  const imageUrl = readOptionalString(payload, [
+    "image_url",
+    "imageUrl",
+    "image",
+    "main_image",
+    "thumbnail",
+  ]);
+  const imageUrls = normalizeImageUrls([
+    ...(imageUrl ? [imageUrl] : []),
+    ...normalizeImageUrls(
+      payload.image_urls ??
+        payload.imageUrls ??
+        payload.images ??
+        payload.gallery,
+    ),
+  ]);
+
   return {
     externalId: readString(payload, aliases.id, "externalId"),
     productName: readString(payload, aliases.productName, "productName"),
@@ -128,6 +146,8 @@ function normalizeCommon(
     source,
     url: readUrl(payload, source),
     condition: normalizeCondition(payload),
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
     publishedAt: readOptionalString(payload, [
       "publishedAt",
       "published_at",

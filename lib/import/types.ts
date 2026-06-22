@@ -25,6 +25,8 @@ export type NormalizedImportListing = {
   source: ImportSource;
   url: string;
   condition: ListingCondition;
+  imageUrl: string | null;
+  imageUrls: string[];
   publishedAt: string | null;
   rawPayload: RawImportListing;
 };

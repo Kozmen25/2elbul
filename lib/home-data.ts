@@ -32,13 +32,27 @@ export type PriceDrop = HomeListing & {
   discountRate: number;
 };
 
+export type PriceOpportunity = HomeListing & {
+  averagePrice: number;
+  discountRate: number;
+};
+
 export type PopularCategory = {
   name: string;
   listingCount: number;
 };
 
+export type SourceSummary = {
+  source: string;
+  listingCount: number;
+};
+
 export type HomeData = {
   latestListings: HomeListing[];
+  refurbishedListings: HomeListing[];
+  priceOpportunities: PriceOpportunity[];
+  last24HourListings: HomeListing[];
+  sourceSummary: SourceSummary[];
   popularProducts: PopularProduct[];
   popularListedProducts: PopularListedProduct[];
   priceDrops: PriceDrop[];
@@ -70,6 +84,10 @@ type ListingRow = {
 export async function getHomeData(): Promise<HomeData> {
   const emptyData: HomeData = {
     latestListings: [],
+    refurbishedListings: [],
+    priceOpportunities: [],
+    last24HourListings: [],
+    sourceSummary: [],
     popularProducts: [],
     popularListedProducts: [],
     priceDrops: [],
@@ -233,6 +251,41 @@ export async function getHomeData(): Promise<HomeData> {
     .slice(0, 8);
 
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const refurbishedListings = normalizedListings
+    .filter((listing) => listing.condition === "Yenilenmiş")
+    .slice(0, 8);
+  const last24HourMatches = normalizedListings.filter(
+    (listing) => new Date(listing.createdAt).getTime() >= oneDayAgo,
+  );
+  const last24HourListings = (
+    last24HourMatches.length > 0 ? last24HourMatches : normalizedListings
+  ).slice(0, 8);
+  const priceOpportunities = normalizedListings
+    .map((listing) => {
+      const stats = listedProductStats.get(listing.productName);
+      if (!stats || stats.count < 2) return null;
+
+      const averagePrice = stats.total / stats.count;
+      if (listing.price > averagePrice * 0.9) return null;
+
+      return {
+        ...listing,
+        averagePrice: Math.round(averagePrice),
+        discountRate: Math.round(
+          ((averagePrice - listing.price) / averagePrice) * 100,
+        ),
+      };
+    })
+    .filter(
+      (listing): listing is NonNullable<typeof listing> => Boolean(listing),
+    )
+    .sort(
+      (a, b) =>
+        b.discountRate - a.discountRate ||
+        a.price - b.price ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .slice(0, 8);
   const priceDrops = normalizedListings
     .filter(
       (listing) =>
@@ -262,9 +315,30 @@ export async function getHomeData(): Promise<HomeData> {
       categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
     }
   }
+  const summarizedSources = [
+    "Sahibinden",
+    "Letgo",
+    "Facebook Marketplace",
+    "EasyCep",
+    "Getmobil",
+  ];
+  const sourceCounts = new Map<string, number>();
+  for (const listing of normalizedListings) {
+    sourceCounts.set(
+      listing.source,
+      (sourceCounts.get(listing.source) ?? 0) + 1,
+    );
+  }
 
   return {
     latestListings: normalizedListings.slice(0, 6),
+    refurbishedListings,
+    priceOpportunities,
+    last24HourListings,
+    sourceSummary: summarizedSources.map((source) => ({
+      source,
+      listingCount: sourceCounts.get(source) ?? 0,
+    })),
     popularProducts,
     popularListedProducts,
     priceDrops,

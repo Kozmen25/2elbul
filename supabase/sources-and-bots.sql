@@ -7,6 +7,13 @@ create table if not exists public.sources (
   is_active boolean not null default true,
   bot_listing_status text not null default 'pending'
     check (bot_listing_status in ('pending', 'published')),
+  api_url text null,
+  scrape_url text null,
+  cron_enabled boolean not null default false,
+  cron_schedule text not null default '0 */6 * * *',
+  product_limit int not null default 100
+    check (product_limit between 1 and 1000),
+  last_success timestamptz null,
   last_run_at timestamptz null,
   total_imported bigint not null default 0,
   created_at timestamptz not null default now()
@@ -40,7 +47,13 @@ alter table public.sources enable row level security;
 alter table public.bot_runs enable row level security;
 
 alter table public.sources
-  add column if not exists bot_listing_status text not null default 'pending';
+  add column if not exists bot_listing_status text not null default 'pending',
+  add column if not exists api_url text null,
+  add column if not exists scrape_url text null,
+  add column if not exists cron_enabled boolean not null default false,
+  add column if not exists cron_schedule text not null default '0 */6 * * *',
+  add column if not exists product_limit int not null default 100,
+  add column if not exists last_success timestamptz null;
 
 alter table public.sources
   drop constraint if exists sources_bot_listing_status_check;
@@ -48,6 +61,13 @@ alter table public.sources
 alter table public.sources
   add constraint sources_bot_listing_status_check
   check (bot_listing_status in ('pending', 'published'));
+
+alter table public.sources
+  drop constraint if exists sources_product_limit_check;
+
+alter table public.sources
+  add constraint sources_product_limit_check
+  check (product_limit between 1 and 1000);
 
 insert into public.sources (
   name,

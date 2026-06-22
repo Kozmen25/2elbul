@@ -12,6 +12,11 @@ export type SourceInput = {
   baseUrl: string;
   type: string;
   botListingStatus: "pending" | "published";
+  apiUrl: string;
+  scrapeUrl: string;
+  cronEnabled: boolean;
+  cronSchedule: string;
+  productLimit: number;
 };
 
 export type SourceActionResult = {
@@ -35,14 +40,28 @@ export async function createSource(
     base_url: normalizeOptionalUrl(input.baseUrl),
     type: input.type.trim() || "marketplace",
     bot_listing_status: input.botListingStatus,
+    api_url: normalizeOptionalUrl(input.apiUrl),
+    scrape_url: normalizeOptionalUrl(input.scrapeUrl),
+    cron_enabled: input.cronEnabled,
+    cron_schedule: input.cronSchedule.trim(),
+    product_limit: input.productLimit,
   };
   let insertResult = await supabase.from("sources").insert(payload);
 
   if (
     insertResult.error &&
+    isMissingIntegrationSettingsColumn(insertResult.error)
+  ) {
+    insertResult = await supabase
+      .from("sources")
+      .insert(withoutIntegrationSettings(payload));
+  }
+  if (
+    insertResult.error &&
     isMissingBotListingStatusColumn(insertResult.error)
   ) {
-    const { bot_listing_status: _status, ...legacyPayload } = payload;
+    const { bot_listing_status: _status, ...legacyPayload } =
+      withoutIntegrationSettings(payload);
     insertResult = await supabase.from("sources").insert(legacyPayload);
   }
 
@@ -77,6 +96,11 @@ export async function updateSource(
     base_url: normalizeOptionalUrl(input.baseUrl),
     type: input.type.trim() || "marketplace",
     bot_listing_status: input.botListingStatus,
+    api_url: normalizeOptionalUrl(input.apiUrl),
+    scrape_url: normalizeOptionalUrl(input.scrapeUrl),
+    cron_enabled: input.cronEnabled,
+    cron_schedule: input.cronSchedule.trim(),
+    product_limit: input.productLimit,
   };
   let updateResult = await supabase
     .from("sources")
@@ -85,9 +109,19 @@ export async function updateSource(
 
   if (
     updateResult.error &&
+    isMissingIntegrationSettingsColumn(updateResult.error)
+  ) {
+    updateResult = await supabase
+      .from("sources")
+      .update(withoutIntegrationSettings(payload))
+      .eq("id", input.id!);
+  }
+  if (
+    updateResult.error &&
     isMissingBotListingStatusColumn(updateResult.error)
   ) {
-    const { bot_listing_status: _status, ...legacyPayload } = payload;
+    const { bot_listing_status: _status, ...legacyPayload } =
+      withoutIntegrationSettings(payload);
     updateResult = await supabase
       .from("sources")
       .update(legacyPayload)
@@ -217,7 +251,7 @@ export async function runDemoBot(
 
   try {
     const productNames = [
-      ...new Set(listings.map((listing) => listing.productName)),
+      ...new Set(listings.map((listing) => listing.product_name)),
     ];
     const { data: existingProducts, error: productLookupError } = await supabase
       .from("products")
@@ -268,7 +302,7 @@ export async function runDemoBot(
         continue;
       }
 
-      const productId = productIds.get(listing.productName);
+      const productId = productIds.get(listing.product_name);
       if (!productId) {
         errorCount += 1;
         errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
@@ -285,7 +319,7 @@ export async function runDemoBot(
           source: listing.source,
           url: listing.url,
           condition: listing.condition,
-          image_url: listing.imageUrl,
+          image_url: listing.image_url ?? listing.image_urls[0] ?? null,
           status: listing.status,
         });
 
@@ -324,23 +358,40 @@ export async function runDemoBot(
     console.error("Demo bot run finalization failed:", runUpdateError);
   }
 
-  const { error: sourceUpdateError } = await supabase
+  const sourceStatsPayload = {
+    last_run_at: finishedAt,
+    total_imported: Number(source.total_imported ?? 0) + imported,
+    ...(finalStatus === "success" ? { last_success: finishedAt } : {}),
+  };
+  let sourceUpdateResult = await supabase
     .from("sources")
-    .update({
-      last_run_at: finishedAt,
-      total_imported: Number(source.total_imported ?? 0) + imported,
-    })
+    .update(sourceStatsPayload)
     .eq("id", sourceId);
 
-  if (sourceUpdateError) {
-    console.error("Demo bot source stats update failed:", sourceUpdateError);
+  if (
+    sourceUpdateResult.error &&
+    isMissingIntegrationSettingsColumn(sourceUpdateResult.error)
+  ) {
+    const { last_success: _lastSuccess, ...legacyStatsPayload } =
+      sourceStatsPayload;
+    sourceUpdateResult = await supabase
+      .from("sources")
+      .update(legacyStatsPayload)
+      .eq("id", sourceId);
+  }
+
+  if (sourceUpdateResult.error) {
+    console.error(
+      "Demo bot source stats update failed:",
+      sourceUpdateResult.error,
+    );
   }
 
   revalidateSources();
   revalidatePath("/admin/listings");
   revalidatePath("/admin");
 
-  if (runUpdateError || sourceUpdateError) {
+  if (runUpdateError || sourceUpdateResult.error) {
     return {
       ok: false,
       message:
@@ -362,14 +413,23 @@ function validateSource(input: SourceInput): SourceActionResult {
   const slug = normalizeSlug(input.slug);
   const type = input.type.trim();
   const botListingStatus = input.botListingStatus;
+  const productLimit = Number(input.productLimit);
 
   if (
     !name ||
     !slug ||
     !type ||
-    !["pending", "published"].includes(botListingStatus)
+    !["pending", "published"].includes(botListingStatus) ||
+    !input.cronSchedule.trim() ||
+    !Number.isInteger(productLimit) ||
+    productLimit < 1 ||
+    productLimit > 1000
   ) {
-    return { ok: false, message: "Ad, slug ve kaynak tipi zorunludur." };
+    return {
+      ok: false,
+      message:
+        "Ad, slug, kaynak tipi, çekim sıklığı ve 1-1000 arası ürün limiti zorunludur.",
+    };
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
     return {
@@ -377,12 +437,17 @@ function validateSource(input: SourceInput): SourceActionResult {
       message: "Slug yalnızca küçük harf, sayı ve tire içerebilir.",
     };
   }
-  if (input.baseUrl.trim()) {
+  for (const [label, value] of [
+    ["Kaynak linki", input.baseUrl],
+    ["API adresi", input.apiUrl],
+    ["Tarama adresi", input.scrapeUrl],
+  ]) {
+    if (!value.trim()) continue;
     try {
-      const url = new URL(input.baseUrl.trim());
+      const url = new URL(value.trim());
       if (!["http:", "https:"].includes(url.protocol)) throw new Error();
     } catch {
-      return { ok: false, message: "Kaynak linki geçerli bir URL olmalıdır." };
+      return { ok: false, message: `${label} geçerli bir URL olmalıdır.` };
     }
   }
   return { ok: true, message: "" };
@@ -426,6 +491,32 @@ function isMissingBotListingStatusColumn(error: unknown) {
     (text.includes("bot_listing_status") &&
       (text.includes("column") || text.includes("schema cache")))
   );
+}
+
+function isMissingIntegrationSettingsColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "42703" ||
+    record.code === "PGRST204" ||
+    ["api_url", "scrape_url", "cron_enabled", "cron_schedule", "product_limit"]
+      .some((column) => text.includes(column))
+  );
+}
+
+function withoutIntegrationSettings<T extends Record<string, unknown>>(
+  payload: T,
+) {
+  const {
+    api_url: _apiUrl,
+    scrape_url: _scrapeUrl,
+    cron_enabled: _cronEnabled,
+    cron_schedule: _cronSchedule,
+    product_limit: _productLimit,
+    ...legacyPayload
+  } = payload;
+  return legacyPayload;
 }
 
 function revalidateSources() {

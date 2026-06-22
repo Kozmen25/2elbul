@@ -290,6 +290,26 @@ EasyCep kaynağı migration sonrasında varsayılan olarak `published`, diğer
 kaynaklar `pending` olarak ayarlanır. Ayar `/admin/sources` sayfasındaki kaynak
 düzenleme penceresinden değiştirilebilir.
 
+Gerçek API ve tarama entegrasyonu ayarlarını eklemek için mevcut kurulumlarda
+şu migration dosyasını da çalıştırın:
+
+```text
+supabase/source-integration-settings.sql
+```
+
+Bu migration `sources` tablosuna şu alanları ekler:
+
+- `api_url`: Kaynağın resmi veya izinli API adresi
+- `scrape_url`: İzinli HTML/veri tarama başlangıç adresi
+- `cron_enabled`: Zamanlanmış çekimin açık veya kapalı olması
+- `cron_schedule`: Çekim sıklığını belirleyen cron ifadesi
+- `product_limit`: Bir çalışmada işlenecek en fazla ürün
+- `last_success`: Son başarılı bot çalışmasının zamanı
+
+Bu alanlar `/admin/sources` düzenleme ekranından yönetilebilir. Arayüzde API
+adresi, tarama adresi, saatlik/günlük çekim sıklığı, ürün limiti ve cron
+aktifliği bulunur.
+
 Migration şu tabloları oluşturur:
 
 - `sources`: kaynak adı, slug, site adresi, kaynak tipi, aktiflik durumu, son
@@ -319,6 +339,69 @@ Admin kullanımı:
 Bu altyapı doğrudan üçüncü taraf siteleri kazımaz. Resmi API, izinli veri
 sağlayıcı, webhook veya ayrı bir bot worker çıktısının güvenli şekilde
 kaydedilmesi için yönetim ve kayıt katmanını hazırlar.
+
+### Gerçek Kaynak Connector Altyapısı
+
+`lib/bots/types.ts` tüm gerçek kaynak entegrasyonlarının uyması gereken ortak
+veri sözleşmesini tanımlar. `lib/bots/connectors.ts` ise EasyCep, Getmobil ve
+yenilenmiş cihaz kaynakları için API/scrape çalışma modlarını seçebilen
+server-only connector iskeletini içerir.
+
+Her kaynak adaptörü ilanları şu ortak formatta döndürmelidir:
+
+```json
+{
+  "product_name": "iPhone 13",
+  "title": "iPhone 13 128GB Yenilenmiş",
+  "price": 21999,
+  "city": "İstanbul",
+  "source": "EasyCep",
+  "url": "https://easycep.com/urun/ornek",
+  "condition": "Yenilenmiş",
+  "image_url": "https://cdn.example.com/main.jpg",
+  "image_urls": [
+    "https://cdn.example.com/main.jpg",
+    "https://cdn.example.com/side.jpg"
+  ]
+}
+```
+
+`image_url` ana ilan görselidir. `image_urls` JSON array veya JSON/string array
+olarak gelebilir. Mevcut veritabanında yalnızca `listings.image_url` bulunduğu
+için sistem `image_url` değerini, bu alan boşsa `image_urls` içindeki ilk
+geçerli HTTP/HTTPS adresini kaydeder. Galeri listesi harici importlarda
+`raw_payload` içinde korunabilir.
+
+Gerçek HTML görsel ayrıştırma altyapısı:
+
+- `lib/bots/html-utils.ts`: `absoluteUrl`, `extractImageUrl`,
+  `extractImageUrls`, `normalizePrice` ve `normalizeCondition`
+- `lib/bots/adapters/easycep.ts`: EasyCep ürün adı, fiyat, ürün linki, ana
+  görsel ve galeri parser iskeleti
+- `lib/bots/adapters/getmobil.ts`: Getmobil ürün adı, fiyat, ürün linki ve
+  galeri parser iskeleti
+
+Adapter parser'ları DOM-benzeri `HtmlRootLike` arayüzü kullanır. Gerçek fetch
+katmanı izinli ürün HTML'ini Cheerio veya eşdeğer güvenli bir sunucu parser'ına
+aktarıp ilgili parser fonksiyonunu çağırmalıdır. Relative `src`, `data-src`,
+`srcset`, lazy-load ve Open Graph görselleri mutlak URL'ye çevrilir. Kaynak
+sayfada geçerli görsel varsa bu URL korunur; yalnızca görsel yoksa kartların
+mevcut ürün fallback SVG'si devreye girer.
+
+Gerçek entegrasyon eklerken:
+
+1. Sağlayıcının resmi API veya yazılı izinli veri erişim yöntemini doğrulayın.
+2. Kimlik bilgilerini yalnızca server-only environment variable olarak
+   tanımlayın; `NEXT_PUBLIC_` ön eki kullanmayın.
+3. Sağlayıcı cevabını `ExternalListingCandidate` formatına dönüştürün.
+4. `product_limit` değerini uygulayın ve her çalışma için `bot_runs` kaydı
+   oluşturun.
+5. Başarılı çalışmada `sources.last_success`, her çalışmada
+   `sources.last_run_at` alanını güncelleyin.
+
+`cron_enabled` ve `cron_schedule` yalnızca zamanlama konfigürasyonunu saklar.
+Cron'u gerçekten tetiklemek için Vercel Cron, Supabase Scheduled Functions veya
+ayrı bir worker kullanılmalıdır.
 
 ### Demo Bot Testi
 
@@ -383,7 +466,11 @@ action içinde kullanılır ve tarayıcıya gönderilmez.
     "source": "Sahibinden",
     "url": "https://example.com",
     "condition": "İkinci El",
-    "image_url": "https://example.com/iphone-13.jpg"
+    "image_url": "https://example.com/iphone-13.jpg",
+    "image_urls": [
+      "https://example.com/iphone-13.jpg",
+      "https://example.com/iphone-13-side.jpg"
+    ]
   }
 ]
 ```
@@ -422,12 +509,14 @@ Kullanım:
 CSV ve Excel dosyalarının ilk satırında şu kolon başlıkları bulunmalıdır:
 
 ```csv
-product_name,title,price,city,source,url,condition,image_url
+product_name,title,price,city,source,url,condition,image_url,image_urls
 ```
 
 Excel aktarımında `.xlsx` dosyasının yalnızca ilk sayfası okunur. CSV ve Excel
 dosyaları tarayıcıda JSON'a dönüştürülerek aynı güvenli server action üzerinden
-işlenir. `image_url` kolonu boş bırakılabilir.
+işlenir. `image_url` ve opsiyonel `image_urls` alanları boş bırakılabilir.
+CSV içinde `image_urls` değeri JSON array metni veya virgül/satır ayrımlı URL
+listesi olabilir.
 
 Aktarım sırasında `product_name` değeri `products.name` alanında aranır. Ürün
 yoksa oluşturulur, varsa mevcut `product_id` kullanılır. Aynı `listings.url`
@@ -467,8 +556,9 @@ Kurulum:
 2. `.env.local` ve Vercel ortamına `SUPABASE_SERVICE_ROLE_KEY` ekleyin.
 3. `supabase/product-slugs.sql`, `supabase/listing-images.sql`,
    `supabase/listing-status.sql`, `supabase/sources-and-bots.sql` ve
-   `supabase/source-bot-publish-mode.sql` migration dosyalarını SQL Editor'da
-   çalıştırın.
+   `supabase/source-bot-publish-mode.sql`,
+   `supabase/source-integration-settings.sql` migration dosyalarını SQL
+   Editor'da çalıştırın.
 4. Oturum açtıktan sonra `/admin` adresine gidin.
 
 Kullanıcı silme işlemi Supabase Auth Admin API üzerinden kalıcı olarak yapılır

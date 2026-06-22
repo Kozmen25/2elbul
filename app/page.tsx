@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ArrowUpRight,
+  BadgePercent,
   BarChart3,
   Clock3,
   Flame,
@@ -8,6 +9,7 @@ import {
   PackageSearch,
   MapPin,
   Search,
+  Smartphone,
   Store,
   TrendingDown,
   TriangleAlert,
@@ -19,6 +21,7 @@ import { createProductSlug } from "@/lib/product-slug";
 import {
   getHomeData,
   type HomeListing,
+  type PriceOpportunity,
   type PriceDrop,
 } from "@/lib/home-data";
 
@@ -59,7 +62,10 @@ const formatDate = (date: string) =>
 
 export default async function Home() {
   const {
-    latestListings,
+    refurbishedListings,
+    priceOpportunities,
+    last24HourListings,
+    sourceSummary,
     popularProducts,
     popularListedProducts,
     priceDrops,
@@ -145,14 +151,14 @@ export default async function Home() {
       )}
 
       <HomeSection
-        eyebrow="Yeni ilanlar"
-        title="Son eklenen ilanlar"
+        eyebrow="Güncel piyasa"
+        title="Son 24 saatte eklenenler"
         icon={Clock3}
       >
-        {latestListings.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {latestListings.map((listing) => (
-              <ListingPreview key={listing.id} listing={listing} />
+        {last24HourListings.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {last24HourListings.map((listing) => (
+              <CompactListingCard key={listing.id} listing={listing} />
             ))}
           </div>
         ) : (
@@ -161,10 +167,73 @@ export default async function Home() {
       </HomeSection>
 
       <HomeSection
+        eyebrow="Kontrollü alternatifler"
+        title="Yenilenmiş cihazlar"
+        icon={Smartphone}
+        muted
+      >
+        {refurbishedListings.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {refurbishedListings.map((listing) => (
+              <CompactListingCard
+                key={listing.id}
+                listing={listing}
+                badge="Yenilenmiş"
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="Yayınlanmış yenilenmiş cihaz ilanı henüz bulunmuyor." />
+        )}
+      </HomeSection>
+
+      <HomeSection
+        eyebrow="Piyasanın altında"
+        title="En ucuz fırsatlar"
+        icon={BadgePercent}
+      >
+        {priceOpportunities.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {priceOpportunities.map((listing) => (
+              <OpportunityCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="Fırsat analizi için her üründe en az iki ilan gerekli." />
+        )}
+      </HomeSection>
+
+      <HomeSection
+        eyebrow="Platform dağılımı"
+        title="Kaynaklara göre ilanlar"
+        icon={Store}
+        muted
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {sourceSummary.map((item) => (
+            <div
+              key={item.source}
+              className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 sm:p-5"
+            >
+              <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+                <Store size={19} />
+              </span>
+              <h3 className="mt-4 break-words text-sm font-black">
+                {item.source}
+              </h3>
+              <p className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#ff6b00]">
+                {item.listingCount}
+              </p>
+              <p className="text-xs text-black/40">yayındaki ilan</p>
+            </div>
+          ))}
+        </div>
+      </HomeSection>
+
+      <HomeSection
         eyebrow="Piyasa özeti"
         title="Popüler ürünler"
         icon={PackageSearch}
-        muted
       >
         {popularListedProducts.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
@@ -324,41 +393,100 @@ function HomeSection({
   );
 }
 
-function ListingPreview({ listing }: { listing: HomeListing }) {
+function CompactListingCard({
+  listing,
+  badge,
+}: {
+  listing: HomeListing;
+  badge?: string;
+}) {
+  const productHref = `/product/${createProductSlug(listing.productName)}`;
+
   return (
-    <article className="flex flex-col rounded-2xl border border-black/8 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.06)]">
-      <ListingImage
-        imageUrl={listing.imageUrl}
-        productName={listing.productName}
-        alt={listing.title}
-      />
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700]">
-          {listing.productName}
-        </span>
-        <span className="text-xs text-black/35">{formatDate(listing.createdAt)}</span>
-      </div>
-      <h3 className="mt-4 min-h-12 text-base font-black leading-6">
-        {listing.title}
-      </h3>
-      <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
+    <article className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.06)]">
+      <Link href={productHref} className="block min-w-0">
+        <ListingImage
+          imageUrl={listing.imageUrl}
+          productName={listing.productName}
+          alt={listing.title}
+        />
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-xs font-black text-[#d95700]">
+            {listing.productName}
+          </span>
+          {badge && (
+            <span className="shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-black text-sky-700">
+              {badge}
+            </span>
+          )}
+        </div>
+        <h3 className="mt-3 line-clamp-2 min-h-10 text-sm font-black leading-5">
+          {listing.title}
+        </h3>
+      </Link>
+      <p className="mt-3 text-xl font-black tracking-[-0.035em] text-[#ff6b00]">
         {formatPrice(listing.price)}
       </p>
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-black/45">
+      <div className="mt-3 grid gap-1.5 text-xs text-black/45">
         <span className="flex items-center gap-1.5">
-          <MapPin size={14} /> {listing.city}
+          <Store size={13} /> {listing.source}
         </span>
         <span className="flex items-center gap-1.5">
-          <Store size={14} /> {listing.source}
+          <MapPin size={13} /> {listing.city}
         </span>
       </div>
       <a
         href={listing.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="orange-button mt-5 py-3"
+        className="mt-4 inline-flex items-center gap-1.5 text-sm font-black text-[#d95700] hover:underline"
       >
-        İlana git <ArrowUpRight size={17} />
+        İlana git <ArrowUpRight size={15} />
+      </a>
+    </article>
+  );
+}
+
+function OpportunityCard({ listing }: { listing: PriceOpportunity }) {
+  return (
+    <article className="flex min-w-0 flex-col rounded-2xl border border-green-200 bg-green-50/45 p-4">
+      <Link
+        href={`/product/${createProductSlug(listing.productName)}`}
+        className="block min-w-0"
+      >
+        <ListingImage
+          imageUrl={listing.imageUrl}
+          productName={listing.productName}
+          alt={listing.title}
+        />
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-xs font-black text-green-800">
+            {listing.productName}
+          </span>
+          <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-black text-green-700">
+            Ortalamanın %{listing.discountRate} altında
+          </span>
+        </div>
+        <h3 className="mt-3 line-clamp-2 min-h-10 text-sm font-black leading-5">
+          {listing.title}
+        </h3>
+      </Link>
+      <p className="mt-3 text-xl font-black tracking-[-0.035em] text-green-700">
+        {formatPrice(listing.price)}
+      </p>
+      <p className="mt-1 text-xs text-black/45">
+        Ürün ortalaması: {formatPrice(listing.averagePrice)}
+      </p>
+      <div className="mt-3 flex items-center gap-1.5 text-xs text-black/45">
+        <Store size={13} /> {listing.source}
+      </div>
+      <a
+        href={listing.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-4 inline-flex items-center gap-1.5 text-sm font-black text-green-700 hover:underline"
+      >
+        İlana git <ArrowUpRight size={15} />
       </a>
     </article>
   );

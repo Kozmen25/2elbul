@@ -2,6 +2,7 @@
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireAdminUser } from "@/lib/admin";
+import { normalizeImageUrls } from "@/lib/bots/image-urls";
 import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 
 export type ImportError = {
@@ -28,6 +29,7 @@ type ImportListing = {
   url: string;
   condition: string;
   imageUrl: string | null;
+  imageUrls: string[];
 };
 
 const allowedConditions = new Set<string>(LISTING_CONDITIONS);
@@ -189,6 +191,7 @@ function normalizeListing(value: unknown): ImportListing {
   const url = readRequiredString(record, "url");
   const price = parsePrice(record.price);
   const imageUrl = readOptionalString(record, "image_url");
+  const galleryUrls = normalizeImageUrls(record.image_urls);
 
   if (!allowedConditions.has(condition)) {
     throw new Error(
@@ -223,6 +226,10 @@ function normalizeListing(value: unknown): ImportListing {
       throw new Error("image_url geçerli bir http veya https bağlantısı olmalıdır.");
     }
   }
+  const imageUrls = normalizeImageUrls([
+    ...(imageUrl ? [imageUrl] : []),
+    ...galleryUrls,
+  ]);
 
   return {
     productName,
@@ -232,7 +239,8 @@ function normalizeListing(value: unknown): ImportListing {
     source,
     url,
     condition,
-    imageUrl,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
   };
 }
 

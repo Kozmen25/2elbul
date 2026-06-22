@@ -24,7 +24,11 @@ const exampleJson = `[
     "source": "Sahibinden",
     "url": "https://example.com",
     "condition": "İkinci El",
-    "image_url": "https://example.com/image.jpg"
+    "image_url": "https://example.com/image.jpg",
+    "image_urls": [
+      "https://example.com/image.jpg",
+      "https://example.com/image-2.jpg"
+    ]
   },
   {
     "product_name": "Samsung S24",
@@ -34,7 +38,8 @@ const exampleJson = `[
     "source": "EasyCep",
     "url": "https://example.com/yenilenmis-samsung-s24",
     "condition": "Yenilenmiş",
-    "image_url": "https://example.com/samsung-s24.jpg"
+    "image_url": "https://example.com/samsung-s24.jpg",
+    "image_urls": "[\\"https://example.com/samsung-s24.jpg\\", \\"https://example.com/samsung-s24-side.jpg\\"]"
   }
 ]`;
 
@@ -56,7 +61,10 @@ const columns = [
   "url",
   "condition",
   "image_url",
+  "image_urls",
 ] as const;
+
+const requiredColumns = columns.filter((column) => column !== "image_urls");
 
 type PreviewRecord = Record<string, unknown>;
 
@@ -112,7 +120,7 @@ export function AdminImportForm() {
         throw new Error("Dosyada içe aktarılacak kayıt bulunamadı.");
       }
 
-      const missingHeaders = columns.filter(
+      const missingHeaders = requiredColumns.filter(
         (column) =>
           !records.some((record) =>
             Object.prototype.hasOwnProperty.call(record, column),

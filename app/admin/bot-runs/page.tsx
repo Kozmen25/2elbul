@@ -1,3 +1,4 @@
+import { CircleCheckBig, Timer, TriangleAlert } from "lucide-react";
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -59,6 +60,30 @@ export default async function AdminBotRunsPage() {
     errorMessage: run.error_message ? String(run.error_message) : null,
     createdAt: String(run.created_at),
   }));
+  const finishedRuns = runs.filter((run) =>
+    ["success", "completed", "failed", "error"].includes(run.status),
+  );
+  const successfulRuns = finishedRuns.filter((run) =>
+    ["success", "completed"].includes(run.status),
+  ).length;
+  const successRate = finishedRuns.length
+    ? Math.round((successfulRuns / finishedRuns.length) * 100)
+    : 0;
+  const durations = runs
+    .filter((run) => run.startedAt && run.finishedAt)
+    .map(
+      (run) =>
+        new Date(run.finishedAt!).getTime() -
+        new Date(run.startedAt!).getTime(),
+    )
+    .filter((duration) => duration >= 0);
+  const averageDuration = durations.length
+    ? durations.reduce((total, duration) => total + duration, 0) /
+      durations.length
+    : 0;
+  const latestError = runs.find(
+    (run) => run.errorMessage || ["failed", "error"].includes(run.status),
+  );
 
   return (
     <>
@@ -73,8 +98,34 @@ export default async function AdminBotRunsPage() {
           Bot çalışma kayıtları okunamadı. Önce
           `supabase/sources-and-bots.sql` migration dosyasını çalıştırın.
         </AdminEmpty>
-      ) : runs.length ? (
+      ) : (
         <>
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <BotMetricCard
+              icon={CircleCheckBig}
+              label="Başarı oranı"
+              value={finishedRuns.length ? `%${successRate}` : "—"}
+              note={`${successfulRuns}/${finishedRuns.length} başarılı çalışma`}
+              tone="green"
+            />
+            <BotMetricCard
+              icon={Timer}
+              label="Ortalama çalışma süresi"
+              value={durations.length ? formatDuration(averageDuration) : "—"}
+              note={`${durations.length} tamamlanmış çalışma`}
+              tone="orange"
+            />
+            <BotMetricCard
+              icon={TriangleAlert}
+              label="Son hata"
+              value={latestError?.sourceName ?? "Hata yok"}
+              note={latestError?.errorMessage ?? "Kayıtlı bot hatası bulunmuyor."}
+              tone={latestError ? "red" : "green"}
+            />
+          </div>
+
+          {runs.length ? (
+            <>
           <p className="mb-4 text-sm font-bold text-black/45">
             Son {runs.length} çalışma kaydı
           </p>
@@ -125,14 +176,54 @@ export default async function AdminBotRunsPage() {
               </tbody>
             </table>
           </div>
+            </>
+          ) : (
+            <AdminEmpty>
+              Henüz bot çalışma kaydı yok. Bot entegrasyonları çalıştıkça
+              sonuçlar burada görünecek.
+            </AdminEmpty>
+          )}
         </>
-      ) : (
-        <AdminEmpty>
-          Henüz bot çalışma kaydı yok. Bot entegrasyonları çalıştıkça sonuçlar
-          burada görünecek.
-        </AdminEmpty>
       )}
     </>
+  );
+}
+
+function BotMetricCard({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone,
+}: {
+  icon: typeof Timer;
+  label: string;
+  value: string;
+  note: string;
+  tone: "green" | "orange" | "red";
+}) {
+  const tones = {
+    green: "bg-green-100 text-green-700",
+    orange: "bg-[#fff1e7] text-[#ff6b00]",
+    red: "bg-red-100 text-red-700",
+  };
+  return (
+    <section className="min-w-0 rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-bold text-black/45">{label}</p>
+        <span
+          className={`grid size-10 shrink-0 place-items-center rounded-xl ${tones[tone]}`}
+        >
+          <Icon size={20} />
+        </span>
+      </div>
+      <p className="mt-4 truncate text-2xl font-black tracking-[-0.035em]">
+        {value}
+      </p>
+      <p className="mt-2 line-clamp-2 text-xs leading-5 text-black/45" title={note}>
+        {note}
+      </p>
+    </section>
   );
 }
 
@@ -195,4 +286,12 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatDuration(milliseconds: number) {
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+  if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(1)} sn`;
+  const minutes = Math.floor(milliseconds / 60_000);
+  const seconds = Math.round((milliseconds % 60_000) / 1000);
+  return `${minutes} dk ${seconds} sn`;
 }

@@ -1,12 +1,21 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  Pencil,
+  ShieldX,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ListingImage } from "@/components/listing-image";
 import {
-  bulkDeleteListings,
-  bulkPublishListings,
+  bulkListingAction,
+  type BulkListingAction,
+  type BulkListingResult,
   deleteListing,
   setListingStatus,
   updateListing,
@@ -38,29 +47,23 @@ export function ListingManager({
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<number[]>([]);
-  const [bulkMessage, setBulkMessage] = useState("");
+  const [notification, setNotification] =
+    useState<BulkListingResult | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function bulkDelete() {
+  function runBulkAction(action: BulkListingAction) {
+    if (selected.length === 0) return;
     if (
-      selected.length === 0 ||
+      action === "delete" &&
       !window.confirm(`${selected.length} ilan kalıcı olarak silinsin mi?`)
     ) {
       return;
     }
-    startTransition(async () => {
-      await bulkDeleteListings(selected);
-      setSelected([]);
-      setBulkMessage("");
-      router.refresh();
-    });
-  }
 
-  function bulkPublish() {
-    if (selected.length === 0) return;
+    setNotification(null);
     startTransition(async () => {
-      const result = await bulkPublishListings(selected);
-      setBulkMessage(result.message);
+      const result = await bulkListingAction(selected, action);
+      setNotification(result);
       if (result.ok) {
         setSelected([]);
         router.refresh();
@@ -70,37 +73,79 @@ export function ListingManager({
 
   return (
     <div className="min-w-0">
-      <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <p className="text-sm font-bold text-black/45">
-          {listings.length} ilan gösteriliyor
-        </p>
-        <div className="flex flex-col gap-2 min-[430px]:flex-row">
-          {statusAvailable && (
-            <button
-              type="button"
+      <div className="mb-3 rounded-2xl border border-black/8 bg-white p-3 shadow-[0_10px_30px_rgba(0,0,0,0.035)] sm:p-4">
+        <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
+          <div>
+            <p className="font-black">Toplu işlemler</p>
+            <p className="mt-1 text-xs font-semibold text-black/45">
+              {selected.length
+                ? `${selected.length} ilan seçildi`
+                : `${listings.length} ilan gösteriliyor. İşlem için ilan seçin.`}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {statusAvailable && (
+              <>
+                <BulkButton
+                  label="Yayınla"
+                  icon={CheckCircle2}
+                  disabled={selected.length === 0 || pending}
+                  onClick={() => runBulkAction("publish")}
+                  className="border-green-200 bg-green-50 text-green-700"
+                />
+                <BulkButton
+                  label="Beklemeye al"
+                  icon={Clock3}
+                  disabled={selected.length === 0 || pending}
+                  onClick={() => runBulkAction("pending")}
+                  className="border-amber-200 bg-amber-50 text-amber-700"
+                />
+                <BulkButton
+                  label="Reddet"
+                  icon={ShieldX}
+                  disabled={selected.length === 0 || pending}
+                  onClick={() => runBulkAction("reject")}
+                  className="border-red-200 bg-red-50 text-red-700"
+                />
+              </>
+            )}
+            <BulkButton
+              label="Sil"
+              icon={Trash2}
               disabled={selected.length === 0 || pending}
-              onClick={bulkPublish}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-            >
-              <CheckCircle2 size={17} />
-              Seçilenleri Yayında yap ({selected.length})
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={selected.length === 0 || pending}
-            onClick={bulkDelete}
-            className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-          >
-            Seçilenleri sil ({selected.length})
-          </button>
+              onClick={() => runBulkAction("delete")}
+              className="border-red-600 bg-red-600 text-white"
+            />
+          </div>
         </div>
       </div>
 
-      {bulkMessage && (
-        <p className="mb-3 rounded-xl border border-black/8 bg-white px-4 py-3 text-sm font-bold">
-          {bulkMessage}
-        </p>
+      {notification && (
+        <div
+          role={notification.ok ? "status" : "alert"}
+          className={`mb-3 flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-bold ${
+            notification.ok
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            {notification.ok ? (
+              <CheckCircle2 size={18} className="shrink-0" />
+            ) : (
+              <ShieldX size={18} className="shrink-0" />
+            )}
+            {notification.message}
+          </span>
+          <button
+            type="button"
+            onClick={() => setNotification(null)}
+            aria-label="Bildirimi kapat"
+            className="shrink-0"
+          >
+            <X size={17} />
+          </button>
+        </div>
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
@@ -348,6 +393,32 @@ export function ListingManager({
         </table>
       </div>
     </div>
+  );
+}
+
+function BulkButton({
+  label,
+  icon: Icon,
+  disabled,
+  onClick,
+  className,
+}: {
+  label: string;
+  icon: typeof CheckCircle2;
+  disabled: boolean;
+  onClick: () => void;
+  className: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-35 sm:text-sm ${className}`}
+    >
+      <Icon size={16} />
+      {label}
+    </button>
   );
 }
 

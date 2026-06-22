@@ -1,21 +1,39 @@
+import type { BotAdapterListing } from "@/lib/bots/types";
+
 type DemoProduct = {
   name: string;
   minPrice: number;
   maxPrice: number;
   titleDetails: string[];
+  imageUrls: string[];
 };
 
-export type DemoListing = {
-  productName: string;
-  title: string;
-  price: number;
-  city: string;
-  source: string;
-  url: string;
-  condition: string;
-  imageUrl: string;
+export type DemoListing = BotAdapterListing & {
   status: "pending" | "published";
 };
+
+const phoneImages = [
+  "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=1200&q=80",
+];
+const androidImages = [
+  "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1605236453806-6ff36851218e?auto=format&fit=crop&w=1200&q=80",
+];
+const consoleImages = [
+  "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1486401899868-0e435ed85128?auto=format&fit=crop&w=1200&q=80",
+];
+const gpuImages = [
+  "https://images.unsplash.com/photo-1591488320449-011701bb6704?auto=format&fit=crop&w=1200&q=80",
+];
+const laptopImages = [
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=1200&q=80",
+];
+const tabletImages = [
+  "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=1200&q=80",
+];
 
 const products: DemoProduct[] = [
   {
@@ -23,48 +41,56 @@ const products: DemoProduct[] = [
     minPrice: 18_000,
     maxPrice: 25_500,
     titleDetails: ["128GB", "256GB", "Kutulu 128GB"],
+    imageUrls: phoneImages,
   },
   {
     name: "iPhone 14",
     minPrice: 24_000,
     maxPrice: 33_500,
     titleDetails: ["128GB", "256GB", "Pil sağlığı yüksek"],
+    imageUrls: phoneImages,
   },
   {
     name: "Samsung S23",
     minPrice: 20_000,
     maxPrice: 29_500,
     titleDetails: ["128GB", "256GB", "Garantili"],
+    imageUrls: androidImages,
   },
   {
     name: "Samsung S24",
     minPrice: 27_000,
     maxPrice: 38_500,
     titleDetails: ["128GB", "256GB", "Kutulu ve garantili"],
+    imageUrls: androidImages,
   },
   {
     name: "PlayStation 5",
     minPrice: 17_000,
     maxPrice: 25_000,
     titleDetails: ["Slim", "Diskli sürüm", "Çift kollu"],
+    imageUrls: consoleImages,
   },
   {
     name: "RTX 4060",
     minPrice: 12_000,
     maxPrice: 18_500,
     titleDetails: ["8GB", "Kutulu", "Garantili ekran kartı"],
+    imageUrls: gpuImages,
   },
   {
     name: "MacBook Air M1",
     minPrice: 22_000,
     maxPrice: 32_000,
     titleDetails: ["8/256GB", "8/512GB", "Temiz kullanılmış"],
+    imageUrls: laptopImages,
   },
   {
     name: "iPad 9. Nesil",
     minPrice: 9_000,
     maxPrice: 14_500,
     titleDetails: ["64GB Wi-Fi", "256GB", "Kutulu"],
+    imageUrls: tabletImages,
   },
 ];
 
@@ -91,14 +117,15 @@ export function createDemoListings(
     const detail = randomItem(product.titleDetails);
 
     return {
-      productName: product.name,
+      product_name: product.name,
       title: `${product.name} ${detail} ${condition}`,
       price: randomPrice(product.minPrice, product.maxPrice),
       city: randomItem(cities),
       source: sourceName,
       url: `https://demo.2elbul.com/${sourceSlug}/${runToken}-${index + 1}`,
       condition,
-      imageUrl: `https://placehold.co/800x450/F5F3EF/FF6B00?text=${encodeURIComponent(product.name)}`,
+      image_url: product.imageUrls[0] ?? null,
+      image_urls: product.imageUrls,
       status: listingStatus,
     };
   });
