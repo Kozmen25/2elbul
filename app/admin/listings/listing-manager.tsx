@@ -148,7 +148,7 @@ export function ListingManager({
         </div>
       )}
 
-      <div className="max-w-full overflow-x-auto rounded-2xl border border-black/8 bg-white">
+      <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch]">
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>

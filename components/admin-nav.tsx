@@ -51,7 +51,7 @@ export function AdminNav({ email }: { email: string }) {
       </div>
 
       <aside
-        className={`${open ? "block" : "hidden"} border-b border-black/8 bg-[#111] text-white lg:sticky lg:top-0 lg:block lg:h-screen lg:border-b-0`}
+        className={`${open ? "block" : "hidden"} shrink-0 border-b border-black/8 bg-[#111] text-white lg:sticky lg:top-0 lg:block lg:h-screen lg:w-[260px] lg:border-b-0`}
       >
         <div className="flex h-full flex-col p-4 sm:p-5">
           <div className="hidden rounded-2xl bg-white p-4 lg:block">

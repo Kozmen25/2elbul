@@ -142,20 +142,33 @@ export function SourceManager({
         </div>
       )}
 
-      <div className="max-w-full overflow-x-auto rounded-2xl border border-black/8 bg-white">
-        <table className="w-full min-w-[1220px] text-left text-sm">
+      <div className="grid gap-3 lg:hidden">
+        {sources.map((source) => (
+          <SourceCard
+            key={source.id}
+            source={source}
+            pending={pending}
+            publishModeAvailable={publishModeAvailable}
+            runAction={runAction}
+            openEdit={openEdit}
+          />
+        ))}
+      </div>
+
+      <div className="hidden w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch] lg:block">
+        <table className="w-max min-w-[1100px] table-auto text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
-              <th className="w-[180px] px-3 py-3">Kaynak</th>
+              <th className="w-[165px] px-3 py-3">Kaynak</th>
               <th className="w-[105px] px-3 py-3">Tip</th>
               <th className="w-[85px] px-3 py-3">Durum</th>
-              <th className="w-[130px] px-3 py-3">Bot modu</th>
-              <th className="w-[130px] px-3 py-3">Entegrasyon</th>
+              <th className="w-[95px] px-3 py-3">Mod</th>
+              <th className="w-[115px] px-3 py-3">Entegrasyon</th>
               <th className="w-[115px] px-3 py-3">Plan</th>
-              <th className="w-[150px] px-3 py-3">Son çalışma</th>
+              <th className="w-[130px] px-3 py-3">Son çalışma</th>
               <th className="w-[95px] px-3 py-3">Aktarılan</th>
               <th className="w-[70px] px-3 py-3 text-center">Link</th>
-              <th className="sticky right-0 z-10 w-[245px] bg-[#fafaf8] px-3 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
+              <th className="sticky right-0 z-10 w-[185px] bg-[#fafaf8] px-3 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
                 İşlemler
               </th>
             </tr>
@@ -274,10 +287,11 @@ export function SourceManager({
                           runAction(() => runDemoBot(source.id));
                         }
                       }}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] px-2.5 text-xs font-black text-[#d95700] disabled:opacity-50"
+                      className="grid size-9 place-items-center rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] text-[#d95700] disabled:opacity-50"
+                      title="Demo test çekimi"
+                      aria-label={`${source.name} için demo test çekimi yap`}
                     >
                       <Bot size={15} />
-                      Demo
                     </button>
                     <button
                       type="button"
@@ -295,7 +309,7 @@ export function SourceManager({
                           runAction(() => runRealBot(source.id));
                         }
                       }}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-2.5 text-xs font-black text-purple-700 disabled:cursor-not-allowed disabled:opacity-45"
+                      className="grid size-9 place-items-center rounded-lg border border-purple-200 bg-purple-50 text-purple-700 disabled:cursor-not-allowed disabled:opacity-45"
                       title={
                         ["easycep", "getmobil"].includes(source.slug)
                           ? "Tek sayfalık sınırlı gerçek test çekimi"
@@ -303,9 +317,6 @@ export function SourceManager({
                       }
                     >
                       <Globe2 size={15} />
-                      {["easycep", "getmobil"].includes(source.slug)
-                        ? "Gerçek"
-                        : "Hazırlanıyor"}
                     </button>
                     <button
                       type="button"
@@ -617,6 +628,207 @@ function SourceField({
       <span className="mb-2 block text-sm font-bold">{label}</span>
       {children}
     </label>
+  );
+}
+
+function SourceCard({
+  source,
+  pending,
+  publishModeAvailable,
+  runAction,
+  openEdit,
+}: {
+  source: AdminSource;
+  pending: boolean;
+  publishModeAvailable: boolean;
+  runAction: (action: () => Promise<SourceActionResult>) => void;
+  openEdit: (source: AdminSource) => void;
+}) {
+  const realBotReady = ["easycep", "getmobil"].includes(source.slug);
+
+  return (
+    <article className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.035)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-base font-black">{source.name}</h3>
+          <p className="mt-1 font-mono text-xs text-black/40">{source.slug}</p>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${
+            source.isActive
+              ? "bg-green-100 text-green-700"
+              : "bg-black/7 text-black/45"
+          }`}
+        >
+          {source.isActive ? "Aktif" : "Pasif"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <InfoItem label="Tip" value={typeLabel(source.type)} />
+        <InfoItem
+          label="Bot modu"
+          value={source.botListingStatus === "published" ? "Direkt" : "Pending"}
+        />
+        <InfoItem
+          label="Plan"
+          value={source.cronEnabled ? cronScheduleLabel(source.cronSchedule) : "Kapalı"}
+        />
+        <InfoItem
+          label="Aktarılan"
+          value={source.totalImported.toLocaleString("tr-TR")}
+        />
+        <InfoItem
+          label="Limit"
+          value={source.productLimit.toLocaleString("tr-TR")}
+        />
+        <InfoItem
+          label="Son çalışma"
+          value={source.lastRunAt ? formatDate(source.lastRunAt) : "Yok"}
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {source.apiUrl && (
+          <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-black text-blue-700">
+            API
+          </span>
+        )}
+        {source.scrapeUrl && (
+          <span className="rounded-full bg-purple-100 px-2 py-1 text-[10px] font-black text-purple-700">
+            SCRAPE
+          </span>
+        )}
+        {source.integrationType !== "manual" && (
+          <span className="rounded-full bg-black/7 px-2 py-1 text-[10px] font-black text-black/55">
+            {source.integrationType.toUpperCase()}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 min-[420px]:grid-cols-6">
+        <ActionIconButton
+          disabled={pending || !publishModeAvailable}
+          title="Demo test çekimi"
+          className="border-[#ff6b00]/25 bg-[#fff7f1] text-[#d95700]"
+          onClick={() => {
+            if (
+              window.confirm(`${source.name} için 10 adet demo ilan üretilsin mi?`)
+            ) {
+              runAction(() => runDemoBot(source.id));
+            }
+          }}
+        >
+          <Bot size={16} />
+        </ActionIconButton>
+        <ActionIconButton
+          disabled={pending || !publishModeAvailable || !realBotReady}
+          title={realBotReady ? "Gerçek test çekimi" : "Hazırlanıyor"}
+          className="border-purple-200 bg-purple-50 text-purple-700"
+          onClick={() => {
+            if (
+              window.confirm(
+                `${source.name} kategori sayfasından en fazla 10 gerçek ürün çekilsin mi?`,
+              )
+            ) {
+              runAction(() => runRealBot(source.id));
+            }
+          }}
+        >
+          <Globe2 size={16} />
+        </ActionIconButton>
+        <ActionIconButton
+          disabled={pending}
+          title={source.isActive ? "Pasifleştir" : "Aktifleştir"}
+          className={
+            source.isActive
+              ? "border-amber-200 text-amber-700"
+              : "border-green-200 text-green-700"
+          }
+          onClick={() =>
+            runAction(() => toggleSource(source.id, !source.isActive))
+          }
+        >
+          <Power size={16} />
+        </ActionIconButton>
+        <ActionIconButton
+          title="Düzenle"
+          className="border-black/10"
+          onClick={() => openEdit(source)}
+        >
+          <Pencil size={16} />
+        </ActionIconButton>
+        <ActionIconButton
+          disabled={pending}
+          title="Sil"
+          className="border-red-200 text-red-600"
+          onClick={() => {
+            if (
+              window.confirm(
+                `${source.name} kaynağı ve tüm bot çalışma kayıtları silinsin mi?`,
+              )
+            ) {
+              runAction(() => deleteSource(source.id));
+            }
+          }}
+        >
+          <Trash2 size={16} />
+        </ActionIconButton>
+        {source.baseUrl ? (
+          <a
+            href={source.baseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Kaynak sitesini aç"
+            className="grid h-10 place-items-center rounded-xl border border-[#ff6b00]/20 bg-[#fff7f1] text-[#ff6b00]"
+          >
+            <ExternalLink size={16} />
+          </a>
+        ) : (
+          <span className="grid h-10 place-items-center rounded-xl border border-black/8 text-black/25">
+            <ExternalLink size={16} />
+          </span>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-[#fafaf8] p-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-xs font-black">{value}</p>
+    </div>
+  );
+}
+
+function ActionIconButton({
+  children,
+  className,
+  disabled,
+  title,
+  onClick,
+}: {
+  children: React.ReactNode;
+  className: string;
+  disabled?: boolean;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={`grid h-10 place-items-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+    >
+      {children}
+    </button>
   );
 }
 
