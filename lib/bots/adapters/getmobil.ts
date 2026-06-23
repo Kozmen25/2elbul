@@ -43,7 +43,7 @@ export async function fetchGetmobilListings(
   return parseGetmobilCategoryHtml(
     response.html,
     response.finalUrl,
-    Math.min(Math.max(limit, 1), 10),
+    Math.min(Math.max(limit, 1), 1000),
   );
 }
 
@@ -53,8 +53,9 @@ export function parseGetmobilCategoryHtml(
   limit = 10,
 ): BotAdapterListing[] {
   const $ = load(html);
-  const listings = parseJsonLdProducts($, pageUrl);
-  return listings.slice(0, Math.min(Math.max(limit, 1), 10));
+  const maxItems = Math.min(Math.max(limit, 1), 1000);
+  const listings = parseJsonLdProducts($, pageUrl, maxItems);
+  return listings.slice(0, maxItems);
 }
 
 export function parseGetmobilProductPage(
@@ -119,11 +120,11 @@ export function parseGetmobilProductPage(
   };
 }
 
-function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
+function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
   const listings: BotAdapterListing[] = [];
 
   $("script[type='application/ld+json']").each((_, element) => {
-    if (listings.length >= 10) return;
+    if (listings.length >= limit) return;
     try {
       const parsed = JSON.parse($(element).text()) as unknown;
       for (const data of collectJsonLdObjects(parsed)) {
@@ -135,7 +136,7 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
         }
 
         for (const listItem of data.itemListElement as JsonLdListItem[]) {
-          if (listings.length >= 10) break;
+          if (listings.length >= limit) break;
           const product = listItem.item;
           if (
             !product ||
@@ -156,7 +157,7 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
 
   const metaImages = extractMetaImages($, pageUrl);
   $("[itemtype*='Product']").each((_, element) => {
-    if (listings.length >= 10) return;
+    if (listings.length >= limit) return;
     const card = $(element);
     const title = cleanText(
       card.find("[itemprop='name'], h2, h3").first().text(),

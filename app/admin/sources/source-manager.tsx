@@ -29,6 +29,7 @@ export type AdminSource = {
   slug: string;
   baseUrl: string | null;
   type: string;
+  integrationType: "manual" | "scrape" | "api";
   botListingStatus: "pending" | "published";
   apiUrl: string | null;
   scrapeUrl: string | null;
@@ -47,6 +48,7 @@ const emptySource: SourceInput = {
   slug: "",
   baseUrl: "",
   type: "marketplace",
+  integrationType: "manual",
   botListingStatus: "pending",
   apiUrl: "",
   scrapeUrl: "",
@@ -82,6 +84,7 @@ export function SourceManager({
       slug: source.slug,
       baseUrl: source.baseUrl ?? "",
       type: source.type,
+      integrationType: source.integrationType,
       botListingStatus: source.botListingStatus,
       apiUrl: source.apiUrl ?? "",
       scrapeUrl: source.scrapeUrl ?? "",
@@ -205,8 +208,15 @@ export function SourceManager({
                         SCRAPE
                       </span>
                     )}
-                    {!source.apiUrl && !source.scrapeUrl && (
+                    {!source.apiUrl &&
+                      !source.scrapeUrl &&
+                      source.integrationType === "manual" && (
                       <span className="text-xs text-black/35">Yapılandırılmadı</span>
+                    )}
+                    {source.integrationType !== "manual" && (
+                      <span className="rounded-full bg-black/7 px-2 py-1 text-[10px] font-black text-black/55">
+                        {source.integrationType.toUpperCase()}
+                      </span>
                     )}
                   </div>
                 </td>
@@ -443,6 +453,26 @@ export function SourceManager({
                     Önce yayın modu migration dosyasını çalıştırın.
                   </span>
                 )}
+              </SourceField>
+              <SourceField label="Entegrasyon tipi">
+                <select
+                  disabled={!integrationSettingsAvailable}
+                  value={editing.integrationType}
+                  onChange={(event) =>
+                    setEditing({
+                      ...editing,
+                      integrationType: event.target.value as
+                        | "manual"
+                        | "scrape"
+                        | "api",
+                    })
+                  }
+                  className="field px-3 py-3 disabled:bg-black/3"
+                >
+                  <option value="manual">Manuel</option>
+                  <option value="scrape">Scrape</option>
+                  <option value="api">API</option>
+                </select>
               </SourceField>
               <SourceField label="Kaynak linki" wide>
                 <input

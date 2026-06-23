@@ -37,7 +37,7 @@ export async function fetchEasyCepListings(
   return parseEasyCepCategoryHtml(
     response.html,
     response.finalUrl,
-    Math.min(Math.max(limit, 1), 10),
+    Math.min(Math.max(limit, 1), 1000),
   );
 }
 
@@ -47,8 +47,9 @@ export function parseEasyCepCategoryHtml(
   limit = 10,
 ): BotAdapterListing[] {
   const $ = load(html);
-  const listings = parseJsonLdProducts($, pageUrl);
-  return listings.slice(0, Math.min(Math.max(limit, 1), 10));
+  const maxItems = Math.min(Math.max(limit, 1), 1000);
+  const listings = parseJsonLdProducts($, pageUrl, maxItems);
+  return listings.slice(0, maxItems);
 }
 
 export function parseEasyCepProductPage(
@@ -112,11 +113,11 @@ export function parseEasyCepProductPage(
   };
 }
 
-function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
+function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
   const listings: BotAdapterListing[] = [];
 
   $("script[type='application/ld+json']").each((_, element) => {
-    if (listings.length >= 10) return;
+    if (listings.length >= limit) return;
     try {
       const data = JSON.parse($(element).text()) as {
         "@type"?: string;
@@ -127,7 +128,7 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
       }
 
       for (const item of data.itemListElement) {
-        if (listings.length >= 10 || item["@type"] !== "Product") break;
+        if (listings.length >= limit || item["@type"] !== "Product") break;
         const listing = toEasyCepListing(item, pageUrl);
         if (listing) listings.push(listing);
       }
@@ -140,7 +141,7 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string) {
 
   const metaImages = extractMetaImages($, pageUrl);
   $("[itemtype*='Product']").each((_, element) => {
-    if (listings.length >= 10) return;
+    if (listings.length >= limit) return;
     const card = $(element);
     const title = cleanText(
       card.find("[itemprop='name'], h2, h3").first().text(),

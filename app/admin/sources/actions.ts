@@ -2,13 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
-import {
-  EASYCEP_PHONE_CATEGORY_URL,
-  fetchEasyCepListings,
-  fetchGetmobilListings,
-  GETMOBIL_PHONE_CATEGORY_URL,
-} from "@/lib/bots/adapters";
-import type { BotAdapterListing } from "@/lib/bots/types";
+import { runSourceScrapeBot } from "@/lib/bots/source-runner";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createDemoListings } from "./demo-data";
 
@@ -18,6 +12,7 @@ export type SourceInput = {
   slug: string;
   baseUrl: string;
   type: string;
+  integrationType: "manual" | "scrape" | "api";
   botListingStatus: "pending" | "published";
   apiUrl: string;
   scrapeUrl: string;
@@ -46,12 +41,15 @@ export async function createSource(
     slug: normalizeSlug(input.slug),
     base_url: normalizeOptionalUrl(input.baseUrl),
     type: input.type.trim() || "marketplace",
+    integration_type: input.integrationType,
     bot_listing_status: input.botListingStatus,
+    bot_import_mode: input.botListingStatus,
     api_url: normalizeOptionalUrl(input.apiUrl),
     scrape_url: normalizeOptionalUrl(input.scrapeUrl),
     cron_enabled: input.cronEnabled,
     cron_schedule: input.cronSchedule.trim(),
     product_limit: input.productLimit,
+    fetch_limit: input.productLimit,
   };
   let insertResult = await supabase.from("sources").insert(payload);
 
@@ -102,12 +100,15 @@ export async function updateSource(
     slug: normalizeSlug(input.slug),
     base_url: normalizeOptionalUrl(input.baseUrl),
     type: input.type.trim() || "marketplace",
+    integration_type: input.integrationType,
     bot_listing_status: input.botListingStatus,
+    bot_import_mode: input.botListingStatus,
     api_url: normalizeOptionalUrl(input.apiUrl),
     scrape_url: normalizeOptionalUrl(input.scrapeUrl),
     cron_enabled: input.cronEnabled,
     cron_schedule: input.cronSchedule.trim(),
     product_limit: input.productLimit,
+    fetch_limit: input.productLimit,
   };
   let updateResult = await supabase
     .from("sources")
@@ -205,7 +206,7 @@ export async function runDemoBot(
 
   const { data: source, error: sourceError } = await supabase
     .from("sources")
-    .select("id, name, slug, total_imported, bot_listing_status")
+    .select("id, name, slug, total_imported, bot_listing_status, bot_import_mode")
     .eq("id", sourceId)
     .maybeSingle();
 
@@ -249,7 +250,10 @@ export async function runDemoBot(
     String(source.name),
     String(source.slug),
     runToken,
-    source.bot_listing_status === "published" ? "published" : "pending",
+    source.bot_import_mode === "published" ||
+      source.bot_listing_status === "published"
+      ? "published"
+      : "pending",
   );
   let imported = 0;
   let skipped = 0;
@@ -427,7 +431,9 @@ export async function runRealBot(
 
   let sourceResult = await supabase
     .from("sources")
-    .select("id, name, slug, total_imported, scrape_url, product_limit")
+    .select(
+      "id, name, slug, total_imported, scrape_url, product_limit, fetch_limit, bot_import_mode, bot_listing_status",
+    )
     .eq("id", sourceId)
     .maybeSingle();
 
@@ -437,7 +443,7 @@ export async function runRealBot(
   ) {
     sourceResult = await supabase
       .from("sources")
-      .select("id, name, slug, total_imported")
+      .select("id, name, slug, total_imported, scrape_url, product_limit, bot_listing_status")
       .eq("id", sourceId)
       .maybeSingle();
   }
@@ -449,6 +455,9 @@ export async function runRealBot(
     total_imported: number | null;
     scrape_url?: string | null;
     product_limit?: number | null;
+    fetch_limit?: number | null;
+    bot_import_mode?: string | null;
+    bot_listing_status?: string | null;
   } | null;
 
   if (sourceResult.error || !source) {
@@ -466,254 +475,40 @@ export async function runRealBot(
   if (!["easycep", "getmobil"].includes(source.slug)) {
     return {
       ok: false,
-      message: "Gerçek test çekimi şu anda yalnızca EasyCep ve Getmobil için hazır.",
+      message:
+        "Gerçek test çekimi şu anda yalnızca EasyCep ve Getmobil için hazır.",
     };
   }
 
-  const startedAt = new Date().toISOString();
-  const { data: botRun, error: runInsertError } = await supabase
-    .from("bot_runs")
-    .insert({
-      source_id: sourceId,
-      status: "running",
-      run_type: "real_test",
-      started_at: startedAt,
-    })
-    .select("id")
-    .single();
-
-  if (runInsertError || !botRun) {
-    if (runInsertError) {
-      console.error("Real bot run insert failed:", runInsertError);
-    }
-    return {
-      ok: false,
-      message: runInsertError
-        ? `Bot çalışması başlatılamadı: ${runInsertError.message}`
-        : "Bot çalışma kaydı oluşturulamadı.",
-    };
-  }
-
-  const runId = Number(botRun.id);
-  let listings: BotAdapterListing[] = [];
-  let imported = 0;
-  let skipped = 0;
-  let errorCount = 0;
-  const errors: string[] = [];
-  let finalStatus = "success";
-
-  try {
-    const limit = Math.min(
-      Math.max(Number(source.product_limit ?? 10), 1),
-      10,
-    );
-    if (source.slug === "easycep") {
-      listings = await fetchEasyCepListings(
-        source.scrape_url || EASYCEP_PHONE_CATEGORY_URL,
-        limit,
-      );
-    } else {
-      listings = await fetchGetmobilListings(
-        source.scrape_url || GETMOBIL_PHONE_CATEGORY_URL,
-        limit,
-      );
-    }
-
-    if (!listings.length) {
-      errors.push("Ürün bulunamadı veya HTML yapısı değişmiş olabilir");
-    } else {
-      const result = await importRealListings(supabase, listings);
-      imported = result.imported;
-      skipped = result.skipped;
-      errorCount = result.errorCount;
-      errors.push(...result.errors);
-      if (errorCount > 0) finalStatus = "failed";
-    }
-  } catch (error) {
-    console.error("Real bot execution failed:", error);
-    finalStatus = "failed";
-    errorCount = 1;
-    errors.push(getErrorMessage(error));
-  }
-
-  const finishedAt = new Date().toISOString();
-  const errorMessage = errors.length ? errors.join(" | ").slice(0, 4000) : null;
-  const { error: runUpdateError } = await supabase
-    .from("bot_runs")
-    .update({
-      status: finalStatus,
-      found_count: listings.length,
-      imported_count: imported,
-      skipped_count: skipped,
-      error_count: errorCount,
-      error_message: errorMessage,
-      finished_at: finishedAt,
-    })
-    .eq("id", runId);
-
-  if (runUpdateError) {
-    console.error("Real bot run finalization failed:", runUpdateError);
-  }
-
-  const sourceStatsPayload = {
-    last_run_at: finishedAt,
-    total_imported: Number(source.total_imported ?? 0) + imported,
-    ...(finalStatus === "success" ? { last_success: finishedAt } : {}),
-  };
-  let sourceUpdateResult = await supabase
-    .from("sources")
-    .update(sourceStatsPayload)
-    .eq("id", sourceId);
-
-  if (
-    sourceUpdateResult.error &&
-    isMissingIntegrationSettingsColumn(sourceUpdateResult.error)
-  ) {
-    const { last_success: _lastSuccess, ...legacyStatsPayload } =
-      sourceStatsPayload;
-    sourceUpdateResult = await supabase
-      .from("sources")
-      .update(legacyStatsPayload)
-      .eq("id", sourceId);
-  }
-
-  if (sourceUpdateResult.error) {
-    console.error(
-      "Real bot source stats update failed:",
-      sourceUpdateResult.error,
-    );
-  }
+  const result = await runSourceScrapeBot(supabase, source, {
+    runType: "real_test",
+    maxLimit: 10,
+    forceStatus: "pending",
+  });
 
   revalidateSources();
   revalidatePath("/admin/listings");
   revalidatePath("/admin");
 
-  if (runUpdateError || sourceUpdateResult.error) {
-    return {
-      ok: false,
-      message:
-        "İlanlar işlendi ancak bot istatistiklerinin bir bölümü güncellenemedi.",
-    };
-  }
-
-  if (!listings.length && finalStatus === "success") {
+  if (!result.found && result.ok) {
     return {
       ok: true,
       message: `${source.name} çekimi tamamlandı ancak ürün bulunamadı. Kaynak HTML yapısı değişmiş veya ürün verisini geçici olarak kaldırmış olabilir.`,
     };
   }
 
-  const firstError = errors[0];
   return {
-    ok: finalStatus === "success",
-    message:
-      finalStatus === "success"
-        ? `Gerçek test çekimi tamamlandı: ${imported} eklendi, ${skipped} atlandı.`
-        : `Gerçek test çekimi tamamlanamadı: ${firstError ?? `${errorCount} hata oluştu.`}`,
+    ok: result.ok,
+    message: result.ok
+      ? `Gerçek test çekimi tamamlandı: ${result.imported} eklendi, ${result.skipped} atlandı.`
+      : `Gerçek test çekimi tamamlanamadı: ${result.errorMessage ?? `${result.errorCount} hata oluştu.`}`,
   };
 }
-
-async function importRealListings(
-  supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
-  listings: BotAdapterListing[],
-) {
-  let imported = 0;
-  let skipped = 0;
-  let errorCount = 0;
-  const errors: string[] = [];
-  const productNames = [
-    ...new Set(listings.map((listing) => listing.product_name)),
-  ];
-  const { data: existingProducts, error: productLookupError } = await supabase
-    .from("products")
-    .select("id, name")
-    .in("name", productNames);
-
-  if (productLookupError) throw productLookupError;
-
-  const productIds = new Map(
-    (existingProducts ?? []).map((product) => [
-      String(product.name),
-      product.id as string | number,
-    ]),
-  );
-
-  for (const productName of productNames) {
-    if (productIds.has(productName)) continue;
-    const { data: createdProduct, error: productInsertError } = await supabase
-      .from("products")
-      .insert({ name: productName })
-      .select("id")
-      .single();
-
-    if (productInsertError || !createdProduct) {
-      const message =
-        productInsertError?.message ?? `${productName} oluşturulamadı.`;
-      console.error("Real bot product insert failed:", productInsertError);
-      errors.push(`${productName}: ${message}`);
-      continue;
-    }
-    productIds.set(productName, createdProduct.id);
-  }
-
-  const { data: existingListings, error: duplicateError } = await supabase
-    .from("listings")
-    .select("url")
-    .in(
-      "url",
-      listings.map((listing) => listing.url),
-    );
-
-  if (duplicateError) throw duplicateError;
-  const existingUrls = new Set(
-    (existingListings ?? []).map((listing) => String(listing.url)),
-  );
-
-  for (const listing of listings) {
-    if (existingUrls.has(listing.url)) {
-      skipped += 1;
-      continue;
-    }
-
-    const productId = productIds.get(listing.product_name);
-    if (!productId) {
-      errorCount += 1;
-      errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
-      continue;
-    }
-
-    const { error: listingInsertError } = await supabase
-      .from("listings")
-      .insert({
-        product_id: productId,
-        title: listing.title,
-        price: listing.price,
-        city: listing.city,
-        source: listing.source,
-        url: listing.url,
-        condition: listing.condition,
-        image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-        status: "pending",
-      });
-
-    if (listingInsertError) {
-      console.error("Real bot listing insert failed:", listingInsertError);
-      errorCount += 1;
-      errors.push(`${listing.title}: ${listingInsertError.message}`);
-      continue;
-    }
-
-    existingUrls.add(listing.url);
-    imported += 1;
-  }
-
-  return { imported, skipped, errorCount, errors };
-}
-
 function validateSource(input: SourceInput): SourceActionResult {
   const name = input.name.trim();
   const slug = normalizeSlug(input.slug);
   const type = input.type.trim();
+  const integrationType = input.integrationType;
   const botListingStatus = input.botListingStatus;
   const productLimit = Number(input.productLimit);
 
@@ -721,6 +516,7 @@ function validateSource(input: SourceInput): SourceActionResult {
     !name ||
     !slug ||
     !type ||
+    !["manual", "scrape", "api"].includes(integrationType) ||
     !["pending", "published"].includes(botListingStatus) ||
     !input.cronSchedule.trim() ||
     !Number.isInteger(productLimit) ||
@@ -808,6 +604,9 @@ function isMissingIntegrationSettingsColumn(error: unknown) {
       "cron_enabled",
       "cron_schedule",
       "product_limit",
+      "fetch_limit",
+      "integration_type",
+      "bot_import_mode",
       "last_success",
     ]
       .some((column) => text.includes(column))
@@ -823,6 +622,9 @@ function withoutIntegrationSettings<T extends Record<string, unknown>>(
     cron_enabled: _cronEnabled,
     cron_schedule: _cronSchedule,
     product_limit: _productLimit,
+    fetch_limit: _fetchLimit,
+    integration_type: _integrationType,
+    bot_import_mode: _botImportMode,
     ...legacyPayload
   } = payload;
   return legacyPayload;

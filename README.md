@@ -47,6 +47,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
 IMPORT_API_KEY=use-a-long-random-secret
+CRON_SECRET=use-another-long-random-secret
 ```
 
 Bu değerleri Supabase panelindeki **Project Settings > API** bölümünden
@@ -61,6 +62,9 @@ commit etmeyin ve anahtara `NEXT_PUBLIC_` ön eki eklemeyin.
 Admin panelindeki sayaçlar, kullanıcı yönetimi ve veri düzenleme işlemleri de
 bu server-only anahtarı kullanır. Anahtar hiçbir client component içine
 aktarılmaz.
+
+`CRON_SECRET`, `/api/cron/run-sources` rotasını korur. Bu değer de server-only
+kalmalı ve `NEXT_PUBLIC_` ön eki almamalıdır.
 
 Projedeki `.gitignore`, `.env*` dosyalarını yok sayar ve yalnızca
 `.env.example` dosyasının repoya eklenmesine izin verir. `.vercelignore` da
@@ -401,9 +405,52 @@ Gerçek entegrasyon eklerken:
 5. Başarılı çalışmada `sources.last_success`, her çalışmada
    `sources.last_run_at` alanını güncelleyin.
 
-`cron_enabled` ve `cron_schedule` yalnızca zamanlama konfigürasyonunu saklar.
-Cron'u gerçekten tetiklemek için Vercel Cron, Supabase Scheduled Functions veya
-ayrı bir worker kullanılmalıdır.
+Otomatik bot zamanlayıcı alanlarını eklemek için şu migration dosyasını
+çalıştırın:
+
+```text
+supabase/bot-scheduler.sql
+```
+
+Bu migration `sources` tablosuna veya mevcut kurulumlarda eksikse şu alanları
+ekler:
+
+- `cron_enabled`: Kaynağın otomatik çalışmaya dahil olup olmadığı
+- `fetch_limit`: Her bot çalışmasında en fazla kaç ürün işleneceği
+- `integration_type`: `manual`, `scrape` veya `api`
+- `bot_import_mode`: Bot ilanlarının `pending` ya da `published` eklenmesi
+- `last_run_at`: Son bot çalışma zamanı
+
+`/api/cron/run-sources` rotası aktif, `cron_enabled = true`,
+`integration_type = 'scrape'` ve gerçek adaptörü hazır olan kaynakları
+çalıştırır. Şimdilik EasyCep ve Getmobil desteklenir. Her çalışma `bot_runs`
+tablosuna yazılır, `fetch_limit` kadar ürünle sınırlanır ve aynı URL daha önce
+eklenmişse atlanır.
+
+Cron rotası public kullanıma kapalıdır. İsteklerde aşağıdaki yöntemlerden
+biriyle `CRON_SECRET` gönderilmelidir:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain.vercel.app/api/cron/run-sources
+curl -H "x-cron-secret: $CRON_SECRET" https://your-domain.vercel.app/api/cron/run-sources
+curl "https://your-domain.vercel.app/api/cron/run-sources?secret=$CRON_SECRET"
+```
+
+Vercel Cron için `vercel.json` dosyası rotayı günde iki kez tetikler:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/run-sources",
+      "schedule": "0 6,18 * * *"
+    }
+  ]
+}
+```
+
+Vercel cron ifadeleri UTC çalışır. `0 6,18 * * *`, Türkiye saatiyle yaklaşık
+09:00 ve 21:00 çalışması için ayarlanmıştır.
 
 ### EasyCep ve Getmobil Gerçek Test Çekimi
 
@@ -739,16 +786,19 @@ https://your-project.vercel.app
 ```
 
 Aşağıdaki server-only değişkenlerden `SUPABASE_SERVICE_ROLE_KEY`,
-`/admin/import` sayfası veya `POST /api/import/listings` API'si kullanılacaksa
-gereklidir. `IMPORT_API_KEY` yalnızca API rotası için gereklidir:
+`/admin/import`, admin bot işlemleri veya cron bot rotası kullanılacaksa
+gereklidir. `IMPORT_API_KEY` yalnızca import API rotası, `CRON_SECRET` ise
+`/api/cron/run-sources` ve Vercel Cron için gereklidir:
 
 ```text
 SUPABASE_SERVICE_ROLE_KEY
 IMPORT_API_KEY
+CRON_SECRET
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` ve `IMPORT_API_KEY` değerlerine `NEXT_PUBLIC_` ön
-eki eklemeyin. Bu iki değer tarayıcı paketine dahil edilmemelidir.
+`SUPABASE_SERVICE_ROLE_KEY`, `IMPORT_API_KEY` ve `CRON_SECRET` değerlerine
+`NEXT_PUBLIC_` ön eki eklemeyin. Bu değerler tarayıcı paketine dahil
+edilmemelidir.
 
 ### Deploy Adımları
 
@@ -762,6 +812,8 @@ eki eklemeyin. Bu iki değer tarayıcı paketine dahil edilmemelidir.
    kullanın. Output Directory alanını değiştirmeyin.
 7. Yukarıdaki environment variables değerlerini **Production**, **Preview** ve
    gerektiğinde **Development** ortamlarına ekleyin.
+   Vercel panelinde `CRON_SECRET` için uzun ve rastgele bir değer üretip aynı
+   değeri environment variable olarak kaydedin.
 8. İlk deploy sonrasında gerçek Vercel adresini
    `NEXT_PUBLIC_SITE_URL` olarak kaydedin ve yeniden deploy edin.
 9. Supabase panelindeki **Authentication > URL Configuration** bölümünde:
