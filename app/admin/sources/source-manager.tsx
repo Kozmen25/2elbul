@@ -156,19 +156,19 @@ export function SourceManager({
       </div>
 
       <div className="hidden w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch] lg:block">
-        <table className="w-max min-w-[1100px] table-auto text-left text-sm">
+        <table className="w-full min-w-[1000px] table-auto text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
-              <th className="w-[165px] px-3 py-3">Kaynak</th>
-              <th className="w-[105px] px-3 py-3">Tip</th>
-              <th className="w-[85px] px-3 py-3">Durum</th>
-              <th className="w-[95px] px-3 py-3">Mod</th>
-              <th className="w-[115px] px-3 py-3">Entegrasyon</th>
-              <th className="w-[115px] px-3 py-3">Plan</th>
-              <th className="w-[130px] px-3 py-3">Son çalışma</th>
-              <th className="w-[95px] px-3 py-3">Aktarılan</th>
-              <th className="w-[70px] px-3 py-3 text-center">Link</th>
-              <th className="sticky right-0 z-10 w-[185px] bg-[#fafaf8] px-3 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
+              <th className="w-[150px] px-2.5 py-3">Kaynak</th>
+              <th className="w-[90px] px-2.5 py-3">Tip</th>
+              <th className="w-[75px] px-2.5 py-3">Durum</th>
+              <th className="w-[80px] px-2.5 py-3">Mod</th>
+              <th className="w-[105px] px-2.5 py-3">Entegrasyon</th>
+              <th className="w-[95px] px-2.5 py-3">Plan</th>
+              <th className="w-[115px] px-2.5 py-3">Son çalışma</th>
+              <th className="w-[80px] px-2.5 py-3">Aktarılan</th>
+              <th className="w-[55px] px-2.5 py-3 text-center">Link</th>
+              <th className="sticky right-0 z-10 w-[155px] bg-[#fafaf8] px-2.5 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
                 İşlemler
               </th>
             </tr>
@@ -176,18 +176,18 @@ export function SourceManager({
           <tbody>
             {sources.map((source) => (
               <tr key={source.id} className="border-t border-black/7">
-                <td className="px-3 py-4">
+                <td className="px-2.5 py-4">
                   <p className="font-black">{source.name}</p>
                   <p className="mt-1 font-mono text-xs text-black/40">
                     {source.slug}
                   </p>
                 </td>
-                <td className="px-3 py-4">
+                <td className="px-2.5 py-4">
                   <span className="rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
                     {typeLabel(source.type)}
                   </span>
                 </td>
-                <td className="px-3 py-4">
+                <td className="px-2.5 py-4">
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-black ${
                       source.isActive
@@ -198,7 +198,7 @@ export function SourceManager({
                     {source.isActive ? "Aktif" : "Pasif"}
                   </span>
                 </td>
-                <td className="px-3 py-4">
+                <td className="px-2.5 py-4">
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-black ${
                       source.botListingStatus === "published"
@@ -211,8 +211,8 @@ export function SourceManager({
                       : "Pending"}
                   </span>
                 </td>
-                <td className="px-3 py-4">
-                  <div className="flex flex-wrap gap-1.5">
+                <td className="px-2.5 py-4">
+                  <div className="flex flex-wrap gap-1">
                     {source.apiUrl && (
                       <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-black text-blue-700">
                         API
@@ -235,7 +235,7 @@ export function SourceManager({
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-4">
+                <td className="px-2.5 py-4">
                   <p className="text-xs font-bold">
                     {source.cronEnabled
                       ? cronScheduleLabel(source.cronSchedule)
@@ -245,7 +245,7 @@ export function SourceManager({
                     Limit: {source.productLimit}
                   </p>
                 </td>
-                <td className="px-3 py-4 text-black/55">
+                <td className="px-2.5 py-4 text-black/55">
                   {source.lastRunAt
                     ? formatDate(source.lastRunAt)
                     : "Henüz çalışmadı"}
@@ -255,10 +255,10 @@ export function SourceManager({
                     </p>
                   )}
                 </td>
-                <td className="px-3 py-4 text-lg font-black">
+                <td className="px-2.5 py-4 text-lg font-black">
                   {source.totalImported.toLocaleString("tr-TR")}
                 </td>
-                <td className="px-3 py-4 text-center">
+                <td className="px-2.5 py-4 text-center">
                   {source.baseUrl ? (
                     <a
                       href={source.baseUrl}
@@ -273,8 +273,8 @@ export function SourceManager({
                     <span className="text-black/35">-</span>
                   )}
                 </td>
-                <td className="sticky right-0 z-10 bg-white px-3 py-4 shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
-                  <div className="flex flex-wrap justify-end gap-1.5">
+                <td className="sticky right-0 z-10 bg-white px-2.5 py-4 shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
+                  <div className="flex flex-wrap justify-end gap-1">
                     <button
                       type="button"
                       disabled={pending || !publishModeAvailable}
@@ -688,7 +688,7 @@ function SourceCard({
         />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
+      <div className="mt-4 flex flex-wrap gap-1">
         {source.apiUrl && (
           <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-black text-blue-700">
             API

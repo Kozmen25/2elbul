@@ -75,7 +75,7 @@ export default async function AdminSourcesPage() {
   }));
 
   return (
-    <>
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden">
       <AdminPageHeader
         eyebrow="Bot altyapısı"
         title="Kaynaklar"
@@ -108,6 +108,6 @@ export default async function AdminSourcesPage() {
           integrationSettingsAvailable={integrationSettingsAvailable}
         />
       )}
-    </>
+    </div>
   );
 }
