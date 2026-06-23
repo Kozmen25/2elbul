@@ -11,8 +11,8 @@ export default async function AdminLayout({
   return (
     <div className="admin-shell min-h-screen bg-[#f5f5f2] lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
       <AdminNav email={user.email ?? "Admin"} />
-      <div className="min-w-0 overflow-hidden">
-        <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
+      <div className="min-w-0 overflow-x-hidden">
+        <div className="mx-auto w-full max-w-full p-4 sm:p-6 lg:max-w-[calc(100vw-260px)] lg:p-8">
           {children}
         </div>
       </div>

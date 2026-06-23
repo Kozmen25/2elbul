@@ -142,37 +142,39 @@ export function SourceManager({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
-        <table className="w-full min-w-[1580px] text-left text-sm">
+      <div className="max-w-full overflow-x-auto rounded-2xl border border-black/8 bg-white">
+        <table className="w-full min-w-[1220px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
-              <th className="px-4 py-3">Kaynak</th>
-              <th className="px-4 py-3">Tip</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3">Bot ilan modu</th>
-              <th className="px-4 py-3">Entegrasyon</th>
-              <th className="px-4 py-3">Çekim planı</th>
-              <th className="px-4 py-3">Son çalışma</th>
-              <th className="px-4 py-3">Toplam aktarılan</th>
-              <th className="px-4 py-3">Kaynak linki</th>
-              <th className="px-4 py-3 text-right">İşlemler</th>
+              <th className="w-[180px] px-3 py-3">Kaynak</th>
+              <th className="w-[105px] px-3 py-3">Tip</th>
+              <th className="w-[85px] px-3 py-3">Durum</th>
+              <th className="w-[130px] px-3 py-3">Bot modu</th>
+              <th className="w-[130px] px-3 py-3">Entegrasyon</th>
+              <th className="w-[115px] px-3 py-3">Plan</th>
+              <th className="w-[150px] px-3 py-3">Son çalışma</th>
+              <th className="w-[95px] px-3 py-3">Aktarılan</th>
+              <th className="w-[70px] px-3 py-3 text-center">Link</th>
+              <th className="sticky right-0 z-10 w-[245px] bg-[#fafaf8] px-3 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
+                İşlemler
+              </th>
             </tr>
           </thead>
           <tbody>
             {sources.map((source) => (
               <tr key={source.id} className="border-t border-black/7">
-                <td className="px-4 py-4">
+                <td className="px-3 py-4">
                   <p className="font-black">{source.name}</p>
                   <p className="mt-1 font-mono text-xs text-black/40">
                     {source.slug}
                   </p>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-3 py-4">
                   <span className="rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
                     {typeLabel(source.type)}
                   </span>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-3 py-4">
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-black ${
                       source.isActive
@@ -183,7 +185,7 @@ export function SourceManager({
                     {source.isActive ? "Aktif" : "Pasif"}
                   </span>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-3 py-4">
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-black ${
                       source.botListingStatus === "published"
@@ -192,11 +194,11 @@ export function SourceManager({
                     }`}
                   >
                     {source.botListingStatus === "published"
-                      ? "Direkt yayınla"
-                      : "Pending olarak ekle"}
+                      ? "Direkt"
+                      : "Pending"}
                   </span>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-3 py-4">
                   <div className="flex flex-wrap gap-1.5">
                     {source.apiUrl && (
                       <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-black text-blue-700">
@@ -220,7 +222,7 @@ export function SourceManager({
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-3 py-4">
                   <p className="text-xs font-bold">
                     {source.cronEnabled
                       ? cronScheduleLabel(source.cronSchedule)
@@ -230,7 +232,7 @@ export function SourceManager({
                     Limit: {source.productLimit}
                   </p>
                 </td>
-                <td className="px-4 py-4 text-black/55">
+                <td className="px-3 py-4 text-black/55">
                   {source.lastRunAt
                     ? formatDate(source.lastRunAt)
                     : "Henüz çalışmadı"}
@@ -240,25 +242,26 @@ export function SourceManager({
                     </p>
                   )}
                 </td>
-                <td className="px-4 py-4 text-lg font-black">
+                <td className="px-3 py-4 text-lg font-black">
                   {source.totalImported.toLocaleString("tr-TR")}
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-3 py-4 text-center">
                   {source.baseUrl ? (
                     <a
                       href={source.baseUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 font-bold text-[#ff6b00] hover:underline"
+                      className="inline-grid size-9 place-items-center rounded-lg border border-[#ff6b00]/20 bg-[#fff7f1] text-[#ff6b00]"
+                      aria-label={`${source.name} sitesini aç`}
                     >
-                      Siteyi aç <ExternalLink size={15} />
+                      <ExternalLink size={16} />
                     </a>
                   ) : (
-                    <span className="text-black/35">Tanımlı değil</span>
+                    <span className="text-black/35">-</span>
                   )}
                 </td>
-                <td className="px-4 py-4">
-                  <div className="flex flex-wrap justify-end gap-2">
+                <td className="sticky right-0 z-10 bg-white px-3 py-4 shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
+                  <div className="flex flex-wrap justify-end gap-1.5">
                     <button
                       type="button"
                       disabled={pending || !publishModeAvailable}
@@ -271,10 +274,10 @@ export function SourceManager({
                           runAction(() => runDemoBot(source.id));
                         }
                       }}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] px-3 text-xs font-black text-[#d95700] disabled:opacity-50"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] px-2.5 text-xs font-black text-[#d95700] disabled:opacity-50"
                     >
                       <Bot size={15} />
-                      Demo test çekimi
+                      Demo
                     </button>
                     <button
                       type="button"
@@ -292,7 +295,7 @@ export function SourceManager({
                           runAction(() => runRealBot(source.id));
                         }
                       }}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-black text-purple-700 disabled:cursor-not-allowed disabled:opacity-45"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-2.5 text-xs font-black text-purple-700 disabled:cursor-not-allowed disabled:opacity-45"
                       title={
                         ["easycep", "getmobil"].includes(source.slug)
                           ? "Tek sayfalık sınırlı gerçek test çekimi"
@@ -301,7 +304,7 @@ export function SourceManager({
                     >
                       <Globe2 size={15} />
                       {["easycep", "getmobil"].includes(source.slug)
-                        ? "Gerçek test çekimi"
+                        ? "Gerçek"
                         : "Hazırlanıyor"}
                     </button>
                     <button

@@ -148,7 +148,7 @@ export function ListingManager({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
+      <div className="max-w-full overflow-x-auto rounded-2xl border border-black/8 bg-white">
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
@@ -174,7 +174,7 @@ export function ListingManager({
               <th className="px-4 py-3">Konum / Kaynak</th>
               <th className="px-4 py-3">Durum</th>
               <th className="px-4 py-3">Tarih</th>
-              <th className="px-4 py-3 text-right">İşlemler</th>
+              <th className="sticky right-0 z-10 bg-[#fafaf8] px-4 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">İşlemler</th>
             </tr>
           </thead>
           <tbody>
@@ -241,7 +241,7 @@ export function ListingManager({
                 <td className="px-4 py-4 text-xs text-black/55">
                   {formatDate(listing.createdAt)}
                 </td>
-                <td className="px-4 py-4">
+                <td className="sticky right-0 z-10 bg-white px-4 py-4 shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
                   <div className="flex justify-end gap-2">
                     <a
                       href={listing.url}

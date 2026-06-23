@@ -37,7 +37,7 @@ export default async function AdminUsersPage() {
         </div>
       )}
       {users.length ? (
-        <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
+        <div className="max-w-full overflow-x-auto rounded-2xl border border-black/8 bg-white">
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
               <tr>
@@ -45,7 +45,7 @@ export default async function AdminUsersPage() {
                 <th className="px-4 py-3">Kayıt tarihi</th>
                 <th className="px-4 py-3">Son giriş</th>
                 <th className="px-4 py-3">Favori</th>
-                <th className="px-4 py-3 text-right">İşlem</th>
+                <th className="sticky right-0 z-10 bg-[#fafaf8] px-4 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -70,7 +70,7 @@ export default async function AdminUsersPage() {
                   <td className="px-4 py-4 font-black">
                     {favoriteCounts.get(user.id) ?? 0}
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="sticky right-0 z-10 bg-white px-4 py-4 shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
                     <div className="flex justify-end">
                       {!ADMIN_EMAILS.includes(user.email ?? "") ? (
                         <DeleteUserButton

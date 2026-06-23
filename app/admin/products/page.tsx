@@ -86,7 +86,7 @@ export default async function AdminProductsPage() {
         </div>
       )}
       {products.length ? (
-        <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
+        <div className="max-w-full overflow-x-auto rounded-2xl border border-black/8 bg-white">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
               <tr>
@@ -96,7 +96,7 @@ export default async function AdminProductsPage() {
                 <th className="px-4 py-3">Ortalama</th>
                 <th className="px-4 py-3">En düşük</th>
                 <th className="px-4 py-3">En yüksek</th>
-                <th className="px-4 py-3 text-right">İşlemler</th>
+                <th className="sticky right-0 z-10 bg-[#fafaf8] px-4 py-3 text-right shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">İşlemler</th>
               </tr>
             </thead>
             <tbody>
@@ -110,7 +110,7 @@ export default async function AdminProductsPage() {
                   <td className="px-4 py-4">{formatPrice(product.average)}</td>
                   <td className="px-4 py-4">{formatPrice(product.min)}</td>
                   <td className="px-4 py-4">{formatPrice(product.max)}</td>
-                  <td className="px-4 py-4">
+                  <td className="sticky right-0 z-10 bg-white px-4 py-4 shadow-[-12px_0_20px_rgba(0,0,0,0.04)]">
                     <div className="flex justify-end gap-2">
                       <Link
                         href={`/product/${product.slug}`}
