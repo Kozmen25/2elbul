@@ -160,6 +160,8 @@ export default async function AdminListingsPage({ searchParams }: Props) {
         {statusAvailable && (
           <Select name="status" value={value("status")} label="Tüm yayın durumları">
             <option value="published">Yayında</option>
+            <option value="active">Aktif</option>
+            <option value="inactive">Pasif</option>
             <option value="pending">Beklemede</option>
             <option value="rejected">Reddedildi</option>
           </Select>

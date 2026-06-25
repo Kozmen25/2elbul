@@ -12,6 +12,7 @@ export type SourceIntegrationConfig = {
 };
 
 export type BotAdapterListing = {
+  external_id?: string;
   product_name: string;
   title: string;
   price: number;
@@ -19,9 +20,10 @@ export type BotAdapterListing = {
   source: string;
   url: string;
   condition: string;
+  description?: string | null;
   image_url: string | null;
   image_urls: string[];
-  status: "pending" | "published";
+  status: "pending" | "published" | "active" | "inactive";
 };
 
 export type SourceConnector = {

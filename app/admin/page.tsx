@@ -17,6 +17,7 @@ export default async function AdminOverviewPage() {
 
   const [
     listings,
+    inactiveListings,
     products,
     favorites,
     todayListings,
@@ -25,6 +26,10 @@ export default async function AdminOverviewPage() {
   ] = supabase
     ? await Promise.all([
         supabase.from("listings").select("id", { count: "exact", head: true }),
+        supabase
+          .from("listings")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "inactive"),
         supabase.from("products").select("id", { count: "exact", head: true }),
         supabase.from("favorites").select("id", { count: "exact", head: true }),
         supabase
@@ -37,7 +42,7 @@ export default async function AdminOverviewPage() {
           .gte("created_at", sevenDaysAgo.toISOString()),
         supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
       ])
-    : [null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null];
 
   if (!supabase) {
     console.error("Admin dashboard: service role client is not configured.");
@@ -58,6 +63,11 @@ export default async function AdminOverviewPage() {
         <AdminStatCard
           label="Toplam ilan"
           value={listings?.count ?? 0}
+          icon={PackageSearch}
+        />
+        <AdminStatCard
+          label="Pasif ilan"
+          value={inactiveListings?.count ?? 0}
           icon={PackageSearch}
         />
         <AdminStatCard

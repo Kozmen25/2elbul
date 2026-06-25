@@ -385,7 +385,7 @@ async function getPublishedHomeListings(
   const publishedResult = await supabase
     .from("listings")
     .select(columns)
-    .eq("status", "published")
+    .in("status", ["published", "active"])
     .order("created_at", { ascending: false });
 
   if (!publishedResult.error) return publishedResult;

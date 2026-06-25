@@ -222,7 +222,7 @@ async function searchPublishedListingsByTitle(
   const result = await supabase
     .from("listings")
     .select(listingColumns)
-    .eq("status", "published")
+    .in("status", ["published", "active"])
     .ilike("title", pattern);
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
@@ -239,7 +239,7 @@ async function searchPublishedListingsByProduct(
   const result = await supabase
     .from("listings")
     .select(listingColumns)
-    .eq("status", "published")
+    .in("status", ["published", "active"])
     .in("product_id", productIds);
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 

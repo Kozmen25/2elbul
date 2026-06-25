@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   EASYCEP_PHONE_CATEGORY_URL,
@@ -28,6 +29,9 @@ export type SourceRunResult = {
   status: "success" | "failed";
   found: number;
   imported: number;
+  updated: number;
+  inactive: number;
+  reactivated: number;
   skipped: number;
   errorCount: number;
   errorMessage: string | null;
@@ -36,7 +40,15 @@ export type SourceRunResult = {
 type RunSourceOptions = {
   runType: "real_test" | "scheduled";
   maxLimit?: number;
-  forceStatus?: "pending" | "published";
+  forceStatus?: "pending" | "published" | "active";
+};
+
+type SyncRpcResult = {
+  inserted?: number;
+  updated?: number;
+  inactive?: number;
+  reactivated?: number;
+  skipped?: number;
 };
 
 export function isSupportedScrapeSource(slug: string) {
@@ -49,18 +61,10 @@ export async function runSourceScrapeBot(
   options: RunSourceOptions,
 ): Promise<SourceRunResult> {
   if (!isSupportedScrapeSource(source.slug)) {
-    return {
-      ok: false,
-      sourceId: source.id,
-      sourceName: source.name,
-      status: "failed",
-      found: 0,
-      imported: 0,
-      skipped: 0,
-      errorCount: 1,
-      errorMessage:
-        "Gerçek çekim şu anda yalnızca EasyCep ve Getmobil için hazır.",
-    };
+    return emptyFailedResult(
+      source,
+      "Gerçek çekim şu anda yalnızca EasyCep ve Getmobil için hazır.",
+    );
   }
 
   const startedAt = new Date().toISOString();
@@ -79,17 +83,7 @@ export async function runSourceScrapeBot(
     const message =
       runInsertError?.message ?? "Bot çalışma kaydı oluşturulamadı.";
     console.error("Source bot run insert failed:", runInsertError);
-    return {
-      ok: false,
-      sourceId: source.id,
-      sourceName: source.name,
-      status: "failed",
-      found: 0,
-      imported: 0,
-      skipped: 0,
-      errorCount: 1,
-      errorMessage: message,
-    };
+    return emptyFailedResult(source, message);
   }
 
   const runId = Number(botRun.id);
@@ -97,13 +91,18 @@ export async function runSourceScrapeBot(
     source.fetch_limit ?? source.product_limit ?? 10,
     options.maxLimit,
   );
-  const listingStatus =
-    options.forceStatus ?? normalizeImportMode(source.bot_import_mode) ??
-    normalizeImportMode(source.bot_listing_status) ??
-    "pending";
+  const listingStatus = normalizeSyncStatus(
+    options.forceStatus ??
+      normalizeImportMode(source.bot_import_mode) ??
+      normalizeImportMode(source.bot_listing_status) ??
+      "published",
+  );
 
   let listings: BotAdapterListing[] = [];
   let imported = 0;
+  let updated = 0;
+  let inactive = 0;
+  let reactivated = 0;
   let skipped = 0;
   let errorCount = 0;
   const errors: string[] = [];
@@ -128,8 +127,11 @@ export async function runSourceScrapeBot(
     if (!listings.length) {
       errors.push("Ürün bulunamadı veya HTML yapısı değişmiş olabilir");
     } else {
-      const result = await importListings(supabase, listings);
+      const result = await syncListings(supabase, source.id, listings);
       imported = result.imported;
+      updated = result.updated;
+      inactive = result.inactive;
+      reactivated = result.reactivated;
       skipped = result.skipped;
       errorCount = result.errorCount;
       errors.push(...result.errors);
@@ -144,21 +146,45 @@ export async function runSourceScrapeBot(
 
   const finishedAt = new Date().toISOString();
   const errorMessage = errors.length ? errors.join(" | ").slice(0, 4000) : null;
-  const { error: runUpdateError } = await supabase
+  const runPayload = {
+    status: finalStatus,
+    found_count: listings.length,
+    imported_count: imported,
+    updated_count: updated,
+    inactive_count: inactive,
+    reactivated_count: reactivated,
+    skipped_count: skipped,
+    error_count: errorCount,
+    error_message: errorMessage,
+    finished_at: finishedAt,
+  };
+  let runUpdate = await supabase
     .from("bot_runs")
-    .update({
-      status: finalStatus,
-      found_count: listings.length,
-      imported_count: imported,
-      skipped_count: skipped,
-      error_count: errorCount,
-      error_message: errorMessage,
-      finished_at: finishedAt,
-    })
+    .update(runPayload)
     .eq("id", runId);
 
-  if (runUpdateError) {
-    console.error("Source bot run finalization failed:", runUpdateError);
+  if (
+    runUpdate.error &&
+    isMissingColumn(runUpdate.error, [
+      "updated_count",
+      "inactive_count",
+      "reactivated_count",
+    ])
+  ) {
+    const {
+      updated_count: _updatedCount,
+      inactive_count: _inactiveCount,
+      reactivated_count: _reactivatedCount,
+      ...legacyRunPayload
+    } = runPayload;
+    runUpdate = await supabase
+      .from("bot_runs")
+      .update(legacyRunPayload)
+      .eq("id", runId);
+  }
+
+  if (runUpdate.error) {
+    console.error("Source bot run finalization failed:", runUpdate.error);
     finalStatus = "failed";
     errorCount += 1;
   }
@@ -172,17 +198,24 @@ export async function runSourceScrapeBot(
     status: finalStatus,
     found: listings.length,
     imported,
+    updated,
+    inactive,
+    reactivated,
     skipped,
     errorCount,
     errorMessage,
   };
 }
 
-async function importListings(
+async function syncListings(
   supabase: SupabaseClient,
+  sourceId: number,
   listings: BotAdapterListing[],
 ) {
   let imported = 0;
+  let updated = 0;
+  let inactive = 0;
+  let reactivated = 0;
   let skipped = 0;
   let errorCount = 0;
   const errors: string[] = [];
@@ -221,25 +254,8 @@ async function importListings(
     productIds.set(productName, createdProduct.id);
   }
 
-  const { data: existingListings, error: duplicateError } = await supabase
-    .from("listings")
-    .select("url")
-    .in(
-      "url",
-      listings.map((listing) => listing.url),
-    );
-
-  if (duplicateError) throw duplicateError;
-  const existingUrls = new Set(
-    (existingListings ?? []).map((listing) => String(listing.url)),
-  );
-
+  const payload = [];
   for (const listing of listings) {
-    if (existingUrls.has(listing.url)) {
-      skipped += 1;
-      continue;
-    }
-
     const productId = productIds.get(listing.product_name);
     if (!productId) {
       errorCount += 1;
@@ -247,32 +263,57 @@ async function importListings(
       continue;
     }
 
-    const { error: listingInsertError } = await supabase
-      .from("listings")
-      .insert({
-        product_id: productId,
-        title: listing.title,
-        price: listing.price,
-        city: listing.city,
-        source: listing.source,
-        url: listing.url,
-        condition: listing.condition,
-        image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-        status: listing.status,
-      });
-
-    if (listingInsertError) {
-      console.error("Source bot listing insert failed:", listingInsertError);
-      errorCount += 1;
-      errors.push(`${listing.title}: ${listingInsertError.message}`);
-      continue;
-    }
-
-    existingUrls.add(listing.url);
-    imported += 1;
+    payload.push({
+      external_id: listing.external_id || createExternalId(listing.url),
+      product_id: productId,
+      title: listing.title,
+      price: listing.price,
+      city: listing.city,
+      source: listing.source,
+      url: listing.url,
+      condition: listing.condition,
+      image_url: listing.image_url ?? listing.image_urls[0] ?? null,
+      description: listing.description ?? null,
+      status: normalizeSyncStatus(listing.status),
+      raw_payload: listing,
+    });
   }
 
-  return { imported, skipped, errorCount, errors };
+  if (!payload.length) {
+    return {
+      imported,
+      updated,
+      inactive,
+      reactivated,
+      skipped,
+      errorCount,
+      errors,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("sync_source_listings", {
+    p_source_id: sourceId,
+    p_items: payload,
+  });
+
+  if (error) throw error;
+
+  const result = (data ?? {}) as SyncRpcResult;
+  imported = Number(result.inserted ?? 0);
+  updated = Number(result.updated ?? 0);
+  inactive = Number(result.inactive ?? 0);
+  reactivated = Number(result.reactivated ?? 0);
+  skipped = Number(result.skipped ?? 0);
+
+  return {
+    imported,
+    updated,
+    inactive,
+    reactivated,
+    skipped,
+    errorCount,
+    errors,
+  };
 }
 
 async function updateSourceStats(
@@ -302,6 +343,26 @@ async function updateSourceStats(
   }
 }
 
+function emptyFailedResult(
+  source: SourceRunRecord,
+  errorMessage: string,
+): SourceRunResult {
+  return {
+    ok: false,
+    sourceId: source.id,
+    sourceName: source.name,
+    status: "failed",
+    found: 0,
+    imported: 0,
+    updated: 0,
+    inactive: 0,
+    reactivated: 0,
+    skipped: 0,
+    errorCount: 1,
+    errorMessage,
+  };
+}
+
 function normalizeLimit(value: unknown, maxLimit?: number) {
   const parsed = Number(value);
   const limit = Number.isFinite(parsed) ? Math.trunc(parsed) : 10;
@@ -310,6 +371,18 @@ function normalizeLimit(value: unknown, maxLimit?: number) {
 
 function normalizeImportMode(value: unknown) {
   return value === "published" || value === "pending" ? value : null;
+}
+
+function normalizeSyncStatus(value: unknown) {
+  if (value === "pending" || value === "inactive" || value === "active") {
+    return value;
+  }
+  if (value === "published") return "active";
+  return "active";
+}
+
+function createExternalId(url: string) {
+  return createHash("sha1").update(url.trim().toLowerCase()).digest("hex");
 }
 
 function getErrorMessage(error: unknown) {

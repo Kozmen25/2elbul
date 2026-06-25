@@ -11,6 +11,9 @@ type BotRun = {
   finishedAt: string | null;
   foundCount: number;
   importedCount: number;
+  updatedCount: number;
+  inactiveCount: number;
+  reactivatedCount: number;
   skippedCount: number;
   errorCount: number;
   errorMessage: string | null;
@@ -25,7 +28,7 @@ export default async function AdminBotRunsPage() {
         supabase
           .from("bot_runs")
           .select(
-            "id, source_id, status, run_type, started_at, finished_at, found_count, imported_count, skipped_count, error_count, error_message, created_at",
+            "id, source_id, status, run_type, started_at, finished_at, found_count, imported_count, updated_count, inactive_count, reactivated_count, skipped_count, error_count, error_message, created_at",
           )
           .order("created_at", { ascending: false })
           .limit(250),
@@ -55,6 +58,9 @@ export default async function AdminBotRunsPage() {
     finishedAt: run.finished_at ? String(run.finished_at) : null,
     foundCount: Number(run.found_count),
     importedCount: Number(run.imported_count),
+    updatedCount: Number(run.updated_count ?? 0),
+    inactiveCount: Number(run.inactive_count ?? 0),
+    reactivatedCount: Number(run.reactivated_count ?? 0),
     skippedCount: Number(run.skipped_count),
     errorCount: Number(run.error_count),
     errorMessage: run.error_message ? String(run.error_message) : null,
@@ -129,8 +135,8 @@ export default async function AdminBotRunsPage() {
           <p className="mb-4 text-sm font-bold text-black/45">
             Son {runs.length} çalışma kaydı
           </p>
-          <div className="overflow-x-auto rounded-2xl border border-black/8 bg-white">
-            <table className="w-full min-w-[1250px] text-left text-sm">
+          <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch]">
+            <table className="w-full min-w-[1450px] text-left text-sm">
               <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
                 <tr>
                   <th className="px-4 py-3">Kaynak</th>
@@ -138,10 +144,13 @@ export default async function AdminBotRunsPage() {
                   <th className="px-4 py-3">Çalışma tipi</th>
                   <th className="px-4 py-3">Başlangıç</th>
                   <th className="px-4 py-3">Bitiş</th>
-                  <th className="px-4 py-3 text-center">Bulunan</th>
-                  <th className="px-4 py-3 text-center">Eklenen</th>
+                  <th className="px-4 py-3 text-center">Toplam bulunan</th>
+                  <th className="px-4 py-3 text-center">Yeni eklenen</th>
+                  <th className="px-4 py-3 text-center">Güncellenen</th>
+                  <th className="px-4 py-3 text-center">Pasif yapılan</th>
+                  <th className="px-4 py-3 text-center">Tekrar aktif</th>
                   <th className="px-4 py-3 text-center">Atlanan</th>
-                  <th className="px-4 py-3 text-center">Hata</th>
+                  <th className="px-4 py-3 text-center">Hatalı</th>
                   <th className="px-4 py-3">Hata mesajı</th>
                 </tr>
               </thead>
@@ -166,6 +175,9 @@ export default async function AdminBotRunsPage() {
                     </td>
                     <CountCell value={run.foundCount} />
                     <CountCell value={run.importedCount} accent="green" />
+                    <CountCell value={run.updatedCount} accent="blue" />
+                    <CountCell value={run.inactiveCount} accent="amber" />
+                    <CountCell value={run.reactivatedCount} accent="green" />
                     <CountCell value={run.skippedCount} accent="amber" />
                     <CountCell value={run.errorCount} accent="red" />
                     <td className="max-w-72 break-words px-4 py-4 text-xs leading-5 text-red-700">
@@ -248,11 +260,13 @@ function CountCell({
   accent,
 }: {
   value: number;
-  accent?: "green" | "amber" | "red";
+  accent?: "green" | "blue" | "amber" | "red";
 }) {
   const className =
     accent === "green"
       ? "text-green-700"
+      : accent === "blue"
+        ? "text-blue-700"
       : accent === "amber"
         ? "text-amber-700"
         : accent === "red"

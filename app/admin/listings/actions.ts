@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
-const statuses = new Set(["pending", "published", "rejected"]);
+const statuses = new Set(["pending", "published", "active", "inactive", "rejected"]);
 
 export type BulkListingAction =
   | "publish"

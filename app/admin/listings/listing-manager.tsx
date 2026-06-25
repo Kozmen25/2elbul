@@ -219,7 +219,7 @@ export function ListingManager({
                   <StatusBadge status={listing.status} />
                   {statusAvailable && (
                     <div className="mt-2 flex gap-1">
-                      {["published", "pending", "rejected"].map((status) => (
+                      {["published", "active", "inactive", "pending", "rejected"].map((status) => (
                         <form key={status} action={setListingStatus}>
                           <input type="hidden" name="id" value={listing.id} />
                           <input type="hidden" name="status" value={status} />
@@ -229,9 +229,13 @@ export function ListingManager({
                           >
                             {status === "published"
                               ? "Yayınla"
-                              : status === "pending"
-                                ? "Beklet"
-                                : "Reddet"}
+                              : status === "active"
+                                ? "Aktif"
+                                : status === "inactive"
+                                  ? "Pasif"
+                                  : status === "pending"
+                                    ? "Beklet"
+                                    : "Reddet"}
                           </button>
                         </form>
                       ))}
@@ -328,6 +332,8 @@ export function ListingManager({
                                   defaultValue={listing.status}
                                 >
                                   <option value="published">Yayında</option>
+                                  <option value="active">Aktif</option>
+                                  <option value="inactive">Pasif</option>
                                   <option value="pending">Beklemede</option>
                                   <option value="rejected">Reddedildi</option>
                                 </select>
@@ -443,9 +449,11 @@ function Field({
 
 function StatusBadge({ status }: { status: string }) {
   const classes =
-    status === "published"
+    (status === "published" || status === "active")
       ? "bg-green-100 text-green-700"
-      : status === "rejected"
+      : status === "inactive"
+        ? "bg-black/7 text-black/45"
+        : status === "rejected"
         ? "bg-red-100 text-red-700"
         : "bg-amber-100 text-amber-700";
   return (
@@ -457,6 +465,8 @@ function StatusBadge({ status }: { status: string }) {
 
 function statusLabel(status: string) {
   if (status === "published") return "Yayında";
+  if (status === "active") return "Aktif";
+  if (status === "inactive") return "Pasif";
   if (status === "rejected") return "Reddedildi";
   return "Beklemede";
 }

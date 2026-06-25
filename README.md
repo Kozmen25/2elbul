@@ -452,6 +452,50 @@ Vercel Cron için `vercel.json` dosyası rotayı günde iki kez tetikler:
 Vercel cron ifadeleri UTC çalışır. `0 6,18 * * *`, Türkiye saatiyle yaklaşık
 09:00 ve 21:00 çalışması için ayarlanmıştır.
 
+### Bot Senkronizasyon Sistemi
+
+Botlar yeni kayıt eklemekle sınırlı değildir; aynı kaynak tekrar çalıştığında
+ilanları senkronize eder. Mevcut kurulumlarda önce şu migration dosyasını
+çalıştırın:
+
+```text
+supabase/bot-sync.sql
+```
+
+Bu migration şunları ekler:
+
+- `listings.source_id`, `listings.external_id`, `listings.description`
+- `listings.updated_at` ve otomatik update trigger'ı
+- `listings.last_seen_at`
+- `status` değerlerine `active` ve `inactive`
+- `bot_runs.updated_count`, `inactive_count`, `reactivated_count`
+- `sync_source_listings(source_id, items)` RPC fonksiyonu
+
+Eşleştirme önceliği:
+
+1. `source_id + external_id`
+2. Aynı kaynak içindeki `url`
+
+Bot aynı ilanı yeniden bulursa yeni kayıt açılmaz. Fiyat, başlık/açıklama,
+görsel, şehir, kaynak, link veya durum değiştiyse kayıt güncellenir ve
+`updated_at` otomatik yenilenir. Önceki çekimde bulunan ama yeni çekimde
+gelmeyen bot kaynaklı ilanlar silinmez; `status = inactive` yapılır. İlan tekrar
+bulunursa `status = active` olur.
+
+Her bot çalışması sonunda `/admin/bot-runs` ekranında şu sayaçlar görünür:
+
+- Toplam bulunan
+- Yeni eklenen
+- Güncellenen
+- Pasif yapılan
+- Tekrar aktif olan
+- Atlanan
+- Hatalı
+
+Senkronizasyon RPC fonksiyonu tek transaction içinde çalışır ve kaynak bazlı
+advisory lock kullanır. `source_id + external_id` ve `source_id + url` unique
+indexleri aynı anda çalışan botlarda duplicate kayıt oluşmasını engeller.
+
 ### EasyCep ve Getmobil Gerçek Test Çekimi
 
 Admin paneli EasyCep ve Getmobil telefon kategori sayfaları için sınırlı gerçek

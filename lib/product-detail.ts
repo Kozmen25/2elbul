@@ -80,7 +80,7 @@ export async function getProductDetail(
       "id, title, price, city, source, url, condition, image_url, created_at",
     )
     .eq("product_id", product.id)
-    .eq("status", "published");
+    .in("status", ["published", "active"]);
 
   if (
     listingsResult.error &&

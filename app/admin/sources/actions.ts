@@ -500,7 +500,7 @@ export async function runRealBot(
   return {
     ok: result.ok,
     message: result.ok
-      ? `Gerçek test çekimi tamamlandı: ${result.imported} eklendi, ${result.skipped} atlandı.`
+      ? `Gerçek test çekimi tamamlandı: ${result.imported} yeni, ${result.updated} güncellendi, ${result.inactive} pasif, ${result.reactivated} tekrar aktif, ${result.skipped} atlandı.`
       : `Gerçek test çekimi tamamlanamadı: ${result.errorMessage ?? `${result.errorCount} hata oluştu.`}`,
   };
 }
