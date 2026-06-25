@@ -142,7 +142,7 @@ export function SourceManager({
         </div>
       )}
 
-      <div className="grid w-full max-w-full min-w-0 gap-3 xl:grid-cols-2">
+      <div className="grid w-full max-w-full min-w-0 gap-3 lg:hidden">
         {sources.map((source) => (
           <SourceCard
             key={source.id}
@@ -155,7 +155,7 @@ export function SourceManager({
         ))}
       </div>
 
-      <div className="hidden w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch]">
+      <div className="hidden w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch] lg:block">
         <table className="w-full min-w-[1000px] table-auto text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
