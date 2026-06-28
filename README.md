@@ -1057,6 +1057,12 @@ TypeScript kontrolü:
 npm run lint
 ```
 
+Otomatik testler:
+
+```bash
+npm run test
+```
+
 Production build:
 
 ```bash

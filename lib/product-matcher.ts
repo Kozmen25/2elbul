@@ -81,6 +81,8 @@ export function normalizeProductTitle(title: string) {
     .replace(/ç/g, "c")
     .replace(/\b(\d+)\s*(gb|g)\b/g, "$1gb")
     .replace(/\b(\d+)\s*(tb|t)\b/g, "$1tb")
+    .replace(/\bpro\s*max\b/g, "pro max")
+    .replace(/\bpromax\b/g, "pro max")
     .replace(/\bapple\s+(?=iphone)\b/g, "")
     .replace(/\bgalaxy\s+(?=s\d|a\d|z\s*fold|z\s*flip)\b/g, "samsung galaxy ")
     .replace(/[^a-z0-9]+/g, " ")
@@ -262,7 +264,9 @@ function detectBrand(normalized: string) {
   if (/\b(iphone|apple)\b/.test(normalized) || isBareIphoneModel(normalized)) {
     return "apple";
   }
-  if (/\b(samsung|galaxy)\b/.test(normalized)) return "samsung";
+  if (/\b(samsung|galaxy)\b/.test(normalized) || isBareSamsungModel(normalized)) {
+    return "samsung";
+  }
   if (/\bxiaomi\b/.test(normalized)) return "xiaomi";
   if (/\bhuawei\b/.test(normalized)) return "huawei";
   if (/\boppo\b/.test(normalized)) return "oppo";
@@ -289,7 +293,12 @@ function detectModel(
   const samsung = normalized.match(
     /\b(?:samsung\s*)?(?:galaxy\s*)?((?:s|a|m)\d{2}(?:\s*ultra|\s*plus|\s*fe)?|z\s*(?:fold|flip)\s*\d?)\b/,
   );
-  if ((brand === "samsung" || normalized.includes("galaxy")) && samsung) {
+  if (
+    (brand === "samsung" ||
+      normalized.includes("galaxy") ||
+      isBareSamsungModel(normalized)) &&
+    samsung
+  ) {
     return `galaxy-${samsung[1].replace(/\s+/g, "-")}`;
   }
 
@@ -374,6 +383,10 @@ function createCanonicalProductName(signals: ProductSignals, fallback: string) {
 
 function isBareIphoneModel(normalized: string) {
   return /\b1[1-6]\s*(pro\s*max|pro|plus|mini)\b/.test(normalized);
+}
+
+function isBareSamsungModel(normalized: string) {
+  return /\b(?:s|a|m)\d{2}\s*(?:ultra|plus|fe)?\b/.test(normalized);
 }
 
 function compactModelSuffix(value: string | undefined) {
