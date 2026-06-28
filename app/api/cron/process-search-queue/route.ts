@@ -235,11 +235,11 @@ async function importAdapterListings(
   let skipped = 0;
 
   for (const listing of listings) {
-    const productId = await ensureProduct(supabase, job.query, listing);
+    const productId = await ensureProduct(supabase, job.query);
     const existing = await findExistingListing(supabase, listing);
     const previousPrice = existing?.price ? Number(existing.price) : null;
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       product_id: productId,
       source_id: source.id || null,
       external_id: listing.externalId,
@@ -256,13 +256,7 @@ async function importAdapterListings(
       last_seen_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from("listings")
-      .upsert(payload, { onConflict: "source,external_id" })
-      .select("id, price")
-      .single();
-
-    if (error) throw error;
+    const data = await upsertListingWithSchemaFallback(supabase, payload);
 
     if (existing) updated += 1;
     else imported += 1;
@@ -288,7 +282,6 @@ async function importAdapterListings(
 async function ensureProduct(
   supabase: SupabaseClient,
   query: string,
-  listing: NormalizedListing,
 ) {
   const productName = normalizeProductName(query);
   const { data, error } = await supabase
@@ -296,7 +289,6 @@ async function ensureProduct(
     .upsert(
       {
         name: productName,
-        category: listing.category,
       },
       { onConflict: "name" },
     )
@@ -308,6 +300,37 @@ async function ensureProduct(
   }
 
   return Number(data.id);
+}
+
+async function upsertListingWithSchemaFallback(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+) {
+  let currentPayload = { ...payload };
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabase
+      .from("listings")
+      .upsert(currentPayload, { onConflict: "source,external_id" })
+      .select("id, price")
+      .single();
+
+    if (!result.error) return result.data;
+
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (!missingColumn || !(missingColumn in currentPayload)) {
+      throw result.error;
+    }
+
+    console.error(
+      `Search queue listing upsert skipped missing column: ${missingColumn}`,
+      result.error,
+    );
+    const { [missingColumn]: _removed, ...nextPayload } = currentPayload;
+    currentPayload = nextPayload;
+  }
+
+  throw new Error("Listing kaydı mevcut şemayla uyumlu hale getirilemedi.");
 }
 
 async function findExistingListing(
@@ -397,6 +420,22 @@ function hasValidSecret(request: NextRequest, secret: string) {
   return [headerSecret, bearerSecret, querySecret].some(
     (value) => value === secret,
   );
+}
+
+function getMissingSchemaColumn(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`;
+  if (record.code !== "PGRST204" && !text.includes("schema cache")) {
+    return null;
+  }
+
+  const match =
+    text.match(/'([^']+)' column/) ??
+    text.match(/column '([^']+)'/) ??
+    text.match(/Could not find the '([^']+)'/);
+
+  return match?.[1] ?? null;
 }
 
 function getErrorMessage(error: unknown) {
