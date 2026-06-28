@@ -5,7 +5,10 @@ import type {
   ListingSource,
 } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
-import type { PriceHistoryRecord } from "@/lib/price-insights";
+import {
+  calculateMarketStats,
+  type PriceHistoryRecord,
+} from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { createSupabaseClient } from "@/lib/supabase";
 
@@ -20,6 +23,29 @@ export type ProductDetailData = {
   product: ProductRecord;
   listings: Listing[];
   priceHistory: PriceHistoryRecord[];
+  decisionInsight: ProductDecisionInsight;
+};
+
+export type ConfidenceLevel =
+  | "Yüksek güven"
+  | "Orta güven"
+  | "Düşük güven"
+  | "Veri yetersiz";
+
+export type ProductDecisionInsight = {
+  confidence: {
+    score: number | null;
+    level: ConfidenceLevel;
+    description: string;
+    reasons: string[];
+    warnings: string[];
+    className: string;
+  };
+  smartPrice: {
+    summary: string;
+    details: string[];
+    warnings: string[];
+  };
 };
 
 type ProductRow = {
@@ -154,7 +180,12 @@ export async function getProductDetail(
       "Supabase product listings query failed:",
       listingsResult.error,
     );
-    return { product, listings: [], priceHistory: [] };
+    return {
+      product,
+      listings: [],
+      priceHistory: [],
+      decisionInsight: buildProductDecisionInsight(product.name, [], []),
+    };
   }
 
   const listingsData = (listingsResult.data ?? []) as unknown as ListingRow[];
@@ -198,7 +229,214 @@ export async function getProductDetail(
         }))
         .filter((record) => Number.isFinite(record.price));
 
-  return { product, listings, priceHistory };
+  return {
+    product,
+    listings,
+    priceHistory,
+    decisionInsight: buildProductDecisionInsight(
+      product.name,
+      listings,
+      priceHistory,
+    ),
+  };
+}
+
+export function buildProductDecisionInsight(
+  productName: string,
+  listings: Listing[],
+  priceHistory: PriceHistoryRecord[],
+): ProductDecisionInsight {
+  const prices = listings
+    .map((listing) => Number(listing.price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  const stats = calculateMarketStats(prices);
+  const count = prices.length;
+
+  if (!stats || count === 0) {
+    return {
+      confidence: {
+        score: null,
+        level: "Veri yetersiz",
+        description:
+          "Bu ürün için güven skoru oluşturacak kadar fiyat verisi bulunmuyor.",
+        reasons: ["Yayında fiyat bilgisi olan ilan yok."],
+        warnings: ["Yeni ilanlar geldikçe analiz otomatik güncellenecek."],
+        className: "border-slate-200 bg-slate-50 text-slate-700",
+      },
+      smartPrice: {
+        summary: `${productName} için henüz güvenilir fiyat yorumu üretilecek kadar ilan bulunmuyor.`,
+        details: ["Fiyat yorumu için en az birkaç karşılaştırılabilir ilan gerekir."],
+        warnings: ["İlk ilanlar geldiğinde ortalama ve medyan fiyat karşılaştırması yapılacak."],
+      },
+    };
+  }
+
+  const sorted = [...prices].sort((a, b) => a - b);
+  const average = stats.average;
+  const median = stats.median;
+  const lowest = stats.lowest;
+  const highest = stats.highest;
+  const standardDeviation = calculateStandardDeviation(prices, average);
+  const variation = average ? standardDeviation / average : 0;
+  const spreadPercent = average ? ((highest - lowest) / average) * 100 : 0;
+  const medianDifferencePercent = average
+    ? Math.round(((average - median) / average) * 1000) / 10
+    : 0;
+  const cheapestDifferencePercent = average
+    ? Math.round(((average - lowest) / average) * 1000) / 10
+    : 0;
+  const outlierCount = sorted.filter(
+    (price) => price <= average * 0.6 || price >= average * 1.6,
+  ).length;
+  const hasHistory =
+    priceHistory.length >= 2 ||
+    new Set(listings.map((listing) => listing.createdAt?.slice(0, 10))).size >= 2;
+
+  const confidence = buildConfidenceScore({
+    count,
+    variation,
+    outlierCount,
+    hasHistory,
+    cheapestDifferencePercent,
+  });
+
+  const reliabilityText =
+    count >= 10
+      ? "İlan sayısı güçlü, fiyat yorumu daha güvenilir."
+      : count >= 3
+        ? "İlan sayısı orta seviyede, yorum makul bir başlangıç sağlar."
+        : "İlan sayısı çok az, analiz dikkatli yorumlanmalı.";
+  const medianText =
+    Math.abs(medianDifferencePercent) <= 5
+      ? "Medyan fiyat ile ortalama birbirine yakın; fiyat dağılımı dengeli görünüyor."
+      : `Medyan fiyat ortalamadan yaklaşık %${Math.abs(medianDifferencePercent).toLocaleString("tr-TR")} ${medianDifferencePercent > 0 ? "düşük" : "yüksek"}; piyasada farklı fiyat seviyeleri var.`;
+
+  const warnings = [
+    ...(spreadPercent >= 35
+      ? ["Piyasada fiyat farkı yüksek; ürün durumu, garanti ve satıcı detaylarını karşılaştır."]
+      : []),
+    ...(cheapestDifferencePercent >= 35
+      ? ["En ucuz ilan ortalamanın çok altında; detayları dikkatli kontrol et."]
+      : []),
+    ...(count < 3 ? ["Tek/az ilan olduğu için karar vermeden önce yeni verileri beklemek daha sağlıklı olur."] : []),
+  ];
+
+  return {
+    confidence,
+    smartPrice: {
+      summary:
+        cheapestDifferencePercent > 0
+          ? `${productName} için ortalama ikinci el fiyat ${formatPrice(average)}. En ucuz ilan ${formatPrice(lowest)} ile ortalamanın yaklaşık %${cheapestDifferencePercent.toLocaleString("tr-TR")} altında.`
+          : `${productName} için ortalama ikinci el fiyat ${formatPrice(average)}. En ucuz ilan ${formatPrice(lowest)} ve ortalamaya yakın seyrediyor.`,
+      details: [
+        `Medyan fiyat ${formatPrice(median)}; ortalama ile fark yaklaşık %${Math.abs(medianDifferencePercent).toLocaleString("tr-TR")}.`,
+        reliabilityText,
+        medianText,
+      ],
+      warnings,
+    },
+  };
+}
+
+function buildConfidenceScore({
+  count,
+  variation,
+  outlierCount,
+  hasHistory,
+  cheapestDifferencePercent,
+}: {
+  count: number;
+  variation: number;
+  outlierCount: number;
+  hasHistory: boolean;
+  cheapestDifferencePercent: number;
+}): ProductDecisionInsight["confidence"] {
+  if (count < 3) {
+    return {
+      score: null,
+      level: "Veri yetersiz" as const,
+      description:
+        "Güven skoru için en az 3 karşılaştırılabilir ilan daha sağlıklı sonuç verir.",
+      reasons: [`Şu anda yalnızca ${count} fiyat verisi var.`],
+      warnings: ["Tek ilanlar fırsat gibi görünebilir; satıcı ve ürün detaylarını ayrıca kontrol et."],
+      className: "border-slate-200 bg-slate-50 text-slate-700",
+    };
+  }
+
+  let score = 45;
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  if (count >= 20) {
+    score += 25;
+    reasons.push("İlan sayısı yüksek.");
+  } else if (count >= 10) {
+    score += 20;
+    reasons.push("İlan sayısı güvenilir karşılaştırma için iyi.");
+  } else if (count >= 5) {
+    score += 14;
+    reasons.push("İlan sayısı makul seviyede.");
+  } else {
+    score += 8;
+    reasons.push("İlan sayısı sınırlı ama temel karşılaştırma yapılabiliyor.");
+  }
+
+  if (variation <= 0.12) {
+    score += 25;
+    reasons.push("Fiyatlar birbirine yakın.");
+  } else if (variation <= 0.24) {
+    score += 17;
+    reasons.push("Fiyat dağılımı dengeli.");
+  } else if (variation <= 0.38) {
+    score += 8;
+    reasons.push("Fiyatlarda orta düzey sapma var.");
+  } else {
+    score -= 12;
+    warnings.push("Fiyat dağılımı geniş; ilan detayları arasında ciddi fark olabilir.");
+  }
+
+  if (outlierCount > 0) {
+    const penalty = Math.min(22, outlierCount * 7);
+    score -= penalty;
+    warnings.push(`${outlierCount} ilan piyasa ortalamasından belirgin sapıyor.`);
+  }
+
+  if (hasHistory) {
+    score += 8;
+    reasons.push("Fiyat geçmişi veya farklı günlere ait veri var.");
+  }
+
+  if (cheapestDifferencePercent >= 35) {
+    score -= 12;
+    warnings.push("En ucuz ilan ortalamanın çok altında; detayları dikkatli kontrol et.");
+  }
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+  const level: ConfidenceLevel =
+    finalScore >= 80
+      ? "Yüksek güven"
+      : finalScore >= 60
+        ? "Orta güven"
+        : "Düşük güven";
+
+  return {
+    score: finalScore,
+    level,
+    description:
+      level === "Yüksek güven"
+        ? "Bu ürün için fiyat verisi tutarlı ve karar desteği güçlü."
+        : level === "Orta güven"
+          ? "Analiz kullanılabilir, ancak ilan detaylarını karşılaştırmak önemli."
+          : "Fiyatlar veya veri miktarı güveni düşürüyor; dikkatli inceleme önerilir.",
+    reasons,
+    warnings,
+    className:
+      level === "Yüksek güven"
+        ? "border-green-200 bg-green-50 text-green-700"
+        : level === "Orta güven"
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-red-200 bg-red-50 text-red-700",
+  };
 }
 
 function fetchProductListings(
@@ -217,6 +455,22 @@ function fetchProductListings(
   }
 
   return query;
+}
+
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  }).format(price);
+}
+
+function calculateStandardDeviation(prices: number[], average: number) {
+  if (!prices.length || !average) return 0;
+  const variance =
+    prices.reduce((sum, price) => sum + (price - average) ** 2, 0) /
+    prices.length;
+  return Math.sqrt(variance);
 }
 
 function isMissingPriceHistoryTable(error: unknown) {

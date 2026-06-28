@@ -24,6 +24,7 @@ import {
 import {
   getProductBySlug,
   getProductDetail,
+  type ProductDecisionInsight,
 } from "@/lib/product-detail";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
@@ -72,7 +73,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const detail = await getProductDetail(slug);
   if (!detail) notFound();
 
-  const { product, listings } = detail;
+  const { product, listings, decisionInsight } = detail;
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
   const marketStats = calculateMarketStats(prices);
@@ -158,14 +159,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const favoriteIds = new Set(favoriteListingIds);
   const loginNext = `/product/${product.slug}`;
-  const priceComment = buildPriceComment({
-    productName: product.name,
-    listingCount,
-    averagePrice,
-    bestDealListing,
-    bestDealDiscount,
-  });
-
   return (
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
       <div className="container-shell min-w-0">
@@ -223,20 +216,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
           />
         </div>
 
-        <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
-          <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-            <SectionTitle
-              icon={ChartNoAxesCombined}
-              eyebrow="Fiyat yorumu"
-              title="Akıllı piyasa özeti"
-            />
-            <p className="mt-5 text-base font-semibold leading-8 text-black/65">
-              {priceComment}
-            </p>
-            <p className="mt-4 text-sm leading-6 text-black/45">
-              Bu yorum aynı ürüne bağlı aktif ilan fiyatlarından kural tabanlı olarak üretilir.
-            </p>
-          </section>
+        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)_minmax(300px,0.8fr)]">
+          <AdvancedPriceInsightCard insight={decisionInsight.smartPrice} />
+
+          <ConfidenceScoreCard insight={decisionInsight.confidence} />
 
           <BestDealCard
             listing={bestDealListing}
@@ -424,6 +407,106 @@ function ProductListingSection({
       ) : (
         <EmptyState text={emptyMessage} />
       )}
+    </section>
+  );
+}
+
+function AdvancedPriceInsightCard({
+  insight,
+}: {
+  insight: ProductDecisionInsight["smartPrice"];
+}) {
+  return (
+    <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle
+        icon={ChartNoAxesCombined}
+        eyebrow="Gelişmiş analiz"
+        title="Akıllı fiyat yorumu"
+      />
+      <p className="mt-5 text-base font-semibold leading-8 text-black/65">
+        {insight.summary}
+      </p>
+      <div className="mt-5 space-y-3">
+        {insight.details.map((detail) => (
+          <p
+            key={detail}
+            className="rounded-2xl border border-black/8 bg-[#fafaf8] px-4 py-3 text-sm font-semibold leading-6 text-black/58"
+          >
+            {detail}
+          </p>
+        ))}
+      </div>
+      {insight.warnings.length > 0 ? (
+        <div className="mt-5 space-y-2">
+          {insight.warnings.map((warning) => (
+            <p
+              key={warning}
+              className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800"
+            >
+              <TriangleAlert className="mt-0.5 shrink-0" size={17} />
+              {warning}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ConfidenceScoreCard({
+  insight,
+}: {
+  insight: ProductDecisionInsight["confidence"];
+}) {
+  const score = insight.score ?? 0;
+
+  return (
+    <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle icon={Tag} eyebrow="Güven Skoru" title="Karar güveni" />
+      <div className="mt-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.08em] text-black/40">
+            Skor
+          </p>
+          <p className="mt-1 text-5xl font-black tracking-[-0.07em]">
+            {insight.score === null ? "—" : insight.score}
+            <span className="text-xl text-black/35">/100</span>
+          </p>
+        </div>
+        <span
+          className={`rounded-full border px-3 py-1.5 text-xs font-black ${insight.className}`}
+        >
+          {insight.level}
+        </span>
+      </div>
+      <div className="mt-5 h-3 overflow-hidden rounded-full bg-black/8">
+        <div
+          className="h-full rounded-full bg-[#ff6b00]"
+          style={{ width: `${insight.score === null ? 12 : score}%` }}
+        />
+      </div>
+      <p className="mt-5 text-sm font-semibold leading-6 text-black/60">
+        {insight.description}
+      </p>
+      <div className="mt-5 space-y-2">
+        {insight.reasons.map((reason) => (
+          <p
+            key={reason}
+            className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-bold leading-6 text-green-800"
+          >
+            {reason}
+          </p>
+        ))}
+        {insight.warnings.map((warning) => (
+          <p
+            key={warning}
+            className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800"
+          >
+            <TriangleAlert className="mt-0.5 shrink-0" size={17} />
+            {warning}
+          </p>
+        ))}
+      </div>
     </section>
   );
 }
@@ -708,34 +791,6 @@ function EmptyState({ text }: { text: string }) {
       {text}
     </div>
   );
-}
-
-function buildPriceComment({
-  productName,
-  listingCount,
-  averagePrice,
-  bestDealListing,
-  bestDealDiscount,
-}: {
-  productName: string;
-  listingCount: number;
-  averagePrice: number;
-  bestDealListing: Listing | null;
-  bestDealDiscount: number | null;
-}) {
-  if (!listingCount) {
-    return `${productName} için henüz yayında ilan bulunmuyor. Yeni veri geldikçe fiyat özeti otomatik oluşacak.`;
-  }
-
-  if (!bestDealListing || !averagePrice || bestDealDiscount === null) {
-    return `${productName} için fiyat bilgisi sınırlı. Daha fazla ilan geldikçe ortalama fiyat ve fırsat yorumu netleşecek.`;
-  }
-
-  if (bestDealDiscount > 0) {
-    return `Bu ürünün ortalama ikinci el fiyatı ${formatPrice(averagePrice)}. En ucuz ilan ${formatPrice(bestDealListing.price)} ile ortalamanın %${bestDealDiscount} altında görünüyor.`;
-  }
-
-  return `Bu ürünün ortalama ikinci el fiyatı ${formatPrice(averagePrice)}. En ucuz ilan ${formatPrice(bestDealListing.price)} seviyesinde ve ortalamaya yakın görünüyor.`;
 }
 
 function buildListingPriceHistory(

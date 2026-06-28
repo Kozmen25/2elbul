@@ -1304,3 +1304,26 @@ Grafik davranisi:
 - 7 gun, 30 gun, 90 gun ve tum zaman filtreleri vardir.
 - Mobil uyumlu SVG tabanli hafif grafik kullanilir; yeni paket eklenmemistir.
 - Yeterli tarih verisi yoksa bos durum mesaji gosterilir.
+
+## Urun Detay Sayfasi 2.0 - Sprint 3 Guven Skoru
+
+`/product/[slug]` sayfasi artik fiyat ozetinin yaninda karar destek kartlari da
+gosterir:
+
+- **Guven Skoru:** 100 uzerinden hesaplanir.
+- **Gelismis Akilli Fiyat Yorumu:** Ortalama, medyan, en ucuz ilan farki,
+  veri guvenilirligi ve fiyat dagilimi yorumlanir.
+
+Skor tamamen kural tabanlidir; harici AI servisi kullanilmaz. Hesaplamada ilan
+sayisi, fiyatlarin birbirine yakinligi, asiri fiyat sapmalari, fiyat gecmisi
+varligi ve en ucuz ilanin ortalamaya uzakligi dikkate alinir.
+
+Skor seviyeleri:
+
+- 80-100: Yuksek guven
+- 60-79: Orta guven
+- 0-59: Dusuk guven
+- Veri azsa: Veri yetersiz
+
+Yeni SQL gerekmez. Hesaplama server tarafinda `lib/product-detail.ts` icinde
+hazirlanir ve sayfaya guvenli ozet veri olarak gonderilir.
