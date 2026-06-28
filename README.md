@@ -1290,3 +1290,17 @@ Gosterilen ana bolumler:
 Bu ozellik mevcut `products`, `listings` ve varsa `price_history` verileriyle
 calisir. Yeni SQL migration gerektirmez. `products.category` kolonu varsa
 gosterilir; kolon yoksa sayfa mevcut semayla calismaya devam eder.
+
+## Urun Detay Sayfasi 2.0 - Sprint 2 Fiyat Grafigi
+
+`/product/[slug]` sayfasindaki fiyat gecmisi grafigi mevcut `listings`
+verisinden uretilir. Yeni tablo veya SQL migration gerekmez.
+
+Grafik davranisi:
+
+- `listings.created_at` tarihi kullanilir.
+- `listings.updated_at` kolonu varsa yedek tarih bilgisi olarak okunur.
+- Her gun icin ortalama fiyat, en dusuk fiyat ve ilan sayisi hesaplanir.
+- 7 gun, 30 gun, 90 gun ve tum zaman filtreleri vardir.
+- Mobil uyumlu SVG tabanli hafif grafik kullanilir; yeni paket eklenmemistir.
+- Yeterli tarih verisi yoksa bos durum mesaji gosterilir.

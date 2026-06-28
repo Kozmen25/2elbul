@@ -29,6 +29,19 @@ type ProductRow = {
   category?: string | null;
 };
 
+type ListingRow = {
+  id: string | number;
+  title: string | null;
+  price: string | number | null;
+  city: string | null;
+  source: string | null;
+  url: string | null;
+  condition: string | null;
+  image_url?: string | null;
+  created_at: string | null;
+  updated_at?: string | null;
+};
+
 export const getProductBySlug = cache(
   async (slug: string): Promise<ProductRecord | null> => {
     const supabase = createSupabaseClient();
@@ -92,24 +105,48 @@ export async function getProductDetail(
   const supabase = createSupabaseClient();
   if (!product || !supabase) return null;
 
-  let listingsResult = await supabase
-    .from("listings")
-    .select(
-      "id, title, price, city, source, url, condition, image_url, created_at",
-    )
-    .eq("product_id", product.id)
-    .in("status", ["published", "active"]);
+  const listingColumns = {
+    base: "id, title, price, city, source, url, condition, image_url, created_at",
+    withUpdated:
+      "id, title, price, city, source, url, condition, image_url, created_at, updated_at",
+  };
+  let useStatusFilter = true;
+  let columns = listingColumns.withUpdated;
+  let listingsResult = await fetchProductListings(
+    supabase,
+    product.id,
+    columns,
+    useStatusFilter,
+  );
 
-  if (
-    listingsResult.error &&
-    isMissingStatusColumn(listingsResult.error)
-  ) {
-    listingsResult = await supabase
-      .from("listings")
-      .select(
-        "id, title, price, city, source, url, condition, image_url, created_at",
-      )
-      .eq("product_id", product.id);
+  if (listingsResult.error && isMissingListingUpdatedAtColumn(listingsResult.error)) {
+    columns = listingColumns.base;
+    listingsResult = await fetchProductListings(
+      supabase,
+      product.id,
+      columns,
+      useStatusFilter,
+    );
+  }
+
+  if (listingsResult.error && isMissingStatusColumn(listingsResult.error)) {
+    useStatusFilter = false;
+    listingsResult = await fetchProductListings(
+      supabase,
+      product.id,
+      columns,
+      useStatusFilter,
+    );
+  }
+
+  if (listingsResult.error && isMissingListingUpdatedAtColumn(listingsResult.error)) {
+    columns = listingColumns.base;
+    listingsResult = await fetchProductListings(
+      supabase,
+      product.id,
+      columns,
+      useStatusFilter,
+    );
   }
 
   if (listingsResult.error) {
@@ -120,7 +157,8 @@ export async function getProductDetail(
     return { product, listings: [], priceHistory: [] };
   }
 
-  const listings = (listingsResult.data ?? [])
+  const listingsData = (listingsResult.data ?? []) as unknown as ListingRow[];
+  const listings = listingsData
     .map((listing) => ({
       id: String(listing.id),
       productId: product.id,
@@ -133,6 +171,10 @@ export async function getProductDetail(
       condition: listing.condition as ListingCondition,
       imageUrl: listing.image_url ? String(listing.image_url) : null,
       createdAt: String(listing.created_at),
+      updatedAt:
+        "updated_at" in listing && listing.updated_at
+          ? String(listing.updated_at)
+          : null,
     }))
     .filter((listing) => Number.isFinite(listing.price));
 
@@ -159,6 +201,24 @@ export async function getProductDetail(
   return { product, listings, priceHistory };
 }
 
+function fetchProductListings(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  productId: string,
+  columns: string,
+  useStatusFilter: boolean,
+) {
+  let query = supabase
+    .from("listings")
+    .select(columns)
+    .eq("product_id", productId);
+
+  if (useStatusFilter) {
+    query = query.in("status", ["published", "active"]);
+  }
+
+  return query;
+}
+
 function isMissingPriceHistoryTable(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const record = error as { code?: string; message?: string; details?: string };
@@ -167,6 +227,17 @@ function isMissingPriceHistoryTable(error: unknown) {
     record.code === "42P01" ||
     record.code === "PGRST205" ||
     text.includes("price_history")
+  );
+}
+
+function isMissingListingUpdatedAtColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "42703" ||
+    record.code === "PGRST204" ||
+    text.includes("updated_at")
   );
 }
 

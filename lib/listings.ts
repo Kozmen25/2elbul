@@ -54,6 +54,7 @@ export type Listing = {
   condition: ListingCondition;
   imageUrl: string | null;
   createdAt: string;
+  updatedAt?: string | null;
 };
 
 export type ProductOption = {

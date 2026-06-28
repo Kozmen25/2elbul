@@ -13,13 +13,8 @@ import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertForm } from "@/components/price-alert-form";
-import { PriceHistoryChart } from "@/components/price-history-chart";
 import type { Listing } from "@/lib/listings";
-import {
-  buildDailyPriceHistory,
-  calculateMarketStats,
-  summarizePriceHistory,
-} from "@/lib/price-insights";
+import { calculateMarketStats } from "@/lib/price-insights";
 import {
   analyzeListingPrice,
   buildProductPriceStats,
@@ -31,6 +26,10 @@ import {
   getProductDetail,
 } from "@/lib/product-detail";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import {
+  ListingPriceHistoryChart,
+  type ListingPriceHistoryPoint,
+} from "./listing-price-history-chart";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -73,7 +72,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const detail = await getProductDetail(slug);
   if (!detail) notFound();
 
-  const { product, listings, priceHistory } = detail;
+  const { product, listings } = detail;
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
   const marketStats = calculateMarketStats(prices);
@@ -89,8 +88,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const averagePrice = marketStats?.average ?? 0;
   const medianPrice = marketStats?.median ?? 0;
   const marketValue = marketStats?.marketValue ?? 0;
-  const dailyPriceHistory = buildDailyPriceHistory(priceHistory);
-  const priceHistorySummary = summarizePriceHistory(dailyPriceHistory);
+  const listingPriceHistory = buildListingPriceHistory(listings);
   const newestListing = [...listings].sort(
     (a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -259,13 +257,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
           <SectionTitle
             icon={ChartNoAxesCombined}
-            eyebrow="Fiyat geçmişi"
-            title="Piyasa fiyat hareketi"
+            eyebrow="Fiyat Geçmişi"
+            title="Fiyat Geçmişi"
           />
-          <PriceHistoryChart
-            points={dailyPriceHistory}
-            summary={priceHistorySummary}
-          />
+          <p className="mt-4 text-sm leading-6 text-black/55">
+            Bu ürün için toplanan ilan fiyatlarının zamana göre değişimi.
+          </p>
+          <ListingPriceHistoryChart points={listingPriceHistory} />
         </section>
 
         <ProductListingSection
@@ -738,6 +736,38 @@ function buildPriceComment({
   }
 
   return `Bu ürünün ortalama ikinci el fiyatı ${formatPrice(averagePrice)}. En ucuz ilan ${formatPrice(bestDealListing.price)} seviyesinde ve ortalamaya yakın görünüyor.`;
+}
+
+function buildListingPriceHistory(
+  listings: Listing[],
+): ListingPriceHistoryPoint[] {
+  const grouped = new Map<string, number[]>();
+
+  for (const listing of listings) {
+    const date = getListingHistoryDate(listing);
+    if (!date || !Number.isFinite(listing.price) || listing.price <= 0) continue;
+    grouped.set(date, [...(grouped.get(date) ?? []), listing.price]);
+  }
+
+  return [...grouped.entries()]
+    .map(([date, prices]) => {
+      const total = prices.reduce((sum, price) => sum + price, 0);
+      return {
+        date,
+        average: Math.round(total / prices.length),
+        lowest: Math.min(...prices),
+        count: prices.length,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function getListingHistoryDate(listing: Listing) {
+  const rawDate = listing.createdAt || listing.updatedAt;
+  if (!rawDate) return null;
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {
