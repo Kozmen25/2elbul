@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createProductSlug } from "@/lib/product-slug";
+import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 
@@ -10,6 +11,9 @@ type ProductRow = {
 
 type ListingProductRow = {
   product_id: string | number | null;
+  title?: string | null;
+  source?: string | null;
+  url?: string | null;
 };
 
 type Suggestion = {
@@ -69,12 +73,14 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
   const productIds = new Set<string>();
 
   for (const row of (productsResult.data ?? []) as ProductRow[]) {
+    if (isPublicDemoProductName(String(row.name))) continue;
     productIds.add(String(row.id));
     counts.set(String(row.id), counts.get(String(row.id)) ?? 0);
   }
 
   for (const row of (listingsResult.data ?? []) as ListingProductRow[]) {
     if (!row.product_id) continue;
+    if (isPublicDemoListing(row)) continue;
     const id = String(row.product_id);
     productIds.add(id);
     counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -109,6 +115,7 @@ async function getPopularSuggestions(): Promise<Suggestion[]> {
   const counts = new Map<string, number>();
   for (const row of (listingsResult.data ?? []) as ListingProductRow[]) {
     if (!row.product_id) continue;
+    if (isPublicDemoListing(row)) continue;
     const id = String(row.product_id);
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
@@ -148,7 +155,7 @@ async function searchListingsByTitle(pattern: string) {
 
   const result = await supabase
     .from("listings")
-    .select("product_id")
+    .select("product_id, title, source, url")
     .in("status", ["published", "active"])
     .ilike("title", pattern)
     .limit(80);
@@ -157,7 +164,7 @@ async function searchListingsByTitle(pattern: string) {
 
   return supabase
     .from("listings")
-    .select("product_id")
+    .select("product_id, title, source, url")
     .ilike("title", pattern)
     .limit(80);
 }
@@ -168,7 +175,7 @@ async function searchRecentListingProducts() {
 
   const result = await supabase
     .from("listings")
-    .select("product_id")
+    .select("product_id, title, source, url")
     .in("status", ["published", "active"])
     .order("created_at", { ascending: false })
     .limit(400);
@@ -177,7 +184,7 @@ async function searchRecentListingProducts() {
 
   return supabase
     .from("listings")
-    .select("product_id")
+    .select("product_id, title, source, url")
     .order("created_at", { ascending: false })
     .limit(400);
 }
@@ -190,12 +197,14 @@ function toSuggestions(
   const normalizedQuery = query.toLocaleLowerCase("tr-TR");
 
   return products
+    .filter((product) => !isPublicDemoProductName(String(product.name)))
     .map((product) => ({
       id: String(product.id),
       name: String(product.name),
       listingCount: counts.get(String(product.id)) ?? 0,
       href: `/search?q=${encodeURIComponent(String(product.name))}`,
     }))
+    .filter((item) => item.listingCount > 0)
     .sort((a, b) => {
       const aStarts = normalizedQuery
         ? a.name.toLocaleLowerCase("tr-TR").startsWith(normalizedQuery)

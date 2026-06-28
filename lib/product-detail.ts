@@ -10,6 +10,7 @@ import {
   type PriceHistoryRecord,
 } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
+import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
 
 export type ProductRecord = {
@@ -90,6 +91,9 @@ type ListingRow = {
 type RelatedListingRow = {
   product_id: string | number | null;
   price: string | number | null;
+  title?: string | null;
+  source?: string | null;
+  url?: string | null;
 };
 
 export const getProductBySlug = cache(
@@ -233,7 +237,10 @@ export async function getProductDetail(
           ? String(listing.updated_at)
           : null,
     }))
-    .filter((listing) => Number.isFinite(listing.price));
+    .filter(
+      (listing) =>
+        Number.isFinite(listing.price) && !isPublicDemoListing(listing),
+    );
 
   const historyResult = await supabase
     .from("price_history")
@@ -407,11 +414,13 @@ async function getRelatedProducts(
 
   let listingsResult = await supabase
     .from("listings")
-    .select("product_id, price")
+    .select("product_id, price, title, source, url")
     .in("status", ["published", "active"]);
 
   if (listingsResult.error && isMissingStatusColumn(listingsResult.error)) {
-    listingsResult = await supabase.from("listings").select("product_id, price");
+    listingsResult = await supabase
+      .from("listings")
+      .select("product_id, price, title, source, url");
   }
 
   if (listingsResult.error) {
@@ -422,6 +431,7 @@ async function getRelatedProducts(
   const priceGroups = new Map<string, number[]>();
   for (const listing of (listingsResult.data ?? []) as unknown as RelatedListingRow[]) {
     if (listing.product_id == null) continue;
+    if (isPublicDemoListing(listing)) continue;
     const price = Number(listing.price);
     if (!Number.isFinite(price) || price <= 0) continue;
     const productId = String(listing.product_id);
@@ -484,12 +494,14 @@ async function fetchProductsForRelated(
     return [];
   }
 
-  return ((productsData ?? []) as ProductRow[]).map((row) => ({
-    id: String(row.id),
-    name: String(row.name),
-    slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
-    category: row.category ? String(row.category) : null,
-  }));
+  return ((productsData ?? []) as ProductRow[])
+    .filter((row) => !isPublicDemoProductName(String(row.name)))
+    .map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
+      category: row.category ? String(row.category) : null,
+    }));
 }
 
 function getRelatedProductScore(

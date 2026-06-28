@@ -6,6 +6,7 @@ import type {
 } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { buildProductPriceStats } from "@/lib/price-analysis";
+import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SearchResultsClient } from "./search-results-client";
@@ -78,9 +79,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     if (matchingProductsResult.error || titleListingsResult.error) {
       loadError = "İlanlar aranırken bir sorun oluştu. Lütfen tekrar deneyin.";
     } else {
-      const matchingProductIds = (matchingProductsResult.data ?? []).map(
-        (product) => product.id,
-      );
+      const matchingProductIds = (matchingProductsResult.data ?? [])
+        .filter((product) => !isPublicDemoProductName(String(product.name)))
+        .map((product) => product.id);
       const productListingsResult = matchingProductIds.length
         ? await searchPublishedListingsByProduct(
             supabase,
@@ -103,7 +104,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           rowsById.set(String(row.id), row);
         }
 
-        const rows = [...rowsById.values()];
+        const rows = [...rowsById.values()].filter(
+          (row) => !isPublicDemoListing(row),
+        );
         const productIds = [
           ...new Set(rows.map((row) => String(row.product_id))),
         ];
@@ -123,10 +126,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             "İlanlar aranırken bir sorun oluştu. Lütfen tekrar deneyin.";
         } else {
           const productNames = new Map(
-            (productsResult.data ?? []).map((product) => [
-              String(product.id),
-              String(product.name),
-            ]),
+            (productsResult.data ?? [])
+              .filter((product) => !isPublicDemoProductName(String(product.name)))
+              .map((product) => [
+                String(product.id),
+                String(product.name),
+              ]),
           );
 
           listings = rows

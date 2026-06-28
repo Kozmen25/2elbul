@@ -1,5 +1,6 @@
 import type { ListingCondition, ListingSource } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
 
 export type HomeListing = {
@@ -162,7 +163,7 @@ export async function getHomeData(): Promise<HomeData> {
       ...product,
       category: categories.get(String(product.id)) ?? null,
     }),
-  );
+  ).filter((product) => !isPublicDemoProductName(String(product.name)));
   const listings = ((listingsResult.data ?? []) as ListingRow[]).map(
     (listing) => {
       const optionalPriceData = priceData.get(String(listing.id));
@@ -201,6 +202,9 @@ export async function getHomeData(): Promise<HomeData> {
       };
     })
     .filter((listing): listing is NonNullable<typeof listing> => Boolean(listing));
+  const publicListings = normalizedListings.filter(
+    (listing) => !isPublicDemoListing(listing),
+  );
 
   const searchCounts = new Map<string, number>();
   for (const event of searchEventsResult.error
@@ -223,7 +227,7 @@ export async function getHomeData(): Promise<HomeData> {
     string,
     { count: number; total: number; lowest: number }
   >();
-  for (const listing of normalizedListings) {
+  for (const listing of publicListings) {
     const current = listedProductStats.get(listing.productName) ?? {
       count: 0,
       total: 0,
@@ -252,16 +256,16 @@ export async function getHomeData(): Promise<HomeData> {
     .slice(0, 8);
 
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const refurbishedListings = normalizedListings
+  const refurbishedListings = publicListings
     .filter((listing) => listing.condition === "Yenilenmiş")
     .slice(0, 8);
-  const last24HourMatches = normalizedListings.filter(
+  const last24HourMatches = publicListings.filter(
     (listing) => new Date(listing.createdAt).getTime() >= oneDayAgo,
   );
   const last24HourListings = (
-    last24HourMatches.length > 0 ? last24HourMatches : normalizedListings
+    last24HourMatches.length > 0 ? last24HourMatches : publicListings
   ).slice(0, 8);
-  const analyzedPriceOpportunities = normalizedListings
+  const analyzedPriceOpportunities = publicListings
     .map((listing) => {
       const stats = listedProductStats.get(listing.productName);
       if (!stats || stats.count < 2) return null;
@@ -290,7 +294,7 @@ export async function getHomeData(): Promise<HomeData> {
   const opportunityIds = new Set(
     analyzedPriceOpportunities.map((listing) => listing.id),
   );
-  const fallbackOpportunities: PriceOpportunity[] = normalizedListings
+  const fallbackOpportunities: PriceOpportunity[] = publicListings
     .filter((listing) => !opportunityIds.has(listing.id))
     .sort(
       (a, b) =>
@@ -313,7 +317,7 @@ export async function getHomeData(): Promise<HomeData> {
     ...analyzedPriceOpportunities,
     ...fallbackOpportunities,
   ].slice(0, 8);
-  const priceDrops = normalizedListings
+  const priceDrops = publicListings
     .filter(
       (listing) =>
         listing.previousPrice !== null &&
@@ -336,8 +340,15 @@ export async function getHomeData(): Promise<HomeData> {
   const categoryCounts = new Map<string, number>();
   if (!categoriesResult.error) {
     for (const listing of listings) {
+      const product = productMap.get(String(listing.product_id));
+      if (
+        !product ||
+        isPublicDemoListing({ ...listing, productName: product.name })
+      ) {
+        continue;
+      }
       const category =
-        productMap.get(String(listing.product_id))?.category?.trim() ||
+        product.category?.trim() ||
         "Diğer";
       categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
     }
@@ -350,7 +361,7 @@ export async function getHomeData(): Promise<HomeData> {
     "Getmobil",
   ];
   const sourceCounts = new Map<string, number>();
-  for (const listing of normalizedListings) {
+  for (const listing of publicListings) {
     sourceCounts.set(
       listing.source,
       (sourceCounts.get(listing.source) ?? 0) + 1,
@@ -358,7 +369,7 @@ export async function getHomeData(): Promise<HomeData> {
   }
 
   return {
-    latestListings: normalizedListings.slice(0, 6),
+    latestListings: publicListings.slice(0, 6),
     refurbishedListings,
     priceOpportunities,
     last24HourListings,

@@ -1436,3 +1436,21 @@ Eklenenler:
 Populer urunler mevcut `products` ve `listings` verilerinden uretilir. En cok
 ilana sahip urunler onceliklidir ve urun detay linkleri `/product/[slug]`
 formatinda calisir. Yeni SQL gerekmez.
+
+## Yayin Oncesi Kontrol
+
+Public sayfalarda demo/test verilerin gorunmesini azaltmak icin ana sayfa,
+arama onerileri, arama sonuclari, urun detay ve sitemap verileri ortak public
+temizlik filtresinden gecirilir.
+
+Kontrol edilen public yuzeyler:
+
+- Ana sayfa landing ve veri bolumleri
+- Arama sayfasi ve autocomplete onerileri
+- Urun detay sayfasi, en iyi firsatlar ve benzer urunler
+- `robots.txt`
+- `sitemap.xml`
+
+Demo veya test verileri veritabanindan otomatik silinmez. Canliya cikmadan once
+Supabase'de demo kaynakli kayitlar kaldiysa manuel temizlik yapilabilir; admin
+panel ve bot test akislari bu temizlikten etkilenmez.
