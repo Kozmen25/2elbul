@@ -1270,3 +1270,23 @@ POST /api/admin/product-matcher-test
 Bu rota kullanicinin admin olup olmadigini server tarafinda kontrol eder.
 `SUPABASE_SERVICE_ROLE_KEY` yalnizca server tarafinda kullanilir ve client
 tarafina gonderilmez.
+
+## Urun Detay Sayfasi 2.0 - Sprint 1
+
+`/product/[slug]` sayfasi urun icin yalnizca ilan kartlari degil, fiyat odakli
+profesyonel bir ozet de gosterir.
+
+Gosterilen ana bolumler:
+
+- Urun adi ve varsa kategori bilgisi
+- Toplam ilan sayisi
+- Ortalama, en dusuk, en yuksek ve medyan fiyat
+- Son guncelleme zamani
+- Kural tabanli akilli fiyat yorumu
+- En iyi firsat karti
+- Supheli ucuz ilanlar, en ucuz ilanlar, son eklenen ilanlar ve tum ilan listesi
+- Ilan kartlarinda kaynak, tarih, ilan linki ve eslesme anahtari bilgisi
+
+Bu ozellik mevcut `products`, `listings` ve varsa `price_history` verileriyle
+calisir. Yeni SQL migration gerektirmez. `products.category` kolonu varsa
+gosterilir; kolon yoksa sayfa mevcut semayla calismaya devam eder.

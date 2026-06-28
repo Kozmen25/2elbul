@@ -86,6 +86,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     )[product.id] ?? null;
   const lowestPrice = marketStats?.lowest ?? 0;
   const highestPrice = marketStats?.highest ?? 0;
+  const averagePrice = marketStats?.average ?? 0;
+  const medianPrice = marketStats?.median ?? 0;
   const marketValue = marketStats?.marketValue ?? 0;
   const dailyPriceHistory = buildDailyPriceHistory(priceHistory);
   const priceHistorySummary = summarizePriceHistory(dailyPriceHistory);
@@ -96,6 +98,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const cheapestListings = [...listings]
     .sort((a, b) => a.price - b.price)
     .slice(0, 5);
+  const bestDealListing = cheapestListings[0] ?? null;
+  const bestDealDiscount =
+    bestDealListing && averagePrice
+      ? Math.max(
+          0,
+          Math.round(
+            ((averagePrice - bestDealListing.price) / averagePrice) * 100,
+          ),
+        )
+      : null;
   const bestListingAnalysis = cheapestListings[0]
     ? analyzeListingPrice(cheapestListings[0].price, productPriceStats)
     : analyzeListingPrice(null, productPriceStats);
@@ -148,6 +160,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const favoriteIds = new Set(favoriteListingIds);
   const loginNext = `/product/${product.slug}`;
+  const priceComment = buildPriceComment({
+    productName: product.name,
+    listingCount,
+    averagePrice,
+    bestDealListing,
+    bestDealDiscount,
+  });
 
   return (
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
@@ -164,11 +183,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </p>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-5">
+        {product.category ? (
+          <p className="mt-4 inline-flex rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-black text-black/55">
+            Kategori: {product.category}
+          </p>
+        ) : null}
+
+        <div className="mt-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-6">
           <StatCard label="Toplam ilan" value={`${listingCount}`} />
           <StatCard
-            label="Piyasa değeri"
-            value={listingCount ? formatPrice(marketValue) : "—"}
+            label="Ortalama fiyat"
+            value={listingCount ? formatPrice(averagePrice) : "—"}
           />
           <StatCard
             label="En düşük fiyat"
@@ -180,7 +205,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
             value={listingCount ? formatPrice(highestPrice) : "—"}
           />
           <StatCard
-            label="Son ilan tarihi"
+            label="Medyan fiyat"
+            value={listingCount ? formatPrice(medianPrice) : "—"}
+          />
+          <StatCard
+            label="Son güncelleme"
             value={newestListing ? formatDate(newestListing.createdAt) : "—"}
             wide
           />
@@ -191,6 +220,32 @@ export default async function ProductPage({ params }: ProductPageProps) {
             productId={product.id}
             productName={product.name}
             suggestedPrice={listingCount ? lowestPrice : null}
+            isAuthenticated={isAuthenticated}
+            loginNext={loginNext}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
+          <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+            <SectionTitle
+              icon={ChartNoAxesCombined}
+              eyebrow="Fiyat yorumu"
+              title="Akıllı piyasa özeti"
+            />
+            <p className="mt-5 text-base font-semibold leading-8 text-black/65">
+              {priceComment}
+            </p>
+            <p className="mt-4 text-sm leading-6 text-black/45">
+              Bu yorum aynı ürüne bağlı aktif ilan fiyatlarından kural tabanlı olarak üretilir.
+            </p>
+          </section>
+
+          <BestDealCard
+            listing={bestDealListing}
+            averagePrice={averagePrice}
+            discountPercent={bestDealDiscount}
+            priceStats={productPriceStats}
+            isFavorite={bestDealListing ? favoriteIds.has(bestDealListing.id) : false}
             isAuthenticated={isAuthenticated}
             loginNext={loginNext}
           />
@@ -247,6 +302,19 @@ export default async function ProductPage({ params }: ProductPageProps) {
           isAuthenticated={isAuthenticated}
           loginNext={loginNext}
           emptyMessage="Bu ürün için henüz yeni ilan bulunmuyor."
+        />
+
+        <ProductListingSection
+          eyebrow="Tüm kaynaklar"
+          title="İlan listesi"
+          icon={Store}
+          listings={listings}
+          priceStats={productPriceStats}
+          favoriteIds={favoriteIds}
+          isAuthenticated={isAuthenticated}
+          loginNext={loginNext}
+          emptyMessage="Ürün var ancak bu ürüne bağlı yayında ilan bulunmuyor."
+          matchKey={product.slug}
         />
 
         <div className="mt-8 grid gap-5 lg:grid-cols-2">
@@ -325,6 +393,7 @@ function ProductListingSection({
   isAuthenticated,
   loginNext,
   emptyMessage,
+  matchKey,
 }: {
   eyebrow: string;
   title: string;
@@ -335,6 +404,7 @@ function ProductListingSection({
   isAuthenticated: boolean;
   loginNext: string;
   emptyMessage: string;
+  matchKey?: string;
 }) {
   return (
     <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
@@ -349,12 +419,98 @@ function ProductListingSection({
               isFavorite={favoriteIds.has(listing.id)}
               isAuthenticated={isAuthenticated}
               loginNext={loginNext}
+              matchKey={matchKey}
             />
           ))}
         </div>
       ) : (
         <EmptyState text={emptyMessage} />
       )}
+    </section>
+  );
+}
+
+function BestDealCard({
+  listing,
+  averagePrice,
+  discountPercent,
+  priceStats,
+  isFavorite,
+  isAuthenticated,
+  loginNext,
+}: {
+  listing: Listing | null;
+  averagePrice: number;
+  discountPercent: number | null;
+  priceStats: ProductPriceStats | null;
+  isFavorite: boolean;
+  isAuthenticated: boolean;
+  loginNext: string;
+}) {
+  if (!listing) {
+    return (
+      <section className="rounded-3xl border border-dashed border-black/15 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <SectionTitle icon={Tag} eyebrow="En iyi fırsat" title="Henüz ilan yok" />
+        <p className="mt-5 text-sm font-semibold leading-6 text-black/45">
+          Bu ürün için yayında ilan geldiğinde en düşük fiyatlı seçenek burada görünecek.
+        </p>
+      </section>
+    );
+  }
+
+  const priceAnalysis = analyzeListingPrice(listing.price, priceStats);
+  const discountText =
+    discountPercent !== null && averagePrice
+      ? `Ortalama fiyata göre %${discountPercent} daha ucuz.`
+      : "Karşılaştırma için daha fazla fiyat verisi gerekiyor.";
+
+  return (
+    <section className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle icon={Tag} eyebrow="En iyi fırsat" title="En düşük fiyatlı ilan" />
+      <div className="mt-5">
+        <ListingImage
+          imageUrl={listing.imageUrl}
+          productName={listing.productName}
+          alt={listing.title}
+        />
+      </div>
+      <h3 className="mt-4 break-words text-lg font-black leading-6">
+        {listing.title}
+      </h3>
+      <p className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#ff6b00]">
+        {formatPrice(listing.price)}
+      </p>
+      <p className="mt-3 text-sm font-bold text-black/60">{discountText}</p>
+      <span
+        className={`mt-4 inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${priceAnalysis.className}`}
+      >
+        {priceAnalysis.label}
+      </span>
+      <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-semibold text-black/55">
+        <span className="inline-flex items-center gap-2">
+          <Store size={16} /> {listing.source}
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <CalendarDays size={16} /> {formatDate(listing.createdAt)}
+        </span>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <a
+          href={listing.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="orange-button flex-1 py-3"
+        >
+          İlana git <ArrowUpRight size={17} />
+        </a>
+        <FavoriteButton
+          listingId={listing.id}
+          initialIsFavorite={isFavorite}
+          isAuthenticated={isAuthenticated}
+          loginNext={loginNext}
+          compact
+        />
+      </div>
     </section>
   );
 }
@@ -413,12 +569,14 @@ function ListingCard({
   isFavorite,
   isAuthenticated,
   loginNext,
+  matchKey,
 }: {
   listing: Listing;
   priceStats: ProductPriceStats | null;
   isFavorite: boolean;
   isAuthenticated: boolean;
   loginNext: string;
+  matchKey?: string;
 }) {
   const priceAnalysis = analyzeListingPrice(listing.price, priceStats);
 
@@ -469,6 +627,11 @@ function ListingCard({
         <p className="flex items-center gap-2">
           <CalendarDays size={16} /> {formatDate(listing.createdAt)}
         </p>
+        {matchKey ? (
+          <p className="flex items-center gap-2 break-all">
+            <Tag size={16} /> Eşleşme: {matchKey}
+          </p>
+        ) : null}
       </div>
       <a
         href={listing.url}
@@ -547,6 +710,34 @@ function EmptyState({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function buildPriceComment({
+  productName,
+  listingCount,
+  averagePrice,
+  bestDealListing,
+  bestDealDiscount,
+}: {
+  productName: string;
+  listingCount: number;
+  averagePrice: number;
+  bestDealListing: Listing | null;
+  bestDealDiscount: number | null;
+}) {
+  if (!listingCount) {
+    return `${productName} için henüz yayında ilan bulunmuyor. Yeni veri geldikçe fiyat özeti otomatik oluşacak.`;
+  }
+
+  if (!bestDealListing || !averagePrice || bestDealDiscount === null) {
+    return `${productName} için fiyat bilgisi sınırlı. Daha fazla ilan geldikçe ortalama fiyat ve fırsat yorumu netleşecek.`;
+  }
+
+  if (bestDealDiscount > 0) {
+    return `Bu ürünün ortalama ikinci el fiyatı ${formatPrice(averagePrice)}. En ucuz ilan ${formatPrice(bestDealListing.price)} ile ortalamanın %${bestDealDiscount} altında görünüyor.`;
+  }
+
+  return `Bu ürünün ortalama ikinci el fiyatı ${formatPrice(averagePrice)}. En ucuz ilan ${formatPrice(bestDealListing.price)} seviyesinde ve ortalamaya yakın görünüyor.`;
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {
