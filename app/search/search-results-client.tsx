@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
@@ -62,6 +63,7 @@ export function SearchResultsClient({
   isAuthenticated,
   shouldQueueSearchDemand,
 }: SearchResultsClientProps) {
+  const router = useRouter();
   const [city, setCity] = useState("");
   const [source, setSource] = useState("");
   const [condition, setCondition] = useState("");
@@ -90,28 +92,74 @@ export function SearchResultsClient({
     }
 
     const demandKey = `2elbul-search-demand:${query.toLocaleLowerCase("tr-TR")}`;
-    setDemandMessage(searchDemandMessage);
-    if (sessionStorage.getItem(demandKey)) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let cancelled = false;
 
-    void fetch("/api/search-demand", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        resultCount: initialListings.length,
-      }),
-    })
-      .then((response) => {
-        if (response.ok) {
-          sessionStorage.setItem(demandKey, "1");
-          return;
+    const refreshLater = (delay: number) => {
+      const timer = setTimeout(() => {
+        if (!cancelled) router.refresh();
+      }, delay);
+      timers.push(timer);
+    };
+
+    async function runInstantSearch() {
+      setDemandMessage(searchDemandMessage);
+
+      if (!sessionStorage.getItem(demandKey)) {
+        try {
+          const demandResponse = await fetch("/api/search-demand", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query,
+              resultCount: initialListings.length,
+            }),
+          });
+
+          if (demandResponse.ok) {
+            sessionStorage.setItem(demandKey, "1");
+          } else {
+            console.error("Search demand request failed:", demandResponse.status);
+          }
+        } catch (error) {
+          console.error("Search demand request failed:", error);
         }
-        console.error("Search demand request failed:", response.status);
-      })
-      .catch((error) => {
-        console.error("Search demand request failed:", error);
-      });
-  }, [initialListings.length, query, shouldQueueSearchDemand]);
+      }
+
+      try {
+        const botResponse = await fetch("/api/search/instant-bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query }),
+        });
+
+        if (!botResponse.ok) {
+          console.error("Instant search bot request failed:", botResponse.status);
+        }
+      } catch (error) {
+        console.error("Instant search bot request failed:", error);
+      }
+
+      refreshLater(5000);
+      refreshLater(10000);
+      const finalTimer = setTimeout(() => {
+        if (!cancelled) {
+          setDemandMessage(
+            "Tarama devam ediyor. Birazdan tekrar kontrol edebilirsin.",
+          );
+          router.refresh();
+        }
+      }, 15000);
+      timers.push(finalTimer);
+    }
+
+    void runInstantSearch();
+
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [initialListings.length, query, router, shouldQueueSearchDemand]);
 
   const cities = useMemo(
     () => [...new Set(initialListings.map((listing) => listing.city))].sort(),
