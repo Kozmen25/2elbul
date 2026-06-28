@@ -62,7 +62,8 @@ export async function createPriceAlert(input: {
     .select("id")
     .eq("user_id", user.id)
     .eq("product_id", productId)
-    .eq("is_active", true)
+    .eq("target_price", targetPrice)
+    .eq("status", "active")
     .maybeSingle();
 
   if (lookupError) {
@@ -71,40 +72,48 @@ export async function createPriceAlert(input: {
   }
 
   if (existingAlert) {
-    const { error: updateError } = await supabase
-      .from("price_alerts")
-      .update({ target_price: targetPrice })
-      .eq("id", existingAlert.id)
-      .eq("user_id", user.id);
+    return {
+      ok: true,
+      message: "Bu hedef fiyat için aktif alarmın zaten var.",
+    };
+  }
 
-    if (updateError) {
-      console.error("Price alert update failed:", updateError);
-      return { ok: false, message: updateError.message };
-    }
-  } else {
-    const { error: insertError } = await supabase.from("price_alerts").insert({
-      user_id: user.id,
-      product_id: productId,
-      target_price: targetPrice,
-      is_active: true,
-    });
+  const { data: currentListing, error: currentPriceError } = await supabase
+    .from("listings")
+    .select("price")
+    .eq("product_id", productId)
+    .in("status", ["published", "active"])
+    .order("price", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-    if (insertError) {
-      console.error("Price alert insert failed:", insertError);
-      return { ok: false, message: insertError.message };
-    }
+  if (currentPriceError) {
+    console.error("Price alert current price lookup failed:", currentPriceError);
+  }
+
+  const { error: insertError } = await supabase.from("price_alerts").insert({
+    user_id: user.id,
+    product_id: productId,
+    target_price: targetPrice,
+    current_price: currentListing?.price ? Number(currentListing.price) : null,
+    status: "active",
+  });
+
+  if (insertError) {
+    console.error("Price alert insert failed:", insertError);
+    return { ok: false, message: insertError.message };
   }
 
   revalidatePath("/hesabim");
 
   return {
     ok: true,
-    message: `Fiyat alarmı kaydedildi: ${formatTry(targetPrice)} ve altı.`,
+    message: "Fiyat alarmın oluşturuldu.",
   };
 }
 
 export async function deactivatePriceAlert(
-  alertId: number,
+  alertId: string,
 ): Promise<PriceAlertActionResult> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -129,23 +138,15 @@ export async function deactivatePriceAlert(
 
   const { error } = await supabase
     .from("price_alerts")
-    .update({ is_active: false })
+    .update({ status: "cancelled" })
     .eq("id", alertId)
     .eq("user_id", user.id);
 
   if (error) {
-    console.error("Price alert deactivate failed:", error);
+    console.error("Price alert cancel failed:", error);
     return { ok: false, message: error.message };
   }
 
   revalidatePath("/hesabim");
-  return { ok: true, message: "Fiyat alarmı kaldırıldı." };
-}
-
-function formatTry(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return { ok: true, message: "Fiyat alarmı iptal edildi." };
 }

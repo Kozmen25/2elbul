@@ -46,9 +46,9 @@ export default async function AccountPage() {
       .eq("user_id", data.user.id),
     supabase
       .from("price_alerts")
-      .select("id, target_price, created_at, product_id, products(name)")
+      .select("id, target_price, current_price, status, created_at, product_id, listing_id, products(name), listings(title)")
       .eq("user_id", data.user.id)
-      .eq("is_active", true)
+      .neq("status", "cancelled")
       .order("created_at", { ascending: false }),
     fetchUserListings(supabase, data.user.id),
   ]);
@@ -68,11 +68,16 @@ export default async function AccountPage() {
   const alertCount = alertRows.length;
   const listings = listingsResult.data ?? [];
   const priceAlerts = alertRows.map((alert) => ({
-    id: Number(alert.id),
+    id: String(alert.id),
     productName: String(
       (alert.products as { name?: string } | null)?.name ?? "Ürün",
     ),
     targetPrice: Number(alert.target_price),
+    currentPrice:
+      alert.current_price === null || alert.current_price === undefined
+        ? null
+        : Number(alert.current_price),
+    status: String(alert.status ?? "active"),
     createdAt: String(alert.created_at),
   }));
 
