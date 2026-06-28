@@ -1418,3 +1418,21 @@ Oneriler mevcut `products` ve `listings` verilerinden uretilir. En cok ilana
 sahip urunler onceliklidir. Yeni SQL gerekmez; endpoint public anon Supabase
 client ile RLS kurallarina uygun sekilde yalnizca sade arama onerisi verisi
 dondurur.
+
+## Ana Sayfa Landing Sprint 1
+
+Ana sayfa satisa hazir landing deneyimine yaklastirildi.
+
+Eklenenler:
+
+- Daha net hero mesajı ve merkezi arama alani
+- Autocomplete destekli arama kutusunun korunmasi
+- Bes ana deger karti: piyasa fiyati, en ucuz ilanlar, fiyat gecmisi, akilli yorum ve fiyat alarmi
+- "Nasil calisir?" bolumu
+- Guven veren analiz bolumu
+- "Hemen urun ara" CTA alani
+- Sayfa seviyesinde title, description, Open Graph ve Twitter metadata
+
+Populer urunler mevcut `products` ve `listings` verilerinden uretilir. En cok
+ilana sahip urunler onceliklidir ve urun detay linkleri `/product/[slug]`
+formatinda calisir. Yeni SQL gerekmez.

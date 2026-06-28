@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import {
   ArrowUpRight,
   BadgePercent,
@@ -27,6 +28,27 @@ import {
 
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = {
+  title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
+  description:
+    "Telefon, bilgisayar, konsol ve daha fazlasi icin ikinci el ilanlari tek yerde karsilastir; ortalama fiyati, en ucuz ilani ve fiyat gecmisini gor.",
+  openGraph: {
+    title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
+    description:
+      "2ElBul ile ikinci el ilanlari karsilastir, ortalama fiyati, en ucuz ilani, fiyat gecmisini ve guven skorunu gor.",
+    url: "https://2elbul.vercel.app",
+    siteName: "2ElBul",
+    locale: "tr_TR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
+    description:
+      "Ikinci el piyasasini tek yerde karsilastir; fiyat analizini, en ucuz ilanlari ve fiyat gecmisini gor.",
+  },
+};
+
 const features = [
   {
     title: "Piyasa Fiyatı",
@@ -43,6 +65,60 @@ const features = [
     description: "Dolandırıcılık risklerini gör",
     icon: TriangleAlert,
   },
+];
+
+const landingFeatures = [
+  {
+    title: "Gercek piyasa fiyati",
+    description: "Ayni urundeki ilanlardan ortalama, medyan ve fiyat araligini gor.",
+    icon: BarChart3,
+  },
+  {
+    title: "En ucuz ilanlari bul",
+    description: "Farkli kaynaklardaki uygun fiyatli ilanlari tek ekranda karsilastir.",
+    icon: Search,
+  },
+  {
+    title: "Fiyat gecmisini takip et",
+    description: "Urun fiyatinin zaman icinde nasil degistigini incele.",
+    icon: Clock3,
+  },
+  {
+    title: "Akilli fiyat yorumu",
+    description: "Fiyatin piyasaya gore ucuz, normal veya pahali oldugunu anla.",
+    icon: TriangleAlert,
+  },
+  {
+    title: "Fiyat alarmi kur",
+    description: "Hedef fiyatini belirle, dususleri takip etmeye hazir ol.",
+    icon: BadgePercent,
+  },
+];
+
+const howItWorks = [
+  {
+    title: "Urunu ara",
+    description: "Arama kutusuna marka, model veya urun adini yaz.",
+  },
+  {
+    title: "Ilanlari karsilastir",
+    description: "Kaynak, fiyat, durum ve urun bazli karsilastirmalari incele.",
+  },
+  {
+    title: "Fiyat analizini incele",
+    description: "Ortalama fiyati, medyani, guven skorunu ve gecmis grafigini gor.",
+  },
+  {
+    title: "Uygun firsati yakala",
+    description: "En iyi firsatlari ac, ilan linkinden satici sayfasina gec.",
+  },
+];
+
+const trustSignals = [
+  "Farkli kaynaklardan ilanlar",
+  "Ortalama ve medyan fiyat",
+  "Fiyat gecmisi",
+  "Guven skoru",
 ];
 
 const formatPrice = (price: number) =>
@@ -84,26 +160,34 @@ export default async function Home() {
             <BrandLogo size="lg" linked={false} centered />
           </div>
 
-          <h1 className="mx-auto max-w-4xl text-[28px] font-black leading-[1.04] tracking-[-0.04em] min-[420px]:text-3xl sm:text-6xl sm:leading-[1.08] sm:tracking-[-0.055em] lg:text-7xl">
+          <h1 className="mx-auto max-w-5xl text-[28px] font-black leading-[1.04] tracking-[-0.04em] min-[420px]:text-3xl sm:text-6xl sm:leading-[1.08] sm:tracking-[-0.055em] lg:text-7xl">
+            Ikinci el urunlerin{" "}
+            <span className="text-[#ff6b00]">gercek piyasa fiyatini</span>{" "}
+            karsilastir.
+          </h1>
+          <p className="hidden">
             En uygun ikinci el ilanları{" "}
             <span className="text-[#ff6b00]">tek yerde bul.</span>
-          </h1>
+          </p>
 
           <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#ff6b00]/15 bg-[#fff7f1] px-3 py-2 text-xs font-bold text-[#d95700] sm:px-4 sm:text-sm">
             <span className="size-2 rounded-full bg-[#ff6b00] shadow-[0_0_0_4px_rgba(255,107,0,0.12)]" />
             Güncel ikinci el ilanları taranıyor
           </div>
 
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-black/55 sm:text-lg">
+          <p className="mx-auto mt-6 max-w-3xl text-base leading-7 text-black/55 sm:text-lg">
+            Telefon, bilgisayar, konsol ve daha fazlasi icin ikinci el ilanlari tek yerde karsilastir; ortalama fiyati, en ucuz ilani ve fiyat gecmisini gor.
+          </p>
+          <p className="hidden">
             İkinci el piyasasını tara, en doğru fiyatı bul.
           </p>
 
-          <div className="mx-auto mt-8 w-full max-w-4xl sm:mt-10">
+          <div id="home-search" className="mx-auto mt-8 w-full max-w-4xl scroll-mt-28 sm:mt-10">
             <SearchBar actionPath="/search" showLocation={false} />
           </div>
 
-          <div className="mx-auto mt-8 grid w-full max-w-4xl grid-cols-1 gap-3 text-left sm:grid-cols-3">
-            {features.map(({ title, description, icon: Icon }) => (
+          <div className="mx-auto mt-8 grid w-full max-w-5xl grid-cols-1 gap-3 text-left sm:grid-cols-2 lg:grid-cols-5">
+            {landingFeatures.map(({ title, description, icon: Icon }) => (
               <div
                 key={title}
                 className="flex min-w-0 items-center gap-4 rounded-2xl border border-black/8 bg-white p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]"
@@ -139,6 +223,87 @@ export default async function Home() {
               </div>
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="border-t border-black/7 bg-[#fafaf8] py-12 sm:py-16">
+        <div className="container-shell">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+              Nasil calisir?
+            </p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
+              Aradigin urunun piyasa resmini dakikalar icinde gor.
+            </h2>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {howItWorks.map((step, index) => (
+              <div
+                key={step.title}
+                className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_10px_35px_rgba(0,0,0,0.04)]"
+              >
+                <span className="grid size-10 place-items-center rounded-xl bg-[#111] text-sm font-black text-white">
+                  {index + 1}
+                </span>
+                <h3 className="mt-5 text-lg font-black">{step.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-black/50">
+                  {step.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-black/7 bg-white py-12 sm:py-16">
+        <div className="container-shell">
+          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+                Guven veren analiz
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
+                Sadece ilan listesi degil, karar vermeni kolaylastiran fiyat rehberi.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-black/55 sm:text-base">
+                2ElBul farkli kaynaklardan gelen ilanlari urun bazinda toparlar,
+                fiyat araligini yorumlar ve piyasanin altindaki firsatlari daha
+                kolay fark etmeni saglar.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {trustSignals.map((signal) => (
+                <div
+                  key={signal}
+                  className="rounded-2xl border border-black/8 bg-[#fafaf8] p-5"
+                >
+                  <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+                    <BarChart3 size={19} />
+                  </span>
+                  <h3 className="mt-4 font-black">{signal}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-black/7 bg-[#111] py-12 text-white sm:py-16">
+        <div className="container-shell text-center">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8a2a]">
+            Hazir misin?
+          </p>
+          <h2 className="mx-auto mt-2 max-w-3xl text-2xl font-black tracking-[-0.04em] sm:text-4xl">
+            Bir urun ara, piyasa fiyatini ve en iyi firsatlari hemen karsilastir.
+          </h2>
+          <Link
+            href="#home-search"
+            className="mt-7 inline-flex items-center justify-center rounded-full bg-[#ff6b00] px-6 py-3 text-sm font-black text-white transition hover:bg-[#e85f00]"
+          >
+            Hemen urun ara
+            <ArrowUpRight size={17} className="ml-2" />
+          </Link>
         </div>
       </section>
 

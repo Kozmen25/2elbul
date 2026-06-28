@@ -217,7 +217,7 @@ export async function getHomeData(): Promise<HomeData> {
     }))
     .filter((product) => product.productName)
     .sort((a, b) => b.searchCount - a.searchCount)
-    .slice(0, 5);
+    .slice(0, 8);
 
   const listedProductStats = new Map<
     string,
