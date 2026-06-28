@@ -64,7 +64,8 @@ Admin panelindeki sayaçlar, kullanıcı yönetimi ve veri düzenleme işlemleri
 bu server-only anahtarı kullanır. Anahtar hiçbir client component içine
 aktarılmaz.
 
-`CRON_SECRET`, `/api/cron/run-sources` rotasını korur. Bu değer de server-only
+`CRON_SECRET`, `/api/cron/daily`, `/api/cron/run-sources` ve
+`/api/cron/process-search-queue` rotalarını korur. Bu değer de server-only
 kalmalı ve `NEXT_PUBLIC_` ön eki almamalıdır.
 
 Projedeki `.gitignore`, `.env*` dosyalarını yok sayar ve yalnızca
@@ -501,21 +502,42 @@ curl -H "x-cron-secret: $CRON_SECRET" https://your-domain.vercel.app/api/cron/ru
 curl "https://your-domain.vercel.app/api/cron/run-sources?secret=$CRON_SECRET"
 ```
 
-Vercel Cron için `vercel.json` dosyası rotayı günde iki kez tetikler:
+Vercel Hobby planı günlük cron ile sınırlıdır. Bu yüzden production deploy'un
+Hobby planda sorunsuz geçmesi için `vercel.json` tek bir günlük cron kullanır:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
+```
+
+Vercel cron ifadeleri UTC çalışır. `0 6 * * *`, Türkiye saatiyle yaklaşık
+09:00 çalışır. `/api/cron/daily` endpoint'i aynı çalışmada önce
+`/api/cron/run-sources`, sonra `/api/cron/process-search-queue` endpoint'lerini
+`CRON_SECRET` ile tetikler.
+
+Pro plana geçildiğinde daha sık otomasyon için `vercel.json` kolayca iki ayrı
+cron'a çevrilebilir:
 
 ```json
 {
   "crons": [
     {
       "path": "/api/cron/run-sources",
-      "schedule": "0 6,18 * * *"
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/process-search-queue",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
 ```
-
-Vercel cron ifadeleri UTC çalışır. `0 6,18 * * *`, Türkiye saatiyle yaklaşık
-09:00 ve 21:00 çalışması için ayarlanmıştır.
 
 ### Arama Tetiklemeli Bot Kuyruğu
 
@@ -554,8 +576,9 @@ Bu endpoint de `CRON_SECRET` ile korunur. Elle test için:
 curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain.vercel.app/api/cron/process-search-queue
 ```
 
-Vercel Cron için `vercel.json` dosyasında bu endpoint 30 dakikada bir
-tetiklenecek şekilde tanımlıdır.
+Hobby planda bu endpoint doğrudan ayrı bir Vercel Cron olarak tanımlı değildir;
+günlük `/api/cron/daily` çalışması içinde tetiklenir. Pro plana geçildiğinde
+`vercel.json` içinde 30 dakikada bir ayrı cron olarak yeniden eklenebilir.
 
 ### Bot Senkronizasyon Sistemi
 
@@ -1040,7 +1063,8 @@ https://2elbul.com
 Aşağıdaki server-only değişkenlerden `SUPABASE_SERVICE_ROLE_KEY`,
 `/admin/import`, admin bot işlemleri veya cron bot rotası kullanılacaksa
 gereklidir. `IMPORT_API_KEY` yalnızca import API rotası, `CRON_SECRET` ise
-`/api/cron/run-sources` ve Vercel Cron için gereklidir:
+`/api/cron/daily`, `/api/cron/run-sources`, `/api/cron/process-search-queue`
+ve Vercel Cron için gereklidir:
 
 ```text
 SUPABASE_SERVICE_ROLE_KEY
