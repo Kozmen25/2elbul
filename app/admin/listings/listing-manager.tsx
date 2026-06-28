@@ -223,7 +223,14 @@ export function ListingManager({
                 </td>
                 <td className="px-4 py-4">
                   <p>{listing.city}</p>
-                  <p className="mt-1 text-xs text-black/45">{listing.source}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-black/45">{listing.source}</p>
+                    {isTestSource(listing.source) && (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">
+                        Test verisi
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-4">
                   <StatusBadge status={listing.status} />
@@ -487,6 +494,10 @@ function formatPrice(value: number) {
     currency: "TRY",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function isTestSource(source: string) {
+  return source.toLocaleLowerCase("tr-TR") === "test kaynağı";
 }
 
 function formatDate(value: string) {

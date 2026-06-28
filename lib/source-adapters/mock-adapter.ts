@@ -10,7 +10,7 @@ export const mockSourceAdapter: SourceAdapter = {
     const cleanQuery = input.query.trim() || "ikinci el urun";
     const normalized = slugify(input.normalizedQuery || cleanQuery);
     const sourceSlug = slugify(input.sourceSlug || "mock");
-    const sourceName = input.sourceName || "2ElBul Demo";
+    const sourceName = "Test Kaynağı";
     const basePrice = getDeterministicBasePrice(normalized);
     const count = Math.min(Math.max(input.limit ?? 3, 1), 3);
 
@@ -19,10 +19,10 @@ export const mockSourceAdapter: SourceAdapter = {
       const price = basePrice + index * 750;
       return {
         externalId: `search-${sourceSlug}-${normalized}-${number}`,
-        title: `${cleanQuery} demo ilan ${number}`,
+        title: `${cleanQuery} için test ilanı ${number}`,
         price,
         url: `https://demo.2elbul.com/search/${sourceSlug}/${normalized}-${number}`,
-        imageUrl: null,
+        imageUrl: "/products/placeholder.svg",
         city: ["İstanbul", "Ankara", "İzmir"][index] ?? "Türkiye",
         sourceName,
         category: inferCategory(cleanQuery),
@@ -30,6 +30,7 @@ export const mockSourceAdapter: SourceAdapter = {
         model: cleanQuery,
         rawData: {
           adapter: "mock",
+          sourceType: "test",
           query: input.query,
           normalizedQuery: input.normalizedQuery,
           generatedAt: new Date().toISOString(),
