@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
@@ -26,6 +26,7 @@ import { createProductSlug } from "@/lib/product-slug";
 import { recordSearch } from "./actions";
 
 type SortOption = "price-asc" | "most-listings" | "confidence" | "newest";
+type ViewOption = "both" | "products" | "listings";
 
 type ProductSummary = {
   productId: string;
@@ -60,6 +61,11 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price);
 
+const formatFilterPrice = (price: number) =>
+  `${new Intl.NumberFormat("tr-TR", {
+    maximumFractionDigits: 0,
+  }).format(price)} TL`;
+
 const formatDate = (date: string) =>
   new Intl.DateTimeFormat("tr-TR", {
     day: "numeric",
@@ -77,12 +83,25 @@ export function SearchResultsClient({
   shouldQueueSearchDemand,
 }: SearchResultsClientProps) {
   const router = useRouter();
-  const [city, setCity] = useState("");
-  const [source, setSource] = useState("");
-  const [condition, setCondition] = useState("");
-  const [minimumPrice, setMinimumPrice] = useState("");
-  const [maximumPrice, setMaximumPrice] = useState("");
-  const [sort, setSort] = useState<SortOption>("price-asc");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [city, setCity] = useState(() => searchParams.get("city") ?? "");
+  const [source, setSource] = useState(() => searchParams.get("source") ?? "");
+  const [condition, setCondition] = useState(
+    () => searchParams.get("condition") ?? "",
+  );
+  const [minimumPrice, setMinimumPrice] = useState(
+    () => searchParams.get("min") ?? "",
+  );
+  const [maximumPrice, setMaximumPrice] = useState(
+    () => searchParams.get("max") ?? "",
+  );
+  const [sort, setSort] = useState<SortOption>(() =>
+    parseSortOption(searchParams.get("sort")),
+  );
+  const [view, setView] = useState<ViewOption>(() =>
+    parseViewOption(searchParams.get("view")),
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [demandMessage, setDemandMessage] = useState(
     shouldQueueSearchDemand ? searchDemandMessage : "",
@@ -97,6 +116,36 @@ export function SearchResultsClient({
     sessionStorage.setItem(trackingKey, "1");
     void recordSearch(query);
   }, [query]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (minimumPrice) params.set("min", minimumPrice);
+    if (maximumPrice) params.set("max", maximumPrice);
+    if (source) params.set("source", source);
+    if (city) params.set("city", city);
+    if (condition) params.set("condition", condition);
+    if (sort !== "price-asc") params.set("sort", sort);
+    if (view !== "both") params.set("view", view);
+
+    const nextUrl = `${pathname}${params.toString() ? `?${params}` : ""}`;
+    const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+    if (nextUrl !== currentUrl) {
+      router.replace(nextUrl, { scroll: false });
+    }
+  }, [
+    city,
+    condition,
+    maximumPrice,
+    minimumPrice,
+    pathname,
+    query,
+    router,
+    searchParams,
+    sort,
+    source,
+    view,
+  ]);
 
   useEffect(() => {
     if (!shouldQueueSearchDemand) {
@@ -201,7 +250,7 @@ export function SearchResultsClient({
       .filter(
         (listing) =>
           (!city || listing.city === city) &&
-          (!source || listing.source === source) &&
+          (!source || normalizeFilterValue(listing.source) === source) &&
           (!condition || listing.condition === condition) &&
           (min === null || listing.price >= min) &&
           (max === null || listing.price <= max),
@@ -245,6 +294,7 @@ export function SearchResultsClient({
     condition,
     minimumPrice,
     maximumPrice,
+    view !== "both" ? view : "",
   ].filter(Boolean).length;
   const favoriteIds = useMemo(
     () => new Set(favoriteListingIds),
@@ -258,6 +308,13 @@ export function SearchResultsClient({
     setCondition("");
     setMinimumPrice("");
     setMaximumPrice("");
+    setSort("price-asc");
+    setView("both");
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    router.replace(`${pathname}${params.toString() ? `?${params}` : ""}`, {
+      scroll: false,
+    });
   }
 
   return (
@@ -337,7 +394,7 @@ export function SearchResultsClient({
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
               <FilterSelect label="Şehir" value={city} onChange={setCity}>
                 <option value="">Tüm şehirler</option>
                 {cities.map((item) => (
@@ -348,7 +405,9 @@ export function SearchResultsClient({
               <FilterSelect label="Kaynak" value={source} onChange={setSource}>
                 <option value="">Tüm kaynaklar</option>
                 {sources.map((item) => (
-                  <option key={item}>{item}</option>
+                  <option key={item} value={normalizeFilterValue(item)}>
+                    {item}
+                  </option>
                 ))}
               </FilterSelect>
 
@@ -387,11 +446,34 @@ export function SearchResultsClient({
                 <option value="confidence">En yüksek güven</option>
                 <option value="newest">En yeni</option>
               </FilterSelect>
+
+              <FilterSelect
+                label="Görünüm"
+                value={view}
+                onChange={(value) => setView(value as ViewOption)}
+                wide
+              >
+                <option value="both">İkisi birlikte</option>
+                <option value="products">Ürün karşılaştırması</option>
+                <option value="listings">İlan listesi</option>
+              </FilterSelect>
             </div>
+
+            <FilterSummary
+              minimumPrice={minimumPrice}
+              maximumPrice={maximumPrice}
+              source={source}
+              sources={sources}
+              view={view}
+            />
           </div>
 
-          <ProductComparisonSection products={productSummaries} />
+          {view !== "listings" ? (
+            <ProductComparisonSection products={productSummaries} />
+          ) : null}
 
+          {view !== "products" ? (
+            <>
           <div className="mb-10 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Bulunan ilan" value={`${results.length}`} />
             <StatCard
@@ -501,7 +583,10 @@ export function SearchResultsClient({
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-16 text-center">
-              <h2 className="text-xl font-black">Filtrelere uygun ilan bulunamadı.</h2>
+              <h2 className="text-xl font-black">Bu filtrelerle sonuç bulunamadı.</h2>
+              <p className="mx-auto mt-2 max-w-lg text-sm font-semibold text-black/50">
+                Filtreleri temizlemeyi deneyin veya fiyat aralığını genişletin.
+              </p>
               <button
                 type="button"
                 onClick={resetFilters}
@@ -511,6 +596,8 @@ export function SearchResultsClient({
               </button>
             </div>
           )}
+            </>
+          ) : null}
         </>
       ) : query ? (
         <div className="rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-16 text-center">
@@ -542,6 +629,43 @@ function ConditionBadge({ condition }: { condition: string }) {
     >
       {condition}
     </span>
+  );
+}
+
+function FilterSummary({
+  minimumPrice,
+  maximumPrice,
+  source,
+  sources,
+  view,
+}: {
+  minimumPrice: string;
+  maximumPrice: string;
+  source: string;
+  sources: string[];
+  view: ViewOption;
+}) {
+  const visibleChips = [
+    minimumPrice || maximumPrice
+      ? `${minimumPrice ? formatFilterPrice(Number(minimumPrice)) : "0 TL"} - ${
+          maximumPrice ? formatFilterPrice(Number(maximumPrice)) : "üst sınır yok"
+        } arası`
+      : "",
+    source ? `Kaynak: ${getSourceLabel(source, sources)}` : "",
+    `Görünüm: ${getViewLabel(view)}`,
+  ].filter(Boolean);
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {visibleChips.map((chip) => (
+        <span
+          key={chip}
+          className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-black text-black/55"
+        >
+          {chip}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -921,4 +1045,34 @@ function getConfidenceClassName(label: ProductSummary["confidenceLabel"]) {
   if (label === "Orta güven") return "border-amber-200 bg-amber-50 text-amber-700";
   if (label === "Düşük güven") return "border-red-200 bg-red-50 text-red-700";
   return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function parseSortOption(value: string | null): SortOption {
+  return value === "most-listings" || value === "confidence" || value === "newest"
+    ? value
+    : "price-asc";
+}
+
+function parseViewOption(value: string | null): ViewOption {
+  return value === "products" || value === "listings" ? value : "both";
+}
+
+function normalizeFilterValue(value: string) {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ı/g, "i")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getSourceLabel(source: string, sources: string[]) {
+  return sources.find((item) => normalizeFilterValue(item) === source) ?? source;
+}
+
+function getViewLabel(view: ViewOption) {
+  if (view === "products") return "Ürün karşılaştırması";
+  if (view === "listings") return "İlan listesi";
+  return "İkisi birlikte";
 }

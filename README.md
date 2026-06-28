@@ -1382,3 +1382,21 @@ Eklenenler:
 
 Yeni SQL gerekmez. Hesaplama mevcut arama sonucu ilanlarindan client tarafinda
 hafif sekilde uretilir; service role key client'a gonderilmez.
+
+## Arama Deneyimi 2.0 - Sprint 2 Filtreler
+
+`/search` sayfasina URL ile senkron calisan filtre ve gorunum kontrolleri
+eklendi.
+
+Desteklenen query parametreleri:
+
+- `min`: minimum fiyat
+- `max`: maksimum fiyat
+- `source`: kaynak/site filtresi
+- `view`: `both`, `products` veya `listings`
+- `sort`: mevcut siralama secimi
+
+Filtreler sayfa yenilenmeden uygulanir ve URL guncellenir. Filtre ozeti,
+secilen fiyat araligini, kaynagi ve gorunum modunu gosterir. "Filtreleri
+temizle" butonu yalnizca `q` parametresini korur. Yeni SQL gerekmez; filtreleme
+mevcut arama sonucu verisi uzerinden client tarafinda yapilir.
