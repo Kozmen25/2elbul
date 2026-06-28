@@ -4,6 +4,7 @@ import type {
   ImportSource,
   RawImportListing,
 } from "@/lib/import/types";
+import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export async function importListings(
@@ -37,9 +38,16 @@ export async function importListings(
         throw new Error(productError?.message ?? "Ürün oluşturulamadı.");
       }
 
+      const matchedProduct = await findOrCreateMatchedProduct({
+        supabase,
+        title: listing.title,
+        productName: listing.productName,
+        category: listing.category,
+      });
+
       const { error: listingError } = await supabase.from("listings").upsert(
         {
-          product_id: product.id,
+          product_id: matchedProduct.id,
           external_id: listing.externalId,
           title: listing.title,
           price: listing.price,

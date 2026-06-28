@@ -5,6 +5,7 @@ import { requireAdminUser } from "@/lib/admin";
 import { normalizeImageUrls } from "@/lib/bots/image-urls";
 import { createListingExternalId } from "@/lib/bots/listing-sync";
 import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
+import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 
 export type ImportError = {
   index: number;
@@ -146,6 +147,19 @@ export async function importAdminListings(
       }
 
       productId = createdProduct.id;
+    }
+
+    try {
+      const matchedProduct = await findOrCreateMatchedProduct({
+        supabase,
+        title: listing.title,
+        productName: listing.productName,
+      });
+      productId = matchedProduct.id;
+    } catch (error) {
+      console.error("Supabase admin import product match failed:", error);
+      addError(result, index, listing.title, error);
+      continue;
     }
 
     const { error: listingInsertError } = await supabase

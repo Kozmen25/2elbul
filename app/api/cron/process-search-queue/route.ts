@@ -5,6 +5,7 @@ import {
   type NormalizedListing,
   type SourceAdapter,
 } from "@/lib/source-adapters";
+import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -319,7 +320,7 @@ async function importAdapterListings(
   let skipped = 0;
 
   for (const listing of listings) {
-    const productId = await ensureProduct(supabase, job.query);
+    const productId = await ensureProduct(supabase, listing, job.query);
     const externalId = ensureExternalId(job, source, listing);
     const existing = await findExistingListing(supabase, listing, externalId);
     const previousPrice = existing?.price ? Number(existing.price) : null;
@@ -369,6 +370,20 @@ async function importAdapterListings(
 }
 
 async function ensureProduct(
+  supabase: SupabaseClient,
+  listing: NormalizedListing,
+  query: string,
+) {
+  const product = await findOrCreateMatchedProduct({
+    supabase,
+    title: listing.title || query,
+    productName: listing.model || query,
+    category: listing.category,
+  });
+  return Number(product.id);
+}
+
+async function ensureProductLegacy(
   supabase: SupabaseClient,
   query: string,
 ) {

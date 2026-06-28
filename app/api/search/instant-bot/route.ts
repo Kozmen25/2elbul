@@ -5,6 +5,7 @@ import {
   type NormalizedListing,
   type SourceAdapter,
 } from "@/lib/source-adapters";
+import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -315,7 +316,7 @@ async function importListings(
   let updated = 0;
 
   for (const listing of listings) {
-    const productId = await ensureProduct(supabase, job.query);
+    const productId = await ensureProduct(supabase, listing, job.query);
     const externalId = listing.externalId || deterministicExternalId(job, listing);
     const existing = await findExistingListing(supabase, listing.sourceName, externalId);
     const payload: Record<string, unknown> = {
@@ -338,7 +339,21 @@ async function importListings(
   return { imported, updated };
 }
 
-async function ensureProduct(supabase: SupabaseClient, query: string) {
+async function ensureProduct(
+  supabase: SupabaseClient,
+  listing: NormalizedListing,
+  query: string,
+) {
+  const product = await findOrCreateMatchedProduct({
+    supabase,
+    title: listing.title || query,
+    productName: listing.model || query,
+    category: listing.category,
+  });
+  return Number(product.id);
+}
+
+async function ensureProductLegacy(supabase: SupabaseClient, query: string) {
   const productName = query.trim().replace(/\s+/g, " ") || "Aranan ürün";
   const existing = await supabase
     .from("products")

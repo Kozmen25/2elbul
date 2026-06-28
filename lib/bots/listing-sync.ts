@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotAdapterListing } from "@/lib/bots/types";
+import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 
 type SyncRpcResult = {
   inserted?: number;
@@ -81,6 +82,8 @@ export async function syncListingsForSource(
     }
     productIds.set(productName, createdProduct.id);
   }
+
+  await applyMatchedProductIds(supabase, listings, productIds, errors);
 
   const payload = [];
   for (const listing of listings) {
@@ -197,6 +200,8 @@ export async function insertListingsLegacy(
     productIds.set(productName, createdProduct.id);
   }
 
+  await applyMatchedProductIds(supabase, listings, productIds, errors);
+
   const urls = listings.map((listing) => listing.url);
   const { data: existingListings, error: duplicateError } = await supabase
     .from("listings")
@@ -252,4 +257,28 @@ export async function insertListingsLegacy(
     errorCount,
     errors,
   };
+}
+
+async function applyMatchedProductIds(
+  supabase: SupabaseClient,
+  listings: BotAdapterListing[],
+  productIds: Map<string, string | number>,
+  errors: string[],
+) {
+  for (const listing of listings) {
+    try {
+      const product = await findOrCreateMatchedProduct({
+        supabase,
+        title: listing.title,
+        productName: listing.product_name,
+        category: listing.category,
+      });
+      productIds.set(listing.product_name, product.id);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Ürün eşleştirilemedi.";
+      console.error("Listing sync product match failed:", error);
+      errors.push(`${listing.product_name}: ${message}`);
+    }
+  }
 }

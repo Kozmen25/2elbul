@@ -1,0 +1,338 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type ProductSignals = {
+  brand: string | null;
+  model: string | null;
+  storage: string | null;
+  ram: string | null;
+  color: string | null;
+  category: string | null;
+  normalizedKey: string;
+};
+
+export type MatchedProduct = {
+  id: string | number;
+  name: string;
+  signals: ProductSignals;
+  created: boolean;
+};
+
+type ProductRow = {
+  id: string | number;
+  name: string;
+  category?: string | null;
+};
+
+type FindOrCreateMatchedProductInput = {
+  supabase: SupabaseClient;
+  title: string;
+  productName?: string | null;
+  category?: string | null;
+};
+
+const storageValues = ["64", "128", "256", "512", "1024", "1"];
+const colors = [
+  "siyah",
+  "beyaz",
+  "mavi",
+  "kirmizi",
+  "yesil",
+  "mor",
+  "pembe",
+  "gri",
+  "gumus",
+  "altin",
+  "gold",
+  "black",
+  "white",
+  "blue",
+  "red",
+  "green",
+  "purple",
+  "pink",
+  "gray",
+  "grey",
+  "silver",
+];
+
+export function normalizeProductTitle(title: string) {
+  return title
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ı/g, "i")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/\b(\d+)\s*(gb|g)\b/g, "$1gb")
+    .replace(/\b(\d+)\s*(tb|t)\b/g, "$1tb")
+    .replace(/\bapple\s+(?=iphone)\b/g, "")
+    .replace(/\bgalaxy\s+(?=s\d|a\d|z\s*fold|z\s*flip)\b/g, "samsung galaxy ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function extractProductSignals(title: string): ProductSignals {
+  const normalized = normalizeProductTitle(title);
+  const tokens = normalized.split(" ").filter(Boolean);
+  const brand = detectBrand(normalized);
+  const model = detectModel(normalized, tokens, brand);
+  const storage = detectStorage(normalized, tokens);
+  const ram = detectRam(normalized);
+  const color = detectColor(tokens);
+  const category = detectCategory(normalized, brand);
+  const keyParts = [
+    brand,
+    model,
+    storage,
+    ram && category !== "Telefon" ? ram : null,
+  ].filter(Boolean);
+  const normalizedKey = keyParts.length
+    ? keyParts.join("-").replace(/[^a-z0-9]+/g, "-")
+    : normalized.replace(/\s+/g, "-");
+
+  return {
+    brand,
+    model,
+    storage,
+    ram,
+    color,
+    category,
+    normalizedKey,
+  };
+}
+
+export function generateProductKey(title: string) {
+  return extractProductSignals(title).normalizedKey;
+}
+
+export async function findOrCreateMatchedProduct({
+  supabase,
+  title,
+  productName,
+  category,
+}: FindOrCreateMatchedProductInput): Promise<MatchedProduct> {
+  const signals = extractProductSignals(`${productName ?? ""} ${title}`);
+  const canonicalName = createCanonicalProductName(signals, productName || title);
+  const canonicalKey = signals.normalizedKey;
+
+  const exact = await supabase
+    .from("products")
+    .select("id, name, category")
+    .eq("name", canonicalName)
+    .maybeSingle();
+  if (exact.error) throw exact.error;
+  if (exact.data) {
+    return {
+      id: exact.data.id,
+      name: String(exact.data.name),
+      signals,
+      created: false,
+    };
+  }
+
+  const { data: products, error: lookupError } = await supabase
+    .from("products")
+    .select("id, name, category")
+    .limit(2000);
+  if (lookupError) throw lookupError;
+
+  const matched = ((products ?? []) as ProductRow[]).find(
+    (product) => generateProductKey(product.name) === canonicalKey,
+  );
+  if (matched) {
+    return {
+      id: matched.id,
+      name: matched.name,
+      signals,
+      created: false,
+    };
+  }
+
+  const insertPayload: Record<string, unknown> = {
+    name: canonicalName,
+  };
+  const productCategory = category || signals.category;
+  if (productCategory) insertPayload.category = productCategory;
+
+  const { data: createdProduct, error: insertError } = await supabase
+    .from("products")
+    .insert(insertPayload)
+    .select("id, name")
+    .single();
+  if (insertError && isDuplicateError(insertError)) {
+    const duplicateLookup = await supabase
+      .from("products")
+      .select("id, name")
+      .eq("name", canonicalName)
+      .maybeSingle();
+    if (duplicateLookup.error) throw duplicateLookup.error;
+    if (duplicateLookup.data) {
+      return {
+        id: duplicateLookup.data.id,
+        name: String(duplicateLookup.data.name),
+        signals,
+        created: false,
+      };
+    }
+  }
+  if (insertError || !createdProduct) {
+    throw new Error(insertError?.message ?? "Ürün oluşturulamadı.");
+  }
+
+  return {
+    id: createdProduct.id,
+    name: String(createdProduct.name),
+    signals,
+    created: true,
+  };
+}
+
+function detectBrand(normalized: string) {
+  if (/\b(iphone|apple)\b/.test(normalized) || isBareIphoneModel(normalized)) {
+    return "apple";
+  }
+  if (/\b(samsung|galaxy)\b/.test(normalized)) return "samsung";
+  if (/\bxiaomi\b/.test(normalized)) return "xiaomi";
+  if (/\bhuawei\b/.test(normalized)) return "huawei";
+  if (/\boppo\b/.test(normalized)) return "oppo";
+  if (/\brealme\b/.test(normalized)) return "realme";
+  if (/\bmacbook\b/.test(normalized)) return "apple";
+  if (/\bipad\b/.test(normalized)) return "apple";
+  return null;
+}
+
+function detectModel(
+  normalized: string,
+  tokens: string[],
+  brand: string | null,
+) {
+  const iphone = normalized.match(
+    /\b(?:iphone\s*)?(1[1-6])\s*(pro\s*max|pro|plus|mini)?\b/,
+  );
+  if ((brand === "apple" || isBareIphoneModel(normalized)) && iphone) {
+    return ["iphone", iphone[1], compactModelSuffix(iphone[2])]
+      .filter(Boolean)
+      .join("-");
+  }
+
+  const samsung = normalized.match(
+    /\b(?:samsung\s*)?(?:galaxy\s*)?((?:s|a|m)\d{2}(?:\s*ultra|\s*plus|\s*fe)?|z\s*(?:fold|flip)\s*\d?)\b/,
+  );
+  if ((brand === "samsung" || normalized.includes("galaxy")) && samsung) {
+    return `galaxy-${samsung[1].replace(/\s+/g, "-")}`;
+  }
+
+  const ipad = normalized.match(/\bipad\s*(\d+|air|pro|mini)?(?:\s*nesil)?\b/);
+  if (ipad) return ["ipad", ipad[1]].filter(Boolean).join("-");
+
+  const macbook = normalized.match(/\bmacbook\s*(air|pro)?\s*(m\d)?\b/);
+  if (macbook) return ["macbook", macbook[1], macbook[2]].filter(Boolean).join("-");
+
+  return tokens.slice(0, 4).join("-");
+}
+
+function detectStorage(normalized: string, tokens: string[]) {
+  const explicit = normalized.match(/\b(\d{2,4}gb|\d+tb)\b/);
+  if (explicit) return normalizeCapacity(explicit[1]);
+
+  const bare = tokens.find((token) => storageValues.includes(token));
+  return bare ? normalizeCapacity(`${bare}${bare === "1" ? "tb" : "gb"}`) : null;
+}
+
+function detectRam(normalized: string) {
+  const match = normalized.match(/\b(\d{1,3})\s*(?:gb)?\s*ram\b/);
+  return match ? `${match[1]}gb` : null;
+}
+
+function detectColor(tokens: string[]) {
+  return tokens.find((token) => colors.includes(token)) ?? null;
+}
+
+function detectCategory(normalized: string, brand: string | null) {
+  if (
+    brand === "apple" &&
+    (normalized.includes("iphone") || isBareIphoneModel(normalized))
+  ) {
+    return "Telefon";
+  }
+  if (brand === "samsung" && /\b(galaxy|s\d{2}|a\d{2})\b/.test(normalized)) {
+    return "Telefon";
+  }
+  if (normalized.includes("ipad") || normalized.includes("tablet")) return "Tablet";
+  if (normalized.includes("macbook") || normalized.includes("laptop")) {
+    return "Laptop";
+  }
+  if (normalized.includes("playstation") || normalized.includes("ps5")) {
+    return "Oyun Konsolu";
+  }
+  if (normalized.includes("rtx") || normalized.includes("ekran karti")) {
+    return "Ekran Kartı";
+  }
+  return null;
+}
+
+function createCanonicalProductName(signals: ProductSignals, fallback: string) {
+  if (signals.brand === "apple" && signals.model?.startsWith("iphone-")) {
+    return [
+      "iPhone",
+      ...signals.model
+        .replace(/^iphone-/, "")
+        .split("-")
+        .map(formatModelPart),
+      signals.storage?.toUpperCase(),
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (signals.brand === "samsung" && signals.model?.startsWith("galaxy-")) {
+    return [
+      "Samsung Galaxy",
+      ...signals.model
+        .replace(/^galaxy-/, "")
+        .split("-")
+        .map(formatModelPart),
+      signals.storage?.toUpperCase(),
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return titleCase(normalizeProductTitle(fallback));
+}
+
+function isBareIphoneModel(normalized: string) {
+  return /\b1[1-6]\s*(pro\s*max|pro|plus|mini)\b/.test(normalized);
+}
+
+function compactModelSuffix(value: string | undefined) {
+  return value?.trim().replace(/\s+/g, "-") ?? "";
+}
+
+function normalizeCapacity(value: string) {
+  const normalized = value.toLocaleLowerCase("en-US").replace(/\s+/g, "");
+  return normalized === "1024gb" ? "1tb" : normalized;
+}
+
+function formatModelPart(value: string) {
+  if (/^\d+$/.test(value)) return value;
+  if (value === "fe") return "FE";
+  return value.charAt(0).toLocaleUpperCase("tr-TR") + value.slice(1);
+}
+
+function titleCase(value: string) {
+  return value
+    .split(" ")
+    .filter(Boolean)
+    .map(formatModelPart)
+    .join(" ");
+}
+
+function isDuplicateError(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  return (error as { code?: string }).code === "23505";
+}
