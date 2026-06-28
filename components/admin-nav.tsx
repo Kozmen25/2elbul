@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Users,
+  WandSparkles,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ const links = [
   { href: "/admin", label: "Genel Bakış", icon: LayoutDashboard },
   { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
   { href: "/admin/products", label: "Ürünler", icon: Boxes },
+  { href: "/admin/product-matcher", label: "Ürün Eşleştirici", icon: WandSparkles },
   { href: "/admin/search-demands", label: "Arama Talepleri", icon: Search },
   { href: "/admin/bot-center", label: "Bot Merkezi", icon: Bot },
   { href: "/admin/price-alerts", label: "Fiyat Alarmları", icon: BellRing },

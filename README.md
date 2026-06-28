@@ -1208,3 +1208,29 @@ daily         -> /api/cron/daily
 ```
 
 Bu API rotasi kullanicinin admin olup olmadigini server tarafinda kontrol eder. Admin olmayan kullanicilar 403 alir. `CRON_SECRET` yalnizca server tarafinda okunur ve client tarafina gonderilmez.
+
+## Urun Eslestirme Test Paneli
+
+Admin panelindeki `/admin/product-matcher` sayfasi ilan basliklarinin urun
+eslestirme motoru tarafindan nasil normalize edildigini dry-run olarak gosterir.
+Panel gercek urun olusturmaz; yalnizca mevcut `products` kayitlari icinde hangi
+urune baglanacagini veya yeni urun olusturulacaksa onerilen urun adini gosterir.
+
+Test paneli su bilgileri dondurur:
+
+- Girilen baslik
+- `normalizeProductTitle` sonucu
+- `extractProductSignals` sonucu
+- `generateProductKey` sonucu
+- Eslesen mevcut urun adi ve id bilgisi
+- Eslesme yoksa "Yeni urun olusturulacak" bilgisi
+
+Istekler guvenli admin API rotasindan calisir:
+
+```text
+POST /api/admin/product-matcher-test
+```
+
+Bu rota kullanicinin admin olup olmadigini server tarafinda kontrol eder.
+`SUPABASE_SERVICE_ROLE_KEY` yalnizca server tarafinda kullanilir ve client
+tarafina gonderilmez.

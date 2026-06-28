@@ -17,6 +17,19 @@ export type MatchedProduct = {
   created: boolean;
 };
 
+export type ProductMatcherDryRunResult = {
+  inputTitle: string;
+  normalizedTitle: string;
+  signals: ProductSignals;
+  productKey: string;
+  matchedProduct: {
+    id: string | number;
+    name: string;
+  } | null;
+  wouldCreate: boolean;
+  suggestedName: string;
+};
+
 type ProductRow = {
   id: string | number;
   name: string;
@@ -109,6 +122,42 @@ export function generateProductKey(title: string) {
   return extractProductSignals(title).normalizedKey;
 }
 
+export async function dryRunProductMatch({
+  supabase,
+  title,
+  productName,
+  category,
+}: FindOrCreateMatchedProductInput): Promise<ProductMatcherDryRunResult> {
+  const combinedTitle = `${productName ?? ""} ${title}`.trim();
+  const signals = extractProductSignals(combinedTitle);
+  const normalizedTitle = normalizeProductTitle(combinedTitle);
+  const productKey = signals.normalizedKey;
+  const suggestedName = createCanonicalProductName(signals, productName || title);
+  const matchedProduct = await findExistingMatchedProduct(
+    supabase,
+    suggestedName,
+    productKey,
+  );
+
+  return {
+    inputTitle: title,
+    normalizedTitle,
+    signals: {
+      ...signals,
+      category: category || signals.category,
+    },
+    productKey,
+    matchedProduct: matchedProduct
+      ? {
+          id: matchedProduct.id,
+          name: matchedProduct.name,
+        }
+      : null,
+    wouldCreate: !matchedProduct,
+    suggestedName,
+  };
+}
+
 export async function findOrCreateMatchedProduct({
   supabase,
   title,
@@ -119,34 +168,15 @@ export async function findOrCreateMatchedProduct({
   const canonicalName = createCanonicalProductName(signals, productName || title);
   const canonicalKey = signals.normalizedKey;
 
-  const exact = await supabase
-    .from("products")
-    .select("id, name, category")
-    .eq("name", canonicalName)
-    .maybeSingle();
-  if (exact.error) throw exact.error;
-  if (exact.data) {
-    return {
-      id: exact.data.id,
-      name: String(exact.data.name),
-      signals,
-      created: false,
-    };
-  }
-
-  const { data: products, error: lookupError } = await supabase
-    .from("products")
-    .select("id, name, category")
-    .limit(2000);
-  if (lookupError) throw lookupError;
-
-  const matched = ((products ?? []) as ProductRow[]).find(
-    (product) => generateProductKey(product.name) === canonicalKey,
+  const matchedProduct = await findExistingMatchedProduct(
+    supabase,
+    canonicalName,
+    canonicalKey,
   );
-  if (matched) {
+  if (matchedProduct) {
     return {
-      id: matched.id,
-      name: matched.name,
+      id: matchedProduct.id,
+      name: matchedProduct.name,
       signals,
       created: false,
     };
@@ -188,6 +218,43 @@ export async function findOrCreateMatchedProduct({
     name: String(createdProduct.name),
     signals,
     created: true,
+  };
+}
+
+async function findExistingMatchedProduct(
+  supabase: SupabaseClient,
+  canonicalName: string,
+  canonicalKey: string,
+) {
+  const exact = await supabase
+    .from("products")
+    .select("id, name, category")
+    .eq("name", canonicalName)
+    .maybeSingle();
+  if (exact.error) throw exact.error;
+  if (exact.data) {
+    return {
+      id: exact.data.id,
+      name: String(exact.data.name),
+      category: exact.data.category ? String(exact.data.category) : null,
+    };
+  }
+
+  const { data: products, error: lookupError } = await supabase
+    .from("products")
+    .select("id, name, category")
+    .limit(2000);
+  if (lookupError) throw lookupError;
+
+  const matched = ((products ?? []) as ProductRow[]).find(
+    (product) => generateProductKey(product.name) === canonicalKey,
+  );
+  if (!matched) return null;
+
+  return {
+    id: matched.id,
+    name: matched.name,
+    category: matched.category ?? null,
   };
 }
 
