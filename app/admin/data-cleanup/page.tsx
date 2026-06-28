@@ -12,6 +12,7 @@ import {
   getPublicDemoProductReasons,
 } from "@/lib/public-data-cleanup";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { DataCleanupDeactivateButton } from "./data-cleanup-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ type Candidate = {
   price: number | null;
   createdAt: string | null;
   reasons: string[];
+  canDeactivate: boolean;
 };
 
 const formatPrice = (price: number | null) =>
@@ -111,6 +113,7 @@ export default async function AdminDataCleanupPage() {
         price: null,
         createdAt: product.created_at ?? null,
         reasons,
+        canDeactivate: false,
       }];
     })
     ;
@@ -135,6 +138,7 @@ export default async function AdminDataCleanupPage() {
         price: Number.isFinite(price) ? price : null,
         createdAt: listing.created_at ?? null,
         reasons,
+        canDeactivate: true,
       }];
     })
     ;
@@ -196,6 +200,15 @@ export default async function AdminDataCleanupPage() {
         </div>
       </div>
 
+      <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-900">
+        <p className="font-black">Sprint 3: Guvenli pasife alma</p>
+        <p className="mt-1">
+          Ilan adaylari artik silinmeden pasife alinabilir. Islem yalnizca public
+          demo/test filtresine takilan ilanlarda calisir; urun adaylari bu surumde
+          pasife alinmaz.
+        </p>
+      </div>
+
       {productsResult.error || listingsResult.error ? (
         <AdminEmpty>
           Veri temizliği sorgusunda hata oluştu. Ürün hatası:{" "}
@@ -221,7 +234,7 @@ export default async function AdminDataCleanupPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full text-left text-sm">
+            <table className="min-w-[1120px] w-full text-left text-sm">
               <thead className="bg-[#fafaf8] text-xs font-black uppercase tracking-[0.08em] text-black/45">
                 <tr>
                   <th className="px-4 py-3">Tip</th>
@@ -230,6 +243,7 @@ export default async function AdminDataCleanupPage() {
                   <th className="px-4 py-3">Fiyat</th>
                   <th className="px-4 py-3">Oluşturulma</th>
                   <th className="px-4 py-3">Sebep</th>
+                  <th className="px-4 py-3">Islem</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/7">
@@ -264,6 +278,18 @@ export default async function AdminDataCleanupPage() {
                           </span>
                         ))}
                       </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      {candidate.canDeactivate ? (
+                        <DataCleanupDeactivateButton
+                          listingId={candidate.id}
+                          title={candidate.title}
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-black/35">
+                          Urunler dry-run
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

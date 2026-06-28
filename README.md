@@ -1470,3 +1470,26 @@ Sayfa sunlari gosterir:
 Bu ilk surum veri silmez. Toplu silme ve tekil silme ozellikle eklenmedi; amac
 canliya cikmadan once hangi kayitlarin public filtrelere takildigini admin
 panelden gormektir. Yeni SQL gerekmez.
+
+## Veri Temizligi - Pasife Alma
+
+`/admin/data-cleanup` sayfasinda demo/test filtresine takilan ilanlar artik
+silinmeden tek tek pasife alinabilir.
+
+Guvenlik kurallari:
+
+- Sadece admin kullanicilar islem yapabilir.
+- API route: `/api/admin/data-cleanup/deactivate`
+- Service role key yalnizca server-side kullanilir.
+- Rastgele gercek ilan ID'si gonderilirse islem yapilmaz; ilan once
+  `lib/public-data-cleanup.ts` filtresinden tekrar gecirilir.
+- Urun kayitlari bu sprintte pasife alinmaz.
+- Toplu pasife alma yoktur.
+
+Pasife alma oncelikle `listings.status = 'inactive'` ile calisir. Canli semada
+`status` kolonu yok ama `is_active` kolonu varsa `is_active = false` fallback'i
+kullanilir. Ikisi de yoksa yeni SQL gerekir:
+
+```sql
+alter table public.listings add column if not exists status text default 'published';
+```
