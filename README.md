@@ -1345,3 +1345,22 @@ Eklenen bolumler:
 Her benzer urun kartinda urun adi, kategori, ilan sayisi, ortalama fiyat, en
 dusuk fiyat ve urun detay linki bulunur. Yeni SQL gerekmez; kategori kolonu yoksa
 fallback ile yalnizca isim sinyalleri kullanilir.
+
+## Urun Detay Sayfasi 2.0 - Sprint 5 SEO ve Mobil Optimizasyon
+
+`/product/[slug]` sayfasi SEO ve mobil kullanim icin guclendirildi.
+
+Eklenen iyilestirmeler:
+
+- Dinamik title ve description
+- Open Graph ve Twitter card metadata
+- Canonical URL
+- Product schema JSON-LD
+- Fiyat verisi varsa AggregateOffer ve Offer structured data
+- Mobilde kartlarin tasmasini azaltan grid ve metin kirilimlari
+- Buyuk ilan listelerinde ilk ekrani hafif tutmak icin ilan listesi onizleme limiti
+- Favori sorgularinda yalnizca ekranda kullanilan ilan id'lerinin sorgulanmasi
+
+Yeni SQL veya yeni paket gerekmez. `NEXT_PUBLIC_SITE_URL` tanimliysa canonical ve
+structured data URL'leri bu alan uzerinden uretilir; yoksa production Vercel URL'i
+fallback olarak kullanilir.

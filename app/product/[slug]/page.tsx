@@ -27,6 +27,7 @@ import {
   getProductDetail,
   type ProductBestDeal,
   type ProductDecisionInsight,
+  type ProductRecord,
   type RelatedProductSummary,
 } from "@/lib/product-detail";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
@@ -62,12 +63,35 @@ export async function generateMetadata({
   if (!product) {
     return {
       title: "Ürün bulunamadı | 2ElBul",
+      description:
+        "Aradığınız ürün 2ElBul fiyat rehberinde bulunamadı. İkinci el piyasa fiyatlarını arayarak keşfedebilirsiniz.",
+      robots: { index: false, follow: false },
     };
   }
 
+  const title = `${product.name} ikinci el fiyatları ve piyasa analizi | 2ElBul`;
+  const description = `${product.name} için ikinci el ilanları, ortalama fiyat, en ucuz ilan, fiyat geçmişi ve güven skoru 2ElBul'da.`;
+  const canonicalUrl = getAbsoluteUrl(`/product/${product.slug}`);
+
   return {
-    title: `${product.name} ikinci el fiyatları | 2ElBul`,
-    description: `${product.name} için ikinci el ilanları, ortalama fiyat, en ucuz ilanlar ve piyasa değeri.`,
+    title,
+    description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      siteName: "2ElBul",
+      locale: "tr_TR",
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
   };
 }
 
@@ -126,6 +150,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
         .sort((a, b) => a.price - b.price)
         .slice(0, 5)
     : [];
+  const listingPreview = listings.slice(0, 24);
+  const favoriteScopeListingIds = [
+    ...new Set(
+      [
+        ...suspiciousListings,
+        ...cheapestListings,
+        ...latestListings,
+        ...listingPreview,
+        bestDealListing,
+      ]
+        .filter((listing): listing is Listing => Boolean(listing))
+        .map((listing) => listing.id),
+    ),
+  ];
 
   const cityCounts = [...countBy(listings, (listing) => listing.city).entries()]
     .map(([city, count]) => ({ city, count }))
@@ -142,15 +180,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const isAuthenticated = Boolean(authData.user);
   let favoriteListingIds: string[] = [];
 
-  if (serverSupabase && authData.user && listings.length > 0) {
+  if (serverSupabase && authData.user && favoriteScopeListingIds.length > 0) {
     const { data, error } = await serverSupabase
       .from("favorites")
       .select("listing_id")
       .eq("user_id", authData.user.id)
-      .in(
-        "listing_id",
-        listings.map((listing) => listing.id),
-      );
+      .in("listing_id", favoriteScopeListingIds);
 
     if (error) {
       console.error("Supabase product favorites query failed:", error);
@@ -163,8 +198,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const favoriteIds = new Set(favoriteListingIds);
   const loginNext = `/product/${product.slug}`;
+  const productJsonLd = buildProductJsonLd({
+    product,
+    listingCount,
+    lowestPrice,
+    highestPrice,
+    bestDeals,
+  });
   return (
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <div className="container-shell min-w-0">
         <div className="max-w-4xl">
           <p className="text-sm font-bold text-[#ff6b00]">
@@ -295,12 +343,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
           eyebrow="Tüm kaynaklar"
           title="İlan listesi"
           icon={Store}
-          listings={listings}
+          listings={listingPreview}
           priceStats={productPriceStats}
           favoriteIds={favoriteIds}
           isAuthenticated={isAuthenticated}
           loginNext={loginNext}
-          emptyMessage="Ürün var ancak bu ürüne bağlı yayında ilan bulunmuyor."
+          emptyMessage="Bu ürün için yayında ilan bulunmuyor. Yeni ilanlar geldikçe liste otomatik güncellenecek."
           matchKey={product.slug}
         />
 
@@ -955,6 +1003,74 @@ function formatDealDifference(value: number | null) {
   if (value < 0) return `%${absolute} altında`;
   if (value > 0) return `%${absolute} üstünde`;
   return "ortalama seviyesinde";
+}
+
+function buildProductJsonLd({
+  product,
+  listingCount,
+  lowestPrice,
+  highestPrice,
+  bestDeals,
+}: {
+  product: ProductRecord;
+  listingCount: number;
+  lowestPrice: number;
+  highestPrice: number;
+  bestDeals: ProductBestDeal[];
+}) {
+  const productUrl = getAbsoluteUrl(`/product/${product.slug}`);
+  const offers =
+    listingCount > 0 && lowestPrice > 0 && highestPrice > 0
+      ? {
+          "@type": "AggregateOffer",
+          priceCurrency: "TRY",
+          lowPrice: lowestPrice,
+          highPrice: highestPrice,
+          offerCount: listingCount,
+          url: productUrl,
+          offers: bestDeals
+            .filter((deal) => deal.listing.url && deal.listing.price > 0)
+            .slice(0, 5)
+            .map((deal) => ({
+              "@type": "Offer",
+              priceCurrency: "TRY",
+              price: deal.listing.price,
+              url: deal.listing.url,
+              availability: "https://schema.org/InStock",
+              seller: {
+                "@type": "Organization",
+                name: deal.listing.source,
+              },
+            })),
+        }
+      : undefined;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    category: product.category ?? undefined,
+    url: productUrl,
+    brand: inferProductBrand(product.name),
+    offers,
+  };
+}
+
+function getAbsoluteUrl(path: string) {
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://2elbul.vercel.app";
+  return `${siteUrl}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function inferProductBrand(name: string) {
+  const normalized = name.toLocaleLowerCase("tr-TR");
+  if (normalized.includes("iphone") || normalized.includes("apple")) return "Apple";
+  if (normalized.includes("samsung") || normalized.includes("galaxy")) return "Samsung";
+  if (normalized.includes("playstation") || normalized.includes("ps5")) return "Sony";
+  if (normalized.includes("macbook")) return "Apple";
+  if (normalized.includes("rtx")) return "NVIDIA";
+  return undefined;
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {
