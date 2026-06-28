@@ -44,6 +44,7 @@ export const LISTING_CONDITIONS: ListingCondition[] = [
 
 export type Listing = {
   id: string;
+  productId?: string;
   title: string;
   productName: string;
   price: number;

@@ -107,6 +107,7 @@ export async function getProductDetail(
   const listings = (listingsResult.data ?? [])
     .map((listing) => ({
       id: String(listing.id),
+      productId: product.id,
       title: String(listing.title),
       productName: product.name,
       price: Number(listing.price),

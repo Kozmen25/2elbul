@@ -1,6 +1,11 @@
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { LISTING_CONDITIONS } from "@/lib/listings";
+import {
+  analyzeListingPrice,
+  buildProductPriceStats,
+  type PriceAnalysisLabel,
+} from "@/lib/price-analysis";
 import { ListingManager, type AdminListing } from "./listing-manager";
 
 type Props = {
@@ -57,6 +62,16 @@ export default async function AdminListingsPage({ searchParams }: Props) {
   const query = value("q").toLocaleLowerCase("tr-TR");
   const minPrice = Number(value("min"));
   const maxPrice = Number(value("max"));
+  const productPriceStats = buildProductPriceStats(
+    listingsData
+      .filter((listing) =>
+        ["published", "active"].includes(String(listing.status ?? "published")),
+      )
+      .map((listing) => ({
+        productId: listing.product_id as string | number | null | undefined,
+        price: listing.price as string | number | null | undefined,
+      })),
+  );
 
   let listings: AdminListing[] = listingsData.map((listing) => ({
     id: Number(listing.id),
@@ -75,6 +90,10 @@ export default async function AdminListingsPage({ searchParams }: Props) {
         ? String(listing.status)
         : "published",
     createdAt: String(listing.created_at),
+    priceAnalysis: analyzeListingPrice(
+      listing.price as string | number | null | undefined,
+      productPriceStats[String(listing.product_id)],
+    ),
   }));
 
   listings = listings.filter((listing) => {
@@ -92,6 +111,11 @@ export default async function AdminListingsPage({ searchParams }: Props) {
     if (value("condition") && listing.condition !== value("condition"))
       return false;
     if (value("status") && listing.status !== value("status")) return false;
+    if (
+      value("opportunity") &&
+      listing.priceAnalysis.label !== value("opportunity")
+    )
+      return false;
     if (Number.isFinite(minPrice) && minPrice > 0 && listing.price < minPrice)
       return false;
     if (Number.isFinite(maxPrice) && maxPrice > 0 && listing.price > maxPrice)
@@ -166,6 +190,11 @@ export default async function AdminListingsPage({ searchParams }: Props) {
             <option value="rejected">Reddedildi</option>
           </Select>
         )}
+        <Select name="opportunity" value={value("opportunity")} label="Tüm fırsat etiketleri">
+          {PRICE_ANALYSIS_FILTERS.map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </Select>
         <input
           name="min"
           type="number"
@@ -203,6 +232,15 @@ export default async function AdminListingsPage({ searchParams }: Props) {
     </>
   );
 }
+
+const PRICE_ANALYSIS_FILTERS: PriceAnalysisLabel[] = [
+  "Çok iyi fırsat",
+  "Piyasanın altında",
+  "Normal fiyat",
+  "Pahalı",
+  "Çok pahalı",
+  "Yetersiz veri",
+];
 
 function Select({
   name,

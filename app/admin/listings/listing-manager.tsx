@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ListingImage } from "@/components/listing-image";
+import type { ListingPriceAnalysis } from "@/lib/price-analysis";
 import {
   bulkListingAction,
   type BulkListingAction,
@@ -34,6 +35,7 @@ export type AdminListing = {
   imageUrl: string | null;
   status: string;
   createdAt: string;
+  priceAnalysis: ListingPriceAnalysis;
 };
 
 export function ListingManager({
@@ -210,6 +212,11 @@ export function ListingManager({
                 <td className="px-4 py-4 font-bold">{listing.productName}</td>
                 <td className="px-4 py-4 font-black">
                   {formatPrice(listing.price)}
+                  <span
+                    className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${listing.priceAnalysis.className}`}
+                  >
+                    {listing.priceAnalysis.label}
+                  </span>
                 </td>
                 <td className="px-4 py-4">
                   <p>{listing.city}</p>

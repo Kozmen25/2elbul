@@ -16,6 +16,10 @@ import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { LISTING_CONDITIONS, type Listing } from "@/lib/listings";
+import {
+  analyzeListingPrice,
+  type ProductPriceStats,
+} from "@/lib/price-analysis";
 import { calculateOpportunityRating } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { recordSearch } from "./actions";
@@ -25,8 +29,7 @@ type SortOption = "price-asc" | "price-desc" | "newest";
 type SearchResultsClientProps = {
   query: string;
   initialListings: Listing[];
-  productAverages: Record<string, number>;
-  productCounts: Record<string, number>;
+  productPriceStats: Record<string, ProductPriceStats>;
   loadError?: string;
   favoriteListingIds: string[];
   isAuthenticated: boolean;
@@ -49,8 +52,7 @@ const formatDate = (date: string) =>
 export function SearchResultsClient({
   query,
   initialListings,
-  productAverages,
-  productCounts,
+  productPriceStats,
   loadError = "",
   favoriteListingIds,
   isAuthenticated,
@@ -319,10 +321,13 @@ export function SearchResultsClient({
                   <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
                     {formatPrice(listing.price)}
                   </p>
-                  <PriceRatingBadge
+                  <SmartPriceRatingBadge
                     price={listing.price}
-                    averagePrice={productAverages[listing.productName]}
-                    listingCount={productCounts[listing.productName] ?? 0}
+                    stats={
+                      listing.productId
+                        ? productPriceStats[listing.productId]
+                        : undefined
+                    }
                   />
 
                   <div className="mt-5 grid gap-2.5 border-t border-black/7 pt-4 text-sm text-black/55">
@@ -391,6 +396,36 @@ function ConditionBadge({ condition }: { condition: string }) {
     >
       {condition}
     </span>
+  );
+}
+
+function SmartPriceRatingBadge({
+  price,
+  stats,
+}: {
+  price: number;
+  stats: ProductPriceStats | undefined;
+}) {
+  const analysis = analyzeListingPrice(price, stats);
+
+  return (
+    <div className="mt-3">
+      <span
+        className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-bold ${analysis.className}`}
+        title={
+          analysis.average
+            ? `Ortalama fiyat: ${formatPrice(analysis.average)}`
+            : "Karşılaştırma için en az 3 aktif ilan gerekli"
+        }
+      >
+        {analysis.label}
+        {analysis.differencePercent !== null
+          ? ` · %${Math.abs(analysis.differencePercent)} ${
+              analysis.differencePercent < 0 ? "ucuz" : "pahalı"
+            }`
+          : ""}
+      </span>
+    </div>
   );
 }
 

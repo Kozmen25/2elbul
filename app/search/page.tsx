@@ -5,7 +5,7 @@ import type {
   ListingSource,
 } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
-import { calculateMarketStats } from "@/lib/price-insights";
+import { buildProductPriceStats } from "@/lib/price-analysis";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SearchResultsClient } from "./search-results-client";
@@ -132,6 +132,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           listings = rows
             .map((row) => ({
               id: String(row.id),
+              productId: String(row.product_id),
               title: String(row.title),
               productName:
                 productNames.get(String(row.product_id)) ?? "Diğer",
@@ -149,25 +150,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     }
   }
 
-  const productTotals = listings.reduce<Record<string, number[]>>((totals, listing) => {
-    totals[listing.productName] = [
-      ...(totals[listing.productName] ?? []),
-      listing.price,
-    ];
-    return totals;
-  }, {});
-
-  const productAverages = Object.fromEntries(
-    Object.entries(productTotals).map(([productName, prices]) => [
-      productName,
-      calculateMarketStats(prices)?.marketValue ?? prices[0] ?? 0,
-    ]),
-  );
-  const productCounts = Object.fromEntries(
-    Object.entries(productTotals).map(([productName, prices]) => [
-      productName,
-      prices.length,
-    ]),
+  const productPriceStats = buildProductPriceStats(
+    listings.map((listing) => ({
+      productId: listing.productId,
+      price: listing.price,
+    })),
   );
 
   if (serverSupabase && authData.user) {
@@ -203,8 +190,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <SearchResultsClient
         query={query}
         initialListings={listings}
-        productAverages={productAverages}
-        productCounts={productCounts}
+        productPriceStats={productPriceStats}
         loadError={loadError}
         favoriteListingIds={favoriteListingIds}
         isAuthenticated={isAuthenticated}

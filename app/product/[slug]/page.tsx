@@ -21,6 +21,12 @@ import {
   summarizePriceHistory,
 } from "@/lib/price-insights";
 import {
+  analyzeListingPrice,
+  buildProductPriceStats,
+  type ListingPriceAnalysis,
+  type ProductPriceStats,
+} from "@/lib/price-analysis";
+import {
   getProductBySlug,
   getProductDetail,
 } from "@/lib/product-detail";
@@ -71,6 +77,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
   const marketStats = calculateMarketStats(prices);
+  const productPriceStats =
+    buildProductPriceStats(
+      listings.map((listing) => ({
+        productId: product.id,
+        price: listing.price,
+      })),
+    )[product.id] ?? null;
   const lowestPrice = marketStats?.lowest ?? 0;
   const highestPrice = marketStats?.highest ?? 0;
   const marketValue = marketStats?.marketValue ?? 0;
@@ -83,6 +96,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const cheapestListings = [...listings]
     .sort((a, b) => a.price - b.price)
     .slice(0, 5);
+  const bestListingAnalysis = cheapestListings[0]
+    ? analyzeListingPrice(cheapestListings[0].price, productPriceStats)
+    : analyzeListingPrice(null, productPriceStats);
   const latestListings = [...listings]
     .sort(
       (a, b) =>
@@ -180,6 +196,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
           />
         </div>
 
+        <PriceAnalysisBox
+          stats={productPriceStats}
+          analysis={bestListingAnalysis}
+        />
+
         <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
           <SectionTitle
             icon={ChartNoAxesCombined}
@@ -197,6 +218,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           title="Şüpheli ucuz ilanlar"
           icon={TriangleAlert}
           listings={suspiciousListings}
+          priceStats={productPriceStats}
           favoriteIds={favoriteIds}
           isAuthenticated={isAuthenticated}
           loginNext={loginNext}
@@ -208,6 +230,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           title="En ucuz ilanlar"
           icon={Tag}
           listings={cheapestListings}
+          priceStats={productPriceStats}
           favoriteIds={favoriteIds}
           isAuthenticated={isAuthenticated}
           loginNext={loginNext}
@@ -219,6 +242,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           title="Son eklenen ilanlar"
           icon={Clock3}
           listings={latestListings}
+          priceStats={productPriceStats}
           favoriteIds={favoriteIds}
           isAuthenticated={isAuthenticated}
           loginNext={loginNext}
@@ -296,6 +320,7 @@ function ProductListingSection({
   title,
   icon,
   listings,
+  priceStats,
   favoriteIds,
   isAuthenticated,
   loginNext,
@@ -305,6 +330,7 @@ function ProductListingSection({
   title: string;
   icon: typeof Tag;
   listings: Listing[];
+  priceStats: ProductPriceStats | null;
   favoriteIds: Set<string>;
   isAuthenticated: boolean;
   loginNext: string;
@@ -319,6 +345,7 @@ function ProductListingSection({
             <ListingCard
               key={listing.id}
               listing={listing}
+              priceStats={priceStats}
               isFavorite={favoriteIds.has(listing.id)}
               isAuthenticated={isAuthenticated}
               loginNext={loginNext}
@@ -332,17 +359,69 @@ function ProductListingSection({
   );
 }
 
+function PriceAnalysisBox({
+  stats,
+  analysis,
+}: {
+  stats: ProductPriceStats | null;
+  analysis: ListingPriceAnalysis;
+}) {
+  return (
+    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle
+        icon={ChartNoAxesCombined}
+        eyebrow="Akıllı fiyat analizi"
+        title="Piyasaya göre fiyat durumu"
+      />
+      <p className="mt-4 text-sm leading-6 text-black/55">
+        Bu analiz aynı ürüne ait aktif ilanlar üzerinden hesaplanır.
+      </p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <AnalysisStat label="Ortalama fiyat" value={stats ? formatPrice(stats.average) : "—"} />
+        <AnalysisStat label="En düşük fiyat" value={stats ? formatPrice(stats.min) : "—"} />
+        <AnalysisStat label="En yüksek fiyat" value={stats ? formatPrice(stats.max) : "—"} />
+        <AnalysisStat label="İlan sayısı" value={stats ? String(stats.count) : "0"} />
+        <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
+            Fırsat etiketi
+          </p>
+          <span
+            className={`mt-3 inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${analysis.className}`}
+          >
+            {analysis.label}
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnalysisStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-lg font-black">{value}</p>
+    </div>
+  );
+}
+
 function ListingCard({
   listing,
+  priceStats,
   isFavorite,
   isAuthenticated,
   loginNext,
 }: {
   listing: Listing;
+  priceStats: ProductPriceStats | null;
   isFavorite: boolean;
   isAuthenticated: boolean;
   loginNext: string;
 }) {
+  const priceAnalysis = analyzeListingPrice(listing.price, priceStats);
+
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-[#fafaf8] p-5">
       <ListingImage
@@ -372,6 +451,11 @@ function ListingCard({
       <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
         {formatPrice(listing.price)}
       </p>
+      <span
+        className={`mt-3 inline-flex w-fit rounded-full border px-3 py-1.5 text-xs font-black ${priceAnalysis.className}`}
+      >
+        {priceAnalysis.label}
+      </span>
       <div className="mt-5 grid gap-2.5 border-t border-black/7 pt-4 text-sm text-black/55">
         <p className="flex items-center gap-2">
           <MapPin size={16} /> {listing.city}
