@@ -41,6 +41,13 @@ type ProductSummary = {
   confidenceLabel: "Yüksek güven" | "Orta güven" | "Düşük güven" | "Veri yetersiz";
 };
 
+type SearchSuggestion = {
+  id: string;
+  name: string;
+  listingCount: number;
+  href: string;
+};
+
 type SearchResultsClientProps = {
   query: string;
   initialListings: Listing[];
@@ -106,6 +113,7 @@ export function SearchResultsClient({
   const [demandMessage, setDemandMessage] = useState(
     shouldQueueSearchDemand ? searchDemandMessage : "",
   );
+  const [suggestedSearches, setSuggestedSearches] = useState<SearchSuggestion[]>([]);
 
   useEffect(() => {
     if (!query) return;
@@ -233,6 +241,43 @@ export function SearchResultsClient({
     };
   }, [initialListings.length, query, router, shouldQueueSearchDemand]);
 
+  useEffect(() => {
+    const shouldLoadSuggestions = !query || initialListings.length < 3;
+    if (!shouldLoadSuggestions) {
+      setSuggestedSearches([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/search/suggestions?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) {
+          setSuggestedSearches([]);
+          return;
+        }
+
+        const data = (await response.json()) as {
+          suggestions?: SearchSuggestion[];
+        };
+        setSuggestedSearches((data.suggestions ?? []).slice(0, 8));
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.error("Search recommendation request failed:", error);
+        }
+        setSuggestedSearches([]);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [initialListings.length, query]);
+
   const cities = useMemo(
     () => [...new Set(initialListings.map((listing) => listing.city))].sort(),
     [initialListings],
@@ -343,6 +388,14 @@ export function SearchResultsClient({
               {demandMessage}
             </div>
           )}
+
+          {initialListings.length < 3 && suggestedSearches.length > 0 ? (
+            <SuggestedSearchesSection
+              title="Bunları deneyebilirsin"
+              description="Benzer ve popüler ürün aramalarını hızlıca aç."
+              suggestions={suggestedSearches}
+            />
+          ) : null}
 
           <SearchSummary
             query={query}
@@ -587,6 +640,16 @@ export function SearchResultsClient({
               <p className="mx-auto mt-2 max-w-lg text-sm font-semibold text-black/50">
                 Filtreleri temizlemeyi deneyin veya fiyat aralığını genişletin.
               </p>
+              {suggestedSearches.length > 0 ? (
+                <div className="mx-auto mt-6 max-w-3xl text-left">
+                  <SuggestedSearchesSection
+                    title="Bunları deneyebilirsin"
+                    description="Filtreleri genişletmeden önce yakın ürünleri de kontrol edebilirsin."
+                    suggestions={suggestedSearches}
+                    compact
+                  />
+                </div>
+              ) : null}
               <button
                 type="button"
                 onClick={resetFilters}
@@ -612,7 +675,23 @@ export function SearchResultsClient({
               {demandMessage}
             </p>
           )}
+          {suggestedSearches.length > 0 ? (
+            <div className="mx-auto mt-8 max-w-4xl text-left">
+              <SuggestedSearchesSection
+                title="Bunları deneyebilirsin"
+                description="Popüler ürünlerden biriyle aramaya devam edebilirsin."
+                suggestions={suggestedSearches}
+                compact
+              />
+            </div>
+          ) : null}
         </div>
+      ) : suggestedSearches.length > 0 ? (
+        <SuggestedSearchesSection
+          title="Popüler aramalar"
+          description="En çok ilana sahip ürünlerden başlayabilirsin."
+          suggestions={suggestedSearches}
+        />
       ) : null}
     </section>
   );
@@ -629,6 +708,49 @@ function ConditionBadge({ condition }: { condition: string }) {
     >
       {condition}
     </span>
+  );
+}
+
+function SuggestedSearchesSection({
+  title,
+  description,
+  suggestions,
+  compact = false,
+}: {
+  title: string;
+  description: string;
+  suggestions: SearchSuggestion[];
+  compact?: boolean;
+}) {
+  if (!suggestions.length) return null;
+
+  return (
+    <section
+      className={`rounded-2xl border border-black/8 bg-white ${
+        compact ? "p-4" : "mb-8 p-5 sm:p-6"
+      }`}
+    >
+      <div className="mb-4">
+        <h2 className="text-lg font-black tracking-[-0.03em]">{title}</h2>
+        <p className="mt-1 text-sm font-semibold text-black/45">{description}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {suggestions.map((suggestion) => (
+          <Link
+            key={suggestion.id}
+            href={suggestion.href}
+            className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-black/8 bg-[#fafaf8] px-4 py-3 transition hover:border-[#ff6b00]/35 hover:bg-[#fff4eb]"
+          >
+            <span className="min-w-0 truncate text-sm font-black">
+              {suggestion.name}
+            </span>
+            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-black/45 group-hover:text-[#d95700]">
+              {suggestion.listingCount} ilan
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

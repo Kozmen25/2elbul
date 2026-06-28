@@ -1400,3 +1400,21 @@ Filtreler sayfa yenilenmeden uygulanir ve URL guncellenir. Filtre ozeti,
 secilen fiyat araligini, kaynagi ve gorunum modunu gosterir. "Filtreleri
 temizle" butonu yalnizca `q` parametresini korur. Yeni SQL gerekmez; filtreleme
 mevcut arama sonucu verisi uzerinden client tarafinda yapilir.
+
+## Arama Deneyimi 2.0 - Sprint 3 Oneriler
+
+Arama kutusu artik kullanici yazarken urun onerileri gosterir.
+
+Eklenenler:
+
+- `/api/search/suggestions?q=...` endpoint'i
+- Maksimum 8 urun onerisi
+- Bos aramada popüler urun onerileri
+- 300ms debounce ile hafif autocomplete
+- Oneriye tiklayinca `/search?q=...` sayfasina yonlendirme
+- Bos veya az sonuc ekraninda "Bunlari deneyebilirsin" onerileri
+
+Oneriler mevcut `products` ve `listings` verilerinden uretilir. En cok ilana
+sahip urunler onceliklidir. Yeni SQL gerekmez; endpoint public anon Supabase
+client ile RLS kurallarina uygun sekilde yalnizca sade arama onerisi verisi
+dondurur.
