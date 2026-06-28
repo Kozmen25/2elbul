@@ -124,6 +124,7 @@ supabase/source-integration-settings.sql
 supabase/bot-scheduler.sql
 supabase/bot-sync.sql
 supabase/price-history.sql
+supabase/search-demand-queue.sql
 supabase/site-settings.sql
 supabase/production-hardening.sql
 ```
@@ -516,6 +517,46 @@ Vercel Cron için `vercel.json` dosyası rotayı günde iki kez tetikler:
 Vercel cron ifadeleri UTC çalışır. `0 6,18 * * *`, Türkiye saatiyle yaklaşık
 09:00 ve 21:00 çalışması için ayarlanmıştır.
 
+### Arama Tetiklemeli Bot Kuyruğu
+
+Kullanıcı bir ürün aradığında sonuç sayısı 3'ten azsa uygulama aramayı arka
+planda bot kuyruğuna ekler. Kullanıcıya şu bilgi gösterilir:
+
+```text
+Bu ürün için piyasayı tarıyoruz. Yeni ilanlar geldikçe sonuçlar güncellenecek.
+```
+
+Bu özellik canlı arama isteğini yavaşlatmaz; `/api/search-demand` endpoint'i
+yalnızca talebi kaydeder ve aktif kaynaklar için `bot_queue` kayıtları üretir.
+Gerçek dış platform scraping entegrasyonu bu aşamada başlatılmaz. Kuyruk,
+gelecekte kaynak adapter'larına query bazlı arama bağlanabilecek şekilde
+hazırlanmıştır.
+
+Kurulum SQL'i:
+
+```text
+supabase/search-demand-queue.sql
+```
+
+Oluşan talepler `/admin/search-demands` sayfasından izlenir. Admin olmayan
+kullanıcılar bu sayfaya erişemez. `bot_queue` tablosunda RLS açıktır ve public
+okuma politikası yoktur; kuyruk sadece server-side service role ile yönetilir.
+
+Kuyruk işleme cron endpoint'i:
+
+```text
+/api/cron/process-search-queue
+```
+
+Bu endpoint de `CRON_SECRET` ile korunur. Elle test için:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain.vercel.app/api/cron/process-search-queue
+```
+
+Vercel Cron için `vercel.json` dosyasında bu endpoint 30 dakikada bir
+tetiklenecek şekilde tanımlıdır.
+
 ### Bot Senkronizasyon Sistemi
 
 Botlar yeni kayıt eklemekle sınırlı değildir; aynı kaynak tekrar çalıştığında
@@ -807,6 +848,7 @@ Admin paneli aşağıdaki rotalardan oluşur:
 - `/admin/products`: ürün ve fiyat istatistikleri
 - `/admin/sources`: ilan kaynakları ve aktiflik yönetimi
 - `/admin/bot-runs`: bot çalışma geçmişi ve hata kayıtları
+- `/admin/search-demands`: az sonuçlu aramalardan oluşan bot kuyruğu talepleri
 - `/admin/users`: Supabase Auth kullanıcıları ve favori sayıları
 - `/admin/import`: JSON, CSV ve Excel içe aktarma
 - `/admin/stats`: platform istatistikleri
@@ -969,6 +1011,7 @@ npm run start
 - `/hesabim` Korumalı kullanıcı hesabı
 - `/favoriler` Korumalı favori ilanlar
 - `/admin/import` Giriş gerektiren toplu JSON ilan aktarımı
+- `/admin/search-demands` Arama tetiklemeli bot kuyruğu talepleri
 - `/gizlilik` Gizlilik bilgilendirmesi
 - `/kullanim-sartlari` Kullanım şartları
 - `/iletisim` İletişim bilgileri

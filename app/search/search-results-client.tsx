@@ -64,6 +64,7 @@ export function SearchResultsClient({
   const [maximumPrice, setMaximumPrice] = useState("");
   const [sort, setSort] = useState<SortOption>("price-asc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [demandMessage, setDemandMessage] = useState("");
 
   useEffect(() => {
     if (!query) return;
@@ -74,6 +75,31 @@ export function SearchResultsClient({
     sessionStorage.setItem(trackingKey, "1");
     void recordSearch(query);
   }, [query]);
+
+  useEffect(() => {
+    if (!query || initialListings.length >= 3) {
+      setDemandMessage("");
+      return;
+    }
+
+    const demandKey = `2elbul-search-demand:${query.toLocaleLowerCase("tr-TR")}`;
+    setDemandMessage(
+      "Bu ürün için piyasayı tarıyoruz. Yeni ilanlar geldikçe sonuçlar güncellenecek.",
+    );
+    if (sessionStorage.getItem(demandKey)) return;
+    sessionStorage.setItem(demandKey, "1");
+
+    void fetch("/api/search-demand", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        resultCount: initialListings.length,
+      }),
+    }).catch((error) => {
+      console.error("Search demand request failed:", error);
+    });
+  }, [initialListings.length, query]);
 
   const cities = useMemo(
     () => [...new Set(initialListings.map((listing) => listing.city))].sort(),
@@ -162,6 +188,11 @@ export function SearchResultsClient({
         </div>
       ) : initialListings.length > 0 ? (
         <>
+          {demandMessage && (
+            <div className="mb-6 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] px-5 py-4 text-sm font-bold text-[#d95700]">
+              {demandMessage}
+            </div>
+          )}
           <div className="mb-6 flex items-center justify-between gap-3 lg:hidden">
             <button
               type="button"
@@ -379,6 +410,11 @@ export function SearchResultsClient({
           <h2 className="text-xl font-black">
             Bu arama için henüz ilan bulunamadı.
           </h2>
+          {demandMessage && (
+            <p className="mx-auto mt-3 max-w-xl text-sm font-semibold text-black/55">
+              {demandMessage}
+            </p>
+          )}
         </div>
       ) : null}
     </section>
