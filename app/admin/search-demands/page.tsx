@@ -8,6 +8,9 @@ type SearchDemand = {
   normalizedQuery: string;
   resultCount: number;
   status: string;
+  queueStatus: string;
+  queueAttempts: number;
+  queueErrorMessage: string | null;
   requestedAt: string;
   lastProcessedAt: string | null;
   processCount: number;
@@ -30,7 +33,10 @@ export default async function AdminSearchDemandsPage() {
           )
           .order("requested_at", { ascending: false })
           .limit(200),
-        supabase.from("bot_queue").select("status"),
+        supabase
+          .from("bot_queue")
+          .select("demand_id, status, attempts, error_message, started_at, finished_at")
+          .order("created_at", { ascending: false }),
       ])
     : [null, null];
 
@@ -41,30 +47,45 @@ export default async function AdminSearchDemandsPage() {
     console.error("Admin bot queue summary query failed:", queueResult.error);
   }
 
-  const demands: SearchDemand[] = (demandsResult?.data ?? []).map((demand) => ({
-    id: String(demand.id),
-    query: String(demand.query),
-    normalizedQuery: String(demand.normalized_query),
-    resultCount: Number(demand.result_count ?? 0),
-    status: String(demand.status),
-    requestedAt: String(demand.requested_at),
-    lastProcessedAt: demand.last_processed_at
-      ? String(demand.last_processed_at)
-      : null,
-    processCount: Number(demand.process_count ?? 0),
-    errorMessage: demand.error_message ? String(demand.error_message) : null,
+  const queueItems = (queueResult?.data ?? []).map((item) => ({
+    demandId: String(item.demand_id),
+    status: String(item.status),
+    attempts: Number(item.attempts ?? 0),
+    errorMessage: item.error_message ? String(item.error_message) : null,
   }));
-
-  const queueSummary = summarizeQueue(
-    (queueResult?.data ?? []).map((item) => String(item.status)),
+  const queueByDemand = new Map(
+    queueItems.map((item) => [item.demandId, item]),
   );
+
+  const demands: SearchDemand[] = (demandsResult?.data ?? []).map((demand) => {
+    const demandId = String(demand.id);
+    const queue = queueByDemand.get(demandId);
+    return {
+      id: demandId,
+      query: String(demand.query),
+      normalizedQuery: String(demand.normalized_query),
+      resultCount: Number(demand.result_count ?? 0),
+      status: String(demand.status),
+      queueStatus: queue?.status ?? "missing",
+      queueAttempts: queue?.attempts ?? 0,
+      queueErrorMessage: queue?.errorMessage ?? null,
+      requestedAt: String(demand.requested_at),
+      lastProcessedAt: demand.last_processed_at
+        ? String(demand.last_processed_at)
+        : null,
+      processCount: Number(demand.process_count ?? 0),
+      errorMessage: demand.error_message ? String(demand.error_message) : null,
+    };
+  });
+
+  const queueSummary = summarizeQueue(queueItems.map((item) => item.status));
 
   return (
     <>
       <AdminPageHeader
         eyebrow="Arama tetiklemeli bot"
         title="Arama Talepleri"
-        description="Sitede az sonuç dönen kullanıcı aramalarını ve bu aramalardan oluşan bot kuyruğunu takip edin."
+        description="Az sonuç dönen kullanıcı aramalarını, queue durumunu ve adapter işlem sonucunu takip edin."
         action={
           <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
             <Search size={24} />
@@ -95,17 +116,19 @@ export default async function AdminSearchDemandsPage() {
 
           {demands.length ? (
             <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch]">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[1300px] text-left text-sm">
                 <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
                   <tr>
                     <th className="px-4 py-3">Arama</th>
                     <th className="px-4 py-3">Normalize</th>
                     <th className="px-4 py-3">Sonuç</th>
-                    <th className="px-4 py-3">Durum</th>
+                    <th className="px-4 py-3">Talep durumu</th>
+                    <th className="px-4 py-3">Queue durumu</th>
+                    <th className="px-4 py-3">Attempts</th>
                     <th className="px-4 py-3">İşlenme</th>
                     <th className="px-4 py-3">Talep zamanı</th>
                     <th className="px-4 py-3">Son işlem</th>
-                    <th className="px-4 py-3">Hata</th>
+                    <th className="px-4 py-3">Hata / mesaj</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,6 +144,12 @@ export default async function AdminSearchDemandsPage() {
                       <td className="px-4 py-4">
                         <StatusBadge status={demand.status} />
                       </td>
+                      <td className="px-4 py-4">
+                        <StatusBadge status={demand.queueStatus} />
+                      </td>
+                      <td className="px-4 py-4 font-black">
+                        {demand.queueAttempts}
+                      </td>
                       <td className="px-4 py-4">{demand.processCount}</td>
                       <td className="px-4 py-4 text-black/55">
                         {formatDate(demand.requestedAt)}
@@ -130,8 +159,8 @@ export default async function AdminSearchDemandsPage() {
                           ? formatDate(demand.lastProcessedAt)
                           : "Henüz işlenmedi"}
                       </td>
-                      <td className="max-w-72 break-words px-4 py-4 text-xs text-red-700">
-                        {demand.errorMessage ?? "—"}
+                      <td className="max-w-80 break-words px-4 py-4 text-xs text-red-700">
+                        {demand.queueErrorMessage ?? demand.errorMessage ?? "—"}
                       </td>
                     </tr>
                   ))}
@@ -163,7 +192,7 @@ function StatusBadge({ status }: { status: string }) {
         ? "bg-red-100 text-red-700"
         : status === "processing"
           ? "bg-blue-100 text-blue-700"
-          : status === "ignored"
+          : status === "ignored" || status === "missing"
             ? "bg-black/7 text-black/45"
             : "bg-amber-100 text-amber-700";
 
@@ -182,6 +211,7 @@ function statusLabel(status: string) {
   if (status === "failed") return "Hatalı";
   if (status === "ignored") return "Yok sayıldı";
   if (status === "skipped") return "Atlandı";
+  if (status === "missing") return "Kuyruk yok";
   return status;
 }
 
