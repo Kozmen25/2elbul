@@ -1327,3 +1327,21 @@ Skor seviyeleri:
 
 Yeni SQL gerekmez. Hesaplama server tarafinda `lib/product-detail.ts` icinde
 hazirlanir ve sayfaya guvenli ozet veri olarak gonderilir.
+
+## Urun Detay Sayfasi 2.0 - Sprint 4 En Iyi Firsatlar ve Benzer Urunler
+
+`/product/[slug]` sayfasi artik kullaniciya ayni urundeki en iyi ilanlari ve
+alternatif benzer urunleri de gosterir.
+
+Eklenen bolumler:
+
+- **En Iyi Firsatlar:** Urunun fiyat bilgisi olan ilanlari icinden en dusuk
+  fiyatli ilk 5 ilan listelenir. Ortalama fiyatin altindakiler "Ortalamanin
+  altinda", cok dusuk olanlar "Dikkatli incele" etiketiyle gosterilir.
+- **Benzer Urunler:** Mevcut urun haric tutulur. Varsa ayni kategori, yoksa
+  urun adindaki marka/model sinyalleri kullanilarak maksimum 6 alternatif
+  urun onerilir.
+
+Her benzer urun kartinda urun adi, kategori, ilan sayisi, ortalama fiyat, en
+dusuk fiyat ve urun detay linki bulunur. Yeni SQL gerekmez; kategori kolonu yoksa
+fallback ile yalnizca isim sinyalleri kullanilir.

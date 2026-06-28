@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   ArrowUpRight,
   CalendarDays,
@@ -24,7 +25,9 @@ import {
 import {
   getProductBySlug,
   getProductDetail,
+  type ProductBestDeal,
   type ProductDecisionInsight,
+  type RelatedProductSummary,
 } from "@/lib/product-detail";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
@@ -73,7 +76,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const detail = await getProductDetail(slug);
   if (!detail) notFound();
 
-  const { product, listings, decisionInsight } = detail;
+  const { product, listings, decisionInsight, bestDeals, relatedProducts } =
+    detail;
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
   const marketStats = calculateMarketStats(prices);
@@ -237,6 +241,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           analysis={bestListingAnalysis}
         />
 
+        <BestDealsSection deals={bestDeals} />
+
         <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
           <SectionTitle
             icon={ChartNoAxesCombined}
@@ -297,6 +303,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           emptyMessage="Ürün var ancak bu ürüne bağlı yayında ilan bulunmuyor."
           matchKey={product.slug}
         />
+
+        <RelatedProductsSection products={relatedProducts} />
 
         <div className="mt-8 grid gap-5 lg:grid-cols-2">
           <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
@@ -408,6 +416,122 @@ function ProductListingSection({
         <EmptyState text={emptyMessage} />
       )}
     </section>
+  );
+}
+
+function BestDealsSection({ deals }: { deals: ProductBestDeal[] }) {
+  return (
+    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle icon={Tag} eyebrow="Fırsat seçkisi" title="En İyi Fırsatlar" />
+      {deals.length > 0 ? (
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {deals.map((deal) => (
+            <article
+              key={deal.listing.id}
+              className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-[#fafaf8] p-4"
+            >
+              <span
+                className={`w-fit rounded-full border px-3 py-1.5 text-xs font-black ${deal.className}`}
+              >
+                {deal.label}
+              </span>
+              <h3 className="mt-4 line-clamp-3 break-words text-sm font-black leading-6">
+                {deal.listing.title}
+              </h3>
+              <p className="mt-3 text-2xl font-black tracking-[-0.05em] text-[#ff6b00]">
+                {formatPrice(deal.listing.price)}
+              </p>
+              <p className="mt-2 text-xs font-bold leading-5 text-black/50">
+                Ortalama fiyata göre {formatDealDifference(deal.differencePercent)}.
+              </p>
+              <div className="mt-4 grid gap-2 border-t border-black/7 pt-4 text-xs font-semibold text-black/50">
+                <span className="inline-flex items-center gap-2">
+                  <Store size={14} /> {deal.listing.source}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <CalendarDays size={14} /> {formatDate(deal.listing.createdAt)}
+                </span>
+              </div>
+              {deal.listing.url ? (
+                <a
+                  href={deal.listing.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="orange-button mt-4 py-2.5 text-sm"
+                >
+                  İlana git <ArrowUpRight size={16} />
+                </a>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState text="Bu ürün için fırsat karşılaştırması yapılacak ilan bulunmuyor." />
+      )}
+    </section>
+  );
+}
+
+function RelatedProductsSection({
+  products,
+}: {
+  products: RelatedProductSummary[];
+}) {
+  return (
+    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle icon={Store} eyebrow="Alternatifler" title="Benzer Ürünler" />
+      {products.length > 0 ? (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {products.map((product) => (
+            <Link
+              key={product.id}
+              href={`/product/${product.slug}`}
+              className="group min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/30 hover:bg-white hover:shadow-[0_18px_45px_rgba(0,0,0,0.06)]"
+            >
+              {product.category ? (
+                <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-black text-black/45">
+                  {product.category}
+                </span>
+              ) : null}
+              <h3 className="mt-4 break-words text-lg font-black leading-6 group-hover:text-[#ff6b00]">
+                {product.name}
+              </h3>
+              <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+                <RelatedMetric label="İlan" value={`${product.listingCount}`} />
+                <RelatedMetric
+                  label="Ortalama"
+                  value={
+                    product.averagePrice ? formatPrice(product.averagePrice) : "—"
+                  }
+                />
+                <RelatedMetric
+                  label="En düşük"
+                  value={product.minPrice ? formatPrice(product.minPrice) : "—"}
+                />
+              </div>
+              <p className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#ff6b00]">
+                Detaya git <ArrowUpRight size={16} />
+              </p>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <EmptyState text="Bu ürün için benzer ürün önerisi henüz oluşturulamadı." />
+      )}
+    </section>
+  );
+}
+
+function RelatedMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-black/8 bg-white p-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.06em] text-black/35">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-xs font-black" title={value}>
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -823,6 +947,14 @@ function getListingHistoryDate(listing: Listing) {
   const date = new Date(rawDate);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString().slice(0, 10);
+}
+
+function formatDealDifference(value: number | null) {
+  if (value === null) return "karşılaştırma verisi sınırlı";
+  const absolute = Math.abs(value).toLocaleString("tr-TR");
+  if (value < 0) return `%${absolute} altında`;
+  if (value > 0) return `%${absolute} üstünde`;
+  return "ortalama seviyesinde";
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {

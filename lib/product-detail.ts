@@ -24,6 +24,8 @@ export type ProductDetailData = {
   listings: Listing[];
   priceHistory: PriceHistoryRecord[];
   decisionInsight: ProductDecisionInsight;
+  bestDeals: ProductBestDeal[];
+  relatedProducts: RelatedProductSummary[];
 };
 
 export type ConfidenceLevel =
@@ -48,6 +50,23 @@ export type ProductDecisionInsight = {
   };
 };
 
+export type ProductBestDeal = {
+  listing: Listing;
+  differencePercent: number | null;
+  label: "Ortalamanın altında" | "Dikkatli incele" | "Normal fiyat";
+  className: string;
+};
+
+export type RelatedProductSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  category: string | null;
+  listingCount: number;
+  averagePrice: number | null;
+  minPrice: number | null;
+};
+
 type ProductRow = {
   id: string | number;
   name: string;
@@ -66,6 +85,11 @@ type ListingRow = {
   image_url?: string | null;
   created_at: string | null;
   updated_at?: string | null;
+};
+
+type RelatedListingRow = {
+  product_id: string | number | null;
+  price: string | number | null;
 };
 
 export const getProductBySlug = cache(
@@ -185,6 +209,8 @@ export async function getProductDetail(
       listings: [],
       priceHistory: [],
       decisionInsight: buildProductDecisionInsight(product.name, [], []),
+      bestDeals: [],
+      relatedProducts: await getRelatedProducts(supabase, product),
     };
   }
 
@@ -238,6 +264,8 @@ export async function getProductDetail(
       listings,
       priceHistory,
     ),
+    bestDeals: buildProductBestDeals(listings),
+    relatedProducts: await getRelatedProducts(supabase, product),
   };
 }
 
@@ -336,6 +364,169 @@ export function buildProductDecisionInsight(
       warnings,
     },
   };
+}
+
+export function buildProductBestDeals(listings: Listing[]): ProductBestDeal[] {
+  const pricedListings = listings
+    .filter((listing) => Number.isFinite(listing.price) && listing.price > 0)
+    .sort((a, b) => a.price - b.price);
+  const stats = calculateMarketStats(pricedListings.map((listing) => listing.price));
+  const average = stats?.average ?? null;
+
+  return pricedListings.slice(0, 5).map((listing) => {
+    const differencePercent = average
+      ? Math.round(((listing.price - average) / average) * 1000) / 10
+      : null;
+    const label =
+      differencePercent !== null && differencePercent <= -35
+        ? "Dikkatli incele"
+        : differencePercent !== null && differencePercent < 0
+          ? "Ortalamanın altında"
+          : "Normal fiyat";
+
+    return {
+      listing,
+      differencePercent,
+      label,
+      className:
+        label === "Dikkatli incele"
+          ? "border-amber-200 bg-amber-50 text-amber-800"
+          : label === "Ortalamanın altında"
+            ? "border-green-200 bg-green-50 text-green-700"
+            : "border-slate-200 bg-slate-50 text-slate-700",
+    };
+  });
+}
+
+async function getRelatedProducts(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  product: ProductRecord,
+): Promise<RelatedProductSummary[]> {
+  const products = await fetchProductsForRelated(supabase);
+  if (!products.length) return [];
+
+  let listingsResult = await supabase
+    .from("listings")
+    .select("product_id, price")
+    .in("status", ["published", "active"]);
+
+  if (listingsResult.error && isMissingStatusColumn(listingsResult.error)) {
+    listingsResult = await supabase.from("listings").select("product_id, price");
+  }
+
+  if (listingsResult.error) {
+    console.error("Supabase related listings query failed:", listingsResult.error);
+    return [];
+  }
+
+  const priceGroups = new Map<string, number[]>();
+  for (const listing of (listingsResult.data ?? []) as unknown as RelatedListingRow[]) {
+    if (listing.product_id == null) continue;
+    const price = Number(listing.price);
+    if (!Number.isFinite(price) || price <= 0) continue;
+    const productId = String(listing.product_id);
+    priceGroups.set(productId, [...(priceGroups.get(productId) ?? []), price]);
+  }
+
+  return products
+    .filter((candidate) => candidate.id !== product.id)
+    .map((candidate) => {
+      const prices = priceGroups.get(candidate.id) ?? [];
+      const stats = calculateMarketStats(prices);
+      return {
+        candidate,
+        score: getRelatedProductScore(product, candidate),
+        listingCount: prices.length,
+        averagePrice: stats?.average ?? null,
+        minPrice: stats?.lowest ?? null,
+      };
+    })
+    .filter((item) => item.score > 0 || item.listingCount > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.listingCount - a.listingCount ||
+        a.candidate.name.localeCompare(b.candidate.name, "tr"),
+    )
+    .slice(0, 6)
+    .map((item) => ({
+      id: item.candidate.id,
+      name: item.candidate.name,
+      slug: item.candidate.slug,
+      category: item.candidate.category,
+      listingCount: item.listingCount,
+      averagePrice: item.averagePrice,
+      minPrice: item.minPrice,
+    }));
+}
+
+async function fetchProductsForRelated(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+) {
+  const productsWithCategoryResult = await supabase
+    .from("products")
+    .select("id, name, slug, category")
+    .limit(200);
+  let productsData = productsWithCategoryResult.data as unknown[] | null;
+  let productsError = productsWithCategoryResult.error;
+
+  if (productsError && isMissingProductCategoryColumn(productsError)) {
+    const fallbackResult = await supabase
+      .from("products")
+      .select("id, name, slug")
+      .limit(200);
+    productsData = fallbackResult.data as unknown[] | null;
+    productsError = fallbackResult.error;
+  }
+
+  if (productsError) {
+    console.error("Supabase related products query failed:", productsError);
+    return [];
+  }
+
+  return ((productsData ?? []) as ProductRow[]).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
+    category: row.category ? String(row.category) : null,
+  }));
+}
+
+function getRelatedProductScore(
+  product: ProductRecord,
+  candidate: ProductRecord,
+) {
+  let score = 0;
+  if (product.category && candidate.category && product.category === candidate.category) {
+    score += 6;
+  }
+
+  const productTokens = getProductSignalTokens(product.name);
+  const candidateTokens = getProductSignalTokens(candidate.name);
+  for (const token of productTokens) {
+    if (candidateTokens.has(token)) score += token.length >= 4 ? 3 : 2;
+  }
+
+  return score;
+}
+
+function getProductSignalTokens(name: string) {
+  const ignored = new Set([
+    "apple",
+    "samsung",
+    "galaxy",
+    "iphone",
+    "telefon",
+    "yenilenmis",
+    "ikinci",
+    "nesil",
+  ]);
+
+  return new Set(
+    createProductSlug(name)
+      .split("-")
+      .filter((token) => token.length >= 2 && !ignored.has(token)),
+  );
 }
 
 function buildConfidenceScore({
