@@ -36,6 +36,7 @@ type SearchAdapterResult = {
   adapterSlug: string;
   sourceName: string;
   listings: NormalizedListing[];
+  triedAdapters: Array<{ slug: string; found: number }>;
 };
 
 export async function GET(request: NextRequest) {
@@ -117,6 +118,33 @@ export async function GET(request: NextRequest) {
       const source = getJobSource(job, sourceMap);
       const searchResult = await runInstantSearchAdapters(source, job);
       const listings = searchResult.listings;
+      if (!listings.length) {
+        const finishedAt = new Date().toISOString();
+        const message = createNoResultsMessage(searchResult.triedAdapters);
+
+        await updateQueueNoResults(
+          supabase,
+          job,
+          finishedAt,
+          nextAttempts,
+          message,
+        );
+
+        skipped += 1;
+        results.push({
+          id: job.id,
+          ok: true,
+          status: "no_results",
+          found: 0,
+          imported: 0,
+          updated: 0,
+          skipped: 1,
+          triedAdapters: searchResult.triedAdapters,
+          message,
+        });
+        continue;
+      }
+
       const importSource = {
         id: source.id,
         name: searchResult.sourceName || source.name,
@@ -237,14 +265,17 @@ async function runInstantSearchAdapters(
   job: QueueJob,
 ): Promise<SearchAdapterResult> {
   const adapters = getInstantSearchAdapters();
+  const triedAdapters: Array<{ slug: string; found: number }> = [];
 
   for (const adapter of adapters) {
     const listings = await searchAdapter(adapter, source, job);
+    triedAdapters.push({ slug: adapter.slug, found: listings.length });
     if (listings.length > 0) {
       return {
         adapterSlug: adapter.slug,
         sourceName: listings[0]?.sourceName ?? source.name,
         listings,
+        triedAdapters,
       };
     }
   }
@@ -253,6 +284,7 @@ async function runInstantSearchAdapters(
     adapterSlug: adapters[0]?.slug ?? "none",
     sourceName: source.name,
     listings: [],
+    triedAdapters,
   };
 }
 
@@ -473,6 +505,50 @@ async function updateQueueSuccess(
     .eq("id", job.demand_id);
 
   if (demandUpdate.error) throw demandUpdate.error;
+}
+
+async function updateQueueNoResults(
+  supabase: SupabaseClient,
+  job: QueueJob,
+  finishedAt: string,
+  attempts: number,
+  message: string,
+) {
+  const finishUpdate = await supabase
+    .from("bot_queue")
+    .update({
+      status: "no_results",
+      finished_at: finishedAt,
+      error_message: message,
+    })
+    .eq("id", job.id);
+
+  if (finishUpdate.error) throw finishUpdate.error;
+
+  const demandUpdate = await supabase
+    .from("search_demands")
+    .update({
+      status: "no_results",
+      last_processed_at: finishedAt,
+      process_count: attempts,
+      error_message: message,
+    })
+    .eq("id", job.demand_id);
+
+  if (demandUpdate.error) throw demandUpdate.error;
+}
+
+function formatTriedAdapters(adapters: Array<{ slug: string; found: number }>) {
+  if (!adapters.length) return "adapter yok";
+  return adapters
+    .map((adapter) => `${adapter.slug}: ${adapter.found}`)
+    .join(", ");
+}
+
+function createNoResultsMessage(
+  adapters: Array<{ slug: string; found: number }>,
+) {
+  return `Gerçek kaynaklarda sonuç bulunamadı. Denenen kaynaklar: ${formatTriedAdapters(adapters)}.`;
 }
 
 function normalizeProductName(query: string) {

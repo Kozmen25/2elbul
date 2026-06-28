@@ -11,9 +11,19 @@ type SearchDemand = {
   queueStatus: string;
   queueAttempts: number;
   queueErrorMessage: string | null;
+  queueDetails: QueueItem[];
   requestedAt: string;
   lastProcessedAt: string | null;
   processCount: number;
+  errorMessage: string | null;
+};
+
+type QueueItem = {
+  demandId: string;
+  sourceId: number | null;
+  sourceName: string;
+  status: string;
+  attempts: number;
   errorMessage: string | null;
 };
 
@@ -24,7 +34,7 @@ type QueueSummary = {
 
 export default async function AdminSearchDemandsPage() {
   const supabase = createSupabaseAdminClient();
-  const [demandsResult, queueResult] = supabase
+  const [demandsResult, queueResult, sourcesResult] = supabase
     ? await Promise.all([
         supabase
           .from("search_demands")
@@ -35,10 +45,11 @@ export default async function AdminSearchDemandsPage() {
           .limit(200),
         supabase
           .from("bot_queue")
-          .select("demand_id, status, attempts, error_message, started_at, finished_at")
+          .select("demand_id, source_id, status, attempts, error_message, started_at, finished_at")
           .order("created_at", { ascending: false }),
+        supabase.from("sources").select("id, name"),
       ])
-    : [null, null];
+    : [null, null, null];
 
   if (demandsResult?.error) {
     console.error("Admin search demands query failed:", demandsResult.error);
@@ -46,20 +57,40 @@ export default async function AdminSearchDemandsPage() {
   if (queueResult?.error) {
     console.error("Admin bot queue summary query failed:", queueResult.error);
   }
+  if (sourcesResult?.error) {
+    console.error("Admin search demand sources query failed:", sourcesResult.error);
+  }
+
+  const sourceById = new Map(
+    (sourcesResult?.data ?? []).map((source) => [
+      Number(source.id),
+      String(source.name),
+    ]),
+  );
 
   const queueItems = (queueResult?.data ?? []).map((item) => ({
     demandId: String(item.demand_id),
+    sourceId: item.source_id === null ? null : Number(item.source_id),
+    sourceName:
+      item.source_id === null
+        ? "Kaynak yok"
+        : sourceById.get(Number(item.source_id)) ?? `Kaynak #${item.source_id}`,
     status: String(item.status),
     attempts: Number(item.attempts ?? 0),
     errorMessage: item.error_message ? String(item.error_message) : null,
   }));
-  const queueByDemand = new Map(
-    queueItems.map((item) => [item.demandId, item]),
-  );
+  const queueByDemand = new Map<string, QueueItem[]>();
+  for (const item of queueItems) {
+    queueByDemand.set(item.demandId, [
+      ...(queueByDemand.get(item.demandId) ?? []),
+      item,
+    ]);
+  }
 
   const demands: SearchDemand[] = (demandsResult?.data ?? []).map((demand) => {
     const demandId = String(demand.id);
-    const queue = queueByDemand.get(demandId);
+    const queueDetails = queueByDemand.get(demandId) ?? [];
+    const queue = queueDetails[0];
     return {
       id: demandId,
       query: String(demand.query),
@@ -69,6 +100,7 @@ export default async function AdminSearchDemandsPage() {
       queueStatus: queue?.status ?? "missing",
       queueAttempts: queue?.attempts ?? 0,
       queueErrorMessage: queue?.errorMessage ?? null,
+      queueDetails,
       requestedAt: String(demand.requested_at),
       lastProcessedAt: demand.last_processed_at
         ? String(demand.last_processed_at)
@@ -125,6 +157,7 @@ export default async function AdminSearchDemandsPage() {
                     <th className="px-4 py-3">Talep durumu</th>
                     <th className="px-4 py-3">Queue durumu</th>
                     <th className="px-4 py-3">Attempts</th>
+                    <th className="px-4 py-3">Denenen kaynaklar</th>
                     <th className="px-4 py-3">İşlenme</th>
                     <th className="px-4 py-3">Talep zamanı</th>
                     <th className="px-4 py-3">Son işlem</th>
@@ -149,6 +182,28 @@ export default async function AdminSearchDemandsPage() {
                       </td>
                       <td className="px-4 py-4 font-black">
                         {demand.queueAttempts}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="grid gap-2">
+                          {demand.queueDetails.length ? (
+                            demand.queueDetails.map((queue, index) => (
+                              <div
+                                key={`${queue.sourceId ?? "none"}-${index}`}
+                                className="rounded-xl bg-[#fafaf8] px-3 py-2"
+                              >
+                                <p className="text-xs font-black">
+                                  {queue.sourceName}
+                                </p>
+                                <p className="mt-1 text-[11px] font-semibold text-black/45">
+                                  {statusLabel(queue.status)} - Deneme:{" "}
+                                  {queue.attempts}
+                                </p>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-xs text-black/40">-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-4">{demand.processCount}</td>
                       <td className="px-4 py-4 text-black/55">
@@ -177,7 +232,14 @@ export default async function AdminSearchDemandsPage() {
 }
 
 function summarizeQueue(statuses: string[]): QueueSummary[] {
-  const wanted = ["pending", "processing", "completed", "failed", "skipped"];
+  const wanted = [
+    "pending",
+    "processing",
+    "completed",
+    "no_results",
+    "failed",
+    "skipped",
+  ];
   return wanted.map((status) => ({
     status,
     count: statuses.filter((item) => item === status).length,
@@ -189,10 +251,12 @@ function StatusBadge({ status }: { status: string }) {
     status === "completed"
       ? "bg-green-100 text-green-700"
       : status === "failed"
-        ? "bg-red-100 text-red-700"
-        : status === "processing"
-          ? "bg-blue-100 text-blue-700"
-          : status === "ignored" || status === "missing"
+      ? "bg-red-100 text-red-700"
+      : status === "processing"
+        ? "bg-blue-100 text-blue-700"
+        : status === "no_results"
+          ? "bg-slate-100 text-slate-700"
+        : status === "ignored" || status === "missing"
             ? "bg-black/7 text-black/45"
             : "bg-amber-100 text-amber-700";
 
@@ -212,6 +276,7 @@ function statusLabel(status: string) {
   if (status === "ignored") return "Yok sayıldı";
   if (status === "skipped") return "Atlandı";
   if (status === "missing") return "Kuyruk yok";
+  if (status === "no_results") return "Sonuc yok";
   return status;
 }
 

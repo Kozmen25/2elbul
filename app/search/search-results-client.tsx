@@ -135,6 +135,16 @@ export function SearchResultsClient({
 
         if (!botResponse.ok) {
           console.error("Instant search bot request failed:", botResponse.status);
+        } else {
+          const botResult = (await botResponse.json().catch(() => null)) as {
+            noResults?: number;
+            noResultsMessage?: string | null;
+          } | null;
+          if (botResult?.noResults) {
+            setDemandMessage(
+              "Şu an bu ürün için güvenilir kaynaklarda ilan bulunamadı. Takip ediyoruz.",
+            );
+          }
         }
       } catch (error) {
         console.error("Instant search bot request failed:", error);

@@ -81,11 +81,25 @@ export async function POST(request: NextRequest) {
 
   const jobs = (data ?? []) as QueueJob[];
   if (!jobs.length) {
+    const noResultsDemand = await supabase
+      .from("search_demands")
+      .select("error_message")
+      .eq("normalized_query", normalizedQuery)
+      .eq("status", "no_results")
+      .order("last_processed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const noResultsMessage = noResultsDemand.data?.error_message
+      ? String(noResultsDemand.data.error_message)
+      : "";
+
     return NextResponse.json({
       ok: true,
       processed: 0,
       imported: 0,
       updated: 0,
+      noResults: noResultsMessage ? 1 : 0,
+      noResultsMessage: noResultsMessage || null,
       message: "Bu arama için bekleyen kuyruk kaydı bulunamadı.",
     });
   }
@@ -95,6 +109,7 @@ export async function POST(request: NextRequest) {
   let imported = 0;
   let updated = 0;
   let failed = 0;
+  let noResults = 0;
 
   for (const job of jobs) {
     const nextAttempts = Number(job.attempts ?? 0) + 1;
@@ -113,6 +128,40 @@ export async function POST(request: NextRequest) {
     try {
       const source = getJobSource(job, sourceMap);
       const searchResult = await runInstantSearchAdapters(source, job);
+      if (!searchResult.listings.length) {
+        const finishedAt = new Date().toISOString();
+        const message = createNoResultsMessage(searchResult.triedAdapters);
+        await supabase
+          .from("bot_queue")
+          .update({
+            status: "no_results",
+            finished_at: finishedAt,
+            error_message: message,
+          })
+          .eq("id", job.id);
+        await supabase
+          .from("search_demands")
+          .update({
+            status: "no_results",
+            last_processed_at: finishedAt,
+            process_count: nextAttempts,
+            error_message: message,
+          })
+          .eq("id", job.demand_id);
+
+        noResults += 1;
+        results.push({
+          id: job.id,
+          ok: true,
+          status: "no_results",
+          found: 0,
+          imported: 0,
+          updated: 0,
+          triedAdapters: searchResult.triedAdapters,
+          message,
+        });
+        continue;
+      }
       const importResult = await importListings(supabase, job, searchResult.listings);
       const finishedAt = new Date().toISOString();
       const message = `Instant bot tamamlandı. Kaynak: ${searchResult.sourceName} (${searchResult.adapterSlug}). Bulunan: ${searchResult.listings.length}, eklenen: ${importResult.imported}, güncellenen: ${importResult.updated}.`;
@@ -177,6 +226,7 @@ export async function POST(request: NextRequest) {
     imported,
     updated,
     failed,
+    noResults,
     results,
   });
 }
@@ -215,13 +265,16 @@ function getJobSource(job: QueueJob, sourceMap: Map<number, SourceRow>): SourceR
 
 async function runInstantSearchAdapters(source: SourceRow, job: QueueJob) {
   const adapters = getInstantSearchAdapters();
+  const triedAdapters: Array<{ slug: string; found: number }> = [];
   for (const adapter of adapters) {
     const listings = await searchAdapter(adapter, source, job);
+    triedAdapters.push({ slug: adapter.slug, found: listings.length });
     if (listings.length > 0) {
       return {
         adapterSlug: adapter.slug,
         sourceName: listings[0]?.sourceName ?? source.name,
         listings,
+        triedAdapters,
       };
     }
   }
@@ -229,6 +282,7 @@ async function runInstantSearchAdapters(source: SourceRow, job: QueueJob) {
     adapterSlug: adapters[0]?.slug ?? "none",
     sourceName: source.name,
     listings: [] as NormalizedListing[],
+    triedAdapters,
   };
 }
 
@@ -367,6 +421,19 @@ function getMissingSchemaColumn(error: unknown) {
     text.match(/column '([^']+)'/) ??
     text.match(/Could not find the '([^']+)'/)
   )?.[1] ?? null;
+}
+
+function formatTriedAdapters(adapters: Array<{ slug: string; found: number }>) {
+  if (!adapters.length) return "adapter yok";
+  return adapters
+    .map((adapter) => `${adapter.slug}: ${adapter.found}`)
+    .join(", ");
+}
+
+function createNoResultsMessage(
+  adapters: Array<{ slug: string; found: number }>,
+) {
+  return `Gerçek kaynaklarda sonuç bulunamadı. Denenen kaynaklar: ${formatTriedAdapters(adapters)}.`;
 }
 
 function getErrorMessage(error: unknown) {
