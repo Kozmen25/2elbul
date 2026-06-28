@@ -1364,3 +1364,21 @@ Eklenen iyilestirmeler:
 Yeni SQL veya yeni paket gerekmez. `NEXT_PUBLIC_SITE_URL` tanimliysa canonical ve
 structured data URL'leri bu alan uzerinden uretilir; yoksa production Vercel URL'i
 fallback olarak kullanilir.
+
+## Arama Deneyimi 2.0 - Sprint 1
+
+`/search?q=...` sayfasi artik ilan listesinin yaninda urun odakli
+karsilastirma deneyimi de sunar.
+
+Eklenenler:
+
+- Arama ozeti: aranan kelime, bulunan urun sayisi, toplam ilan sayisi, en dusuk
+  fiyatli urun ve piyasa araligi
+- Urun karsilastirma kartlari: urun adi, ilan sayisi, ortalama fiyat, en dusuk
+  fiyat, en yuksek fiyat, guven skoru ve detay linki
+- Siralama secenekleri: en ucuz, en cok ilan, en yuksek guven ve en yeni
+- Bos sonuc durumunda daha acik mesaj ve aramanin izlemeye alindigini belirten
+  bilgi
+
+Yeni SQL gerekmez. Hesaplama mevcut arama sonucu ilanlarindan client tarafinda
+hafif sekilde uretilir; service role key client'a gonderilmez.

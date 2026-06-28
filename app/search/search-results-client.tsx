@@ -25,7 +25,20 @@ import { calculateOpportunityRating } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { recordSearch } from "./actions";
 
-type SortOption = "price-asc" | "price-desc" | "newest";
+type SortOption = "price-asc" | "most-listings" | "confidence" | "newest";
+
+type ProductSummary = {
+  productId: string;
+  productName: string;
+  slug: string;
+  listingCount: number;
+  averagePrice: number;
+  lowestPrice: number;
+  highestPrice: number;
+  newestAt: string;
+  confidenceScore: number | null;
+  confidenceLabel: "Yüksek güven" | "Orta güven" | "Düşük güven" | "Veri yetersiz";
+};
 
 type SearchResultsClientProps = {
   query: string;
@@ -194,7 +207,6 @@ export function SearchResultsClient({
           (max === null || listing.price <= max),
       )
       .sort((a, b) => {
-        if (sort === "price-desc") return b.price - a.price;
         if (sort === "newest") {
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         }
@@ -211,6 +223,17 @@ export function SearchResultsClient({
   ]);
 
   const prices = results.map((listing) => listing.price);
+  const productSummaries = useMemo(
+    () => buildProductSummaries(results, sort),
+    [results, sort],
+  );
+  const cheapestProduct = productSummaries[0] ?? null;
+  const marketRange = productSummaries.length
+    ? {
+        min: Math.min(...productSummaries.map((product) => product.lowestPrice)),
+        max: Math.max(...productSummaries.map((product) => product.averagePrice)),
+      }
+    : null;
   const lowestPrice = prices.length ? Math.min(...prices) : 0;
   const highestPrice = prices.length ? Math.max(...prices) : 0;
   const averagePrice = prices.length
@@ -263,6 +286,15 @@ export function SearchResultsClient({
               {demandMessage}
             </div>
           )}
+
+          <SearchSummary
+            query={query}
+            productCount={productSummaries.length}
+            listingCount={results.length}
+            cheapestProduct={cheapestProduct}
+            marketRange={marketRange}
+          />
+
           <div className="mb-6 flex items-center justify-between gap-3 lg:hidden">
             <button
               type="button"
@@ -350,12 +382,15 @@ export function SearchResultsClient({
                 onChange={(value) => setSort(value as SortOption)}
                 wide
               >
-                <option value="price-asc">Ucuzdan pahalıya</option>
-                <option value="price-desc">Pahalıdan ucuza</option>
+                <option value="price-asc">En ucuz</option>
+                <option value="most-listings">En çok ilan</option>
+                <option value="confidence">En yüksek güven</option>
                 <option value="newest">En yeni</option>
               </FilterSelect>
             </div>
           </div>
+
+          <ProductComparisonSection products={productSummaries} />
 
           <div className="mb-10 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Bulunan ilan" value={`${results.length}`} />
@@ -379,11 +414,13 @@ export function SearchResultsClient({
               İlanlar
             </h2>
             <span className="text-sm font-semibold text-black/45">
-              {sort === "price-desc"
-                ? "Pahalıdan ucuza"
+              {sort === "most-listings"
+                ? "En çok ilana göre"
+                : sort === "confidence"
+                  ? "En yüksek güvene göre"
                 : sort === "newest"
                   ? "En yeni"
-                  : "Ucuzdan pahalıya"}
+                  : "En ucuz"}
             </span>
           </div>
 
@@ -478,8 +515,11 @@ export function SearchResultsClient({
       ) : query ? (
         <div className="rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-16 text-center">
           <h2 className="text-xl font-black">
-            Bu arama için henüz ilan bulunamadı.
+            Bu arama için henüz eşleşen ilan bulamadık.
           </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-black/55">
+            Araman izlemeye alındı. Güvenilir kaynaklarda yeni ilan buldukça sonuçlar burada güncellenecek.
+          </p>
           {demandMessage && (
             <p className="mx-auto mt-3 max-w-xl text-sm font-semibold text-black/55">
               {demandMessage}
@@ -502,6 +542,151 @@ function ConditionBadge({ condition }: { condition: string }) {
     >
       {condition}
     </span>
+  );
+}
+
+function SearchSummary({
+  query,
+  productCount,
+  listingCount,
+  cheapestProduct,
+  marketRange,
+}: {
+  query: string;
+  productCount: number;
+  listingCount: number;
+  cheapestProduct: ProductSummary | null;
+  marketRange: { min: number; max: number } | null;
+}) {
+  return (
+    <div className="mb-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+            Arama özeti
+          </p>
+          <h2 className="mt-2 break-words text-2xl font-black tracking-[-0.04em] sm:text-3xl">
+            “{query}” için ürün karşılaştırması
+          </h2>
+          <p className="mt-2 text-sm font-semibold text-black/45">
+            Ürünleri ilan sayısı, fiyat aralığı ve güven skoruna göre hızlıca kıyasla.
+          </p>
+        </div>
+        {cheapestProduct ? (
+          <Link
+            href={`/product/${cheapestProduct.slug}`}
+            className="orange-button w-full justify-center py-3 lg:w-auto"
+          >
+            En ucuz ürüne git
+            <ArrowUpRight size={17} />
+          </Link>
+        ) : null}
+      </div>
+
+      <div className="mt-6 grid gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Bulunan ürün" value={`${productCount}`} />
+        <StatCard label="Toplam ilan" value={`${listingCount}`} />
+        <StatCard
+          label="En düşük fiyatlı ürün"
+          value={
+            cheapestProduct
+              ? `${cheapestProduct.productName} · ${formatPrice(cheapestProduct.lowestPrice)}`
+              : "—"
+          }
+          accent
+        />
+        <StatCard
+          label="Piyasa aralığı"
+          value={
+            marketRange
+              ? `${formatPrice(marketRange.min)} - ${formatPrice(marketRange.max)}`
+              : "—"
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProductComparisonSection({ products }: { products: ProductSummary[] }) {
+  return (
+    <section className="mb-10">
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+            Ürünler
+          </p>
+          <h2 className="mt-1 text-xl font-black tracking-[-0.03em] sm:text-2xl">
+            Ürün karşılaştırması
+          </h2>
+        </div>
+        <span className="text-sm font-semibold text-black/45">
+          {products.length} ürün
+        </span>
+      </div>
+
+      {products.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {products.map((product) => (
+            <article
+              key={product.productId}
+              className="min-w-0 rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="min-w-0 break-words text-lg font-black leading-6">
+                  {product.productName}
+                </h3>
+                <span
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-black ${getConfidenceClassName(product.confidenceLabel)}`}
+                >
+                  {product.confidenceLabel}
+                </span>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <MiniMetric label="İlan" value={`${product.listingCount}`} />
+                <MiniMetric label="Güven" value={product.confidenceScore === null ? "—" : `${product.confidenceScore}/100`} />
+                <MiniMetric label="Ortalama" value={formatPrice(product.averagePrice)} />
+                <MiniMetric label="En düşük" value={formatPrice(product.lowestPrice)} accent />
+                <MiniMetric label="En yüksek" value={formatPrice(product.highestPrice)} />
+                <MiniMetric label="Son ilan" value={formatDate(product.newestAt)} />
+              </div>
+              <Link
+                href={`/product/${product.slug}`}
+                className="orange-button mt-5 w-full justify-center py-3"
+              >
+                Detaya git
+                <ArrowUpRight size={17} />
+              </Link>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-10 text-center text-sm font-semibold text-black/45">
+          Karşılaştırılabilir ürün bulunamadı.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MiniMetric({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className={`min-w-0 rounded-xl border p-3 ${accent ? "border-[#ff6b00]/20 bg-[#fff7f1]" : "border-black/8 bg-[#fafaf8]"}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.06em] text-black/35">
+        {label}
+      </p>
+      <p className={`mt-1 truncate text-sm font-black ${accent ? "text-[#ff6b00]" : ""}`} title={value}>
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -651,4 +836,89 @@ function StatCard({
       </p>
     </div>
   );
+}
+
+function buildProductSummaries(
+  listings: Listing[],
+  sort: SortOption,
+): ProductSummary[] {
+  const groups = new Map<string, Listing[]>();
+
+  for (const listing of listings) {
+    const key = listing.productId || createProductSlug(listing.productName);
+    groups.set(key, [...(groups.get(key) ?? []), listing]);
+  }
+
+  const summaries = [...groups.entries()].map(([productId, productListings]) => {
+    const prices = productListings
+      .map((listing) => listing.price)
+      .filter((price) => Number.isFinite(price) && price > 0);
+    const total = prices.reduce((sum, price) => sum + price, 0);
+    const averagePrice = prices.length ? Math.round(total / prices.length) : 0;
+    const confidence = calculateProductConfidence(productListings, averagePrice);
+    const newestAt = productListings
+      .map((listing) => listing.createdAt)
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+
+    return {
+      productId,
+      productName: productListings[0]?.productName ?? "Ürün",
+      slug: createProductSlug(productListings[0]?.productName ?? productId),
+      listingCount: productListings.length,
+      averagePrice,
+      lowestPrice: prices.length ? Math.min(...prices) : 0,
+      highestPrice: prices.length ? Math.max(...prices) : 0,
+      newestAt,
+      confidenceScore: confidence.score,
+      confidenceLabel: confidence.label,
+    };
+  });
+
+  return summaries.sort((a, b) => {
+    if (sort === "most-listings") return b.listingCount - a.listingCount;
+    if (sort === "confidence") {
+      return (b.confidenceScore ?? -1) - (a.confidenceScore ?? -1);
+    }
+    if (sort === "newest") {
+      return new Date(b.newestAt).getTime() - new Date(a.newestAt).getTime();
+    }
+    return a.lowestPrice - b.lowestPrice;
+  });
+}
+
+function calculateProductConfidence(
+  listings: Listing[],
+  averagePrice: number,
+): { score: number | null; label: ProductSummary["confidenceLabel"] } {
+  if (listings.length < 3 || !averagePrice) {
+    return { score: null, label: "Veri yetersiz" };
+  }
+
+  const prices = listings.map((listing) => listing.price);
+  const spread = Math.max(...prices) - Math.min(...prices);
+  const spreadRatio = spread / averagePrice;
+  const uniqueDays = new Set(listings.map((listing) => listing.createdAt.slice(0, 10))).size;
+  let score = 48;
+
+  score += Math.min(25, listings.length * 3);
+  score += spreadRatio <= 0.15 ? 22 : spreadRatio <= 0.3 ? 12 : -10;
+  score += uniqueDays >= 2 ? 8 : 0;
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: finalScore,
+    label:
+      finalScore >= 80
+        ? "Yüksek güven"
+        : finalScore >= 60
+          ? "Orta güven"
+          : "Düşük güven",
+  };
+}
+
+function getConfidenceClassName(label: ProductSummary["confidenceLabel"]) {
+  if (label === "Yüksek güven") return "border-green-200 bg-green-50 text-green-700";
+  if (label === "Orta güven") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (label === "Düşük güven") return "border-red-200 bg-red-50 text-red-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
 }
