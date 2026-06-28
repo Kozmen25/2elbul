@@ -19,6 +19,7 @@ export type ListingSyncResult = {
   inactive: number;
   reactivated: number;
   skipped: number;
+  matchedProducts: number;
   errorCount: number;
   errors: string[];
 };
@@ -83,7 +84,12 @@ export async function syncListingsForSource(
     productIds.set(productName, createdProduct.id);
   }
 
-  await applyMatchedProductIds(supabase, listings, productIds, errors);
+  const matchedProducts = await applyMatchedProductIds(
+    supabase,
+    listings,
+    productIds,
+    errors,
+  );
 
   const payload = [];
   for (const listing of listings) {
@@ -127,6 +133,7 @@ export async function syncListingsForSource(
       inactive,
       reactivated,
       skipped,
+      matchedProducts,
       errorCount,
       errors,
     };
@@ -152,6 +159,7 @@ export async function syncListingsForSource(
     inactive,
     reactivated,
     skipped,
+    matchedProducts,
     errorCount,
     errors,
   };
@@ -200,7 +208,12 @@ export async function insertListingsLegacy(
     productIds.set(productName, createdProduct.id);
   }
 
-  await applyMatchedProductIds(supabase, listings, productIds, errors);
+  const matchedProducts = await applyMatchedProductIds(
+    supabase,
+    listings,
+    productIds,
+    errors,
+  );
 
   const urls = listings.map((listing) => listing.url);
   const { data: existingListings, error: duplicateError } = await supabase
@@ -254,6 +267,7 @@ export async function insertListingsLegacy(
     inactive: 0,
     reactivated: 0,
     skipped,
+    matchedProducts,
     errorCount,
     errors,
   };
@@ -265,6 +279,7 @@ async function applyMatchedProductIds(
   productIds: Map<string, string | number>,
   errors: string[],
 ) {
+  const matchedIds = new Set<string>();
   for (const listing of listings) {
     try {
       const product = await findOrCreateMatchedProduct({
@@ -274,6 +289,7 @@ async function applyMatchedProductIds(
         category: listing.category,
       });
       productIds.set(listing.product_name, product.id);
+      matchedIds.add(String(product.id));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Ürün eşleştirilemedi.";
@@ -281,4 +297,5 @@ async function applyMatchedProductIds(
       errors.push(`${listing.product_name}: ${message}`);
     }
   }
+  return matchedIds.size;
 }

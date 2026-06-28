@@ -31,6 +31,7 @@ type ImportedListingResult = {
   imported: number;
   updated: number;
   skipped: number;
+  matchedProducts: number;
 };
 
 type SearchAdapterResult = {
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest) {
   let skipped = 0;
   let imported = 0;
   let updated = 0;
+  let matchedProducts = 0;
   const results = [];
 
   for (const job of jobs) {
@@ -173,6 +175,7 @@ export async function GET(request: NextRequest) {
       imported += importResult.imported;
       updated += importResult.updated;
       skipped += importResult.skipped;
+      matchedProducts += importResult.matchedProducts;
       results.push({
         id: job.id,
         ok: true,
@@ -220,6 +223,7 @@ export async function GET(request: NextRequest) {
     failed,
     imported,
     updated,
+    matchedProducts,
     results,
   });
 }
@@ -318,9 +322,11 @@ async function importAdapterListings(
   let imported = 0;
   let updated = 0;
   let skipped = 0;
+  const matchedProductIds = new Set<string>();
 
   for (const listing of listings) {
     const productId = await ensureProduct(supabase, listing, job.query);
+    matchedProductIds.add(String(productId));
     const externalId = ensureExternalId(job, source, listing);
     const existing = await findExistingListing(supabase, listing, externalId);
     const previousPrice = existing?.price ? Number(existing.price) : null;
@@ -366,7 +372,7 @@ async function importAdapterListings(
   }
 
   if (!listings.length) skipped += 1;
-  return { imported, updated, skipped };
+  return { imported, updated, skipped, matchedProducts: matchedProductIds.size };
 }
 
 async function ensureProduct(

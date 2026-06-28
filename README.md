@@ -124,6 +124,7 @@ supabase/source-bot-publish-mode.sql
 supabase/source-integration-settings.sql
 supabase/bot-scheduler.sql
 supabase/bot-sync.sql
+supabase/migrations/bot-center-monitoring.sql
 supabase/price-history.sql
 supabase/price-alerts.sql
 supabase/search-demand-queue.sql
@@ -1214,6 +1215,35 @@ daily         -> /api/cron/daily
 ```
 
 Bu API rotasi kullanicinin admin olup olmadigini server tarafinda kontrol eder. Admin olmayan kullanicilar 403 alir. `CRON_SECRET` yalnizca server tarafinda okunur ve client tarafina gonderilmez.
+
+### Bot Merkezi Izleme
+
+`/admin/bot-center` sayfasi manuel bot calistirma butonlarinin yaninda canli
+izleme tablosu da gosterir. Tablo `bot_runs` kayitlarindan su alanlari okur:
+
+- Bot adi
+- Durum: `idle`, `running`, `success`, `failed`
+- Son calisma zamani
+- Son basarili calisma zamani
+- Son hata zamani ve hata mesaji
+- Son calismada bulunan, eklenen ve guncellenen ilan sayisi
+- Son calismada eslesen urun sayisi
+- Son calisma suresi
+
+Manuel calistirma `/api/admin/run-bot-task` uzerinden yapilir. Bu endpoint once
+`bot_runs.status = 'running'` kaydi olusturur, gorev bitince kaydi `success` veya
+`failed` olarak gunceller. Hata mesaji ve sayaclar ayni kayit uzerinde saklanir.
+
+Eslesen urun sayisini saklamak icin mevcut kurulumlarda su migration dosyasini
+calistirin:
+
+```text
+supabase/migrations/bot-center-monitoring.sql
+```
+
+Migration yalnizca `bot_runs.matched_product_count` kolonunu ve run type indeksini
+ekler. Kod kolon henuz yoksa fallback ile calismaya devam eder, fakat eslesen
+urun sayisi kalici olarak saklanmaz.
 
 ## Urun Eslestirme Test Paneli
 

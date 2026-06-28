@@ -31,6 +31,7 @@ export type SourceRunResult = {
   inactive: number;
   reactivated: number;
   skipped: number;
+  matchedProducts: number;
   errorCount: number;
   errorMessage: string | null;
 };
@@ -94,6 +95,7 @@ export async function runSourceScrapeBot(
   let inactive = 0;
   let reactivated = 0;
   let skipped = 0;
+  let matchedProducts = 0;
   let errorCount = 0;
   const errors: string[] = [];
   let finalStatus: "success" | "failed" = "success";
@@ -118,6 +120,7 @@ export async function runSourceScrapeBot(
       inactive = result.inactive;
       reactivated = result.reactivated;
       skipped = result.skipped;
+      matchedProducts = result.matchedProducts;
       errorCount = result.errorCount;
       errors.push(...result.errors);
       if (errorCount > 0) finalStatus = "failed";
@@ -138,6 +141,7 @@ export async function runSourceScrapeBot(
     updated_count: updated,
     inactive_count: inactive,
     reactivated_count: reactivated,
+    matched_product_count: matchedProducts,
     skipped_count: skipped,
     error_count: errorCount,
     error_message: errorMessage,
@@ -160,6 +164,7 @@ export async function runSourceScrapeBot(
       updated_count: _updatedCount,
       inactive_count: _inactiveCount,
       reactivated_count: _reactivatedCount,
+      matched_product_count: _matchedProductCount,
       ...legacyRunPayload
     } = runPayload;
     runUpdate = await supabase
@@ -187,6 +192,7 @@ export async function runSourceScrapeBot(
     inactive,
     reactivated,
     skipped,
+    matchedProducts,
     errorCount,
     errorMessage,
   };
@@ -234,6 +240,7 @@ function emptyFailedResult(
     inactive: 0,
     reactivated: 0,
     skipped: 0,
+    matchedProducts: 0,
     errorCount: 1,
     errorMessage,
   };

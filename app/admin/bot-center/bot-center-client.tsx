@@ -4,49 +4,76 @@ import { useState, useTransition } from "react";
 
 type BotTask = "search_queue" | "sources" | "price_alerts" | "daily";
 
+export type BotMonitor = {
+  task: BotTask;
+  botName: string;
+  status: string;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
+  foundCount: number;
+  importedCount: number;
+  updatedCount: number;
+  matchedProductCount: number;
+  skippedCount: number;
+  errorCount: number;
+  durationMs: number | null;
+};
+
 type TaskResult = {
   ok: boolean;
-  task?: string;
+  task?: BotTask;
+  botName?: string;
+  runId?: number | null;
   status?: number;
+  metrics?: {
+    found: number;
+    imported: number;
+    updated: number;
+    matchedProducts: number;
+    skipped: number;
+    errorCount: number;
+  };
   data?: unknown;
   error?: string;
 };
 
-const TASKS: {
-  task: BotTask;
-  title: string;
-  description: string;
-}[] = [
-  {
-    task: "search_queue",
-    title: "Arama Kuyruğunu Çalıştır",
-    description: "Az sonuçlu aramalardan oluşan bot_queue kayıtlarını işler.",
-  },
-  {
-    task: "sources",
-    title: "Kaynak Senkronizasyonunu Çalıştır",
-    description: "Aktif kaynakların planlı veri çekimini başlatır.",
-  },
-  {
-    task: "price_alerts",
-    title: "Fiyat Alarmlarını Kontrol Et",
-    description: "Aktif fiyat alarmlarını güncel ilan fiyatlarına göre kontrol eder.",
-  },
-  {
-    task: "daily",
-    title: "Günlük Cron'u Çalıştır",
-    description: "Günlük cron içinde tanımlı tüm bot görevlerini sırayla tetikler.",
-  },
-];
+const TASK_DESCRIPTIONS: Record<BotTask, string> = {
+  search_queue: "Az sonuçlu aramalardan oluşan bot_queue kayıtlarını işler.",
+  sources: "Aktif kaynakların planlı veri çekimini başlatır.",
+  price_alerts: "Aktif fiyat alarmlarını güncel ilan fiyatlarına göre kontrol eder.",
+  daily: "Günlük cron içindeki tüm bot görevlerini sırayla tetikler.",
+};
 
-export function BotCenterClient() {
+export function BotCenterClient({
+  initialMonitors,
+}: {
+  initialMonitors: BotMonitor[];
+}) {
+  const [monitors, setMonitors] = useState(initialMonitors);
   const [pendingTask, setPendingTask] = useState<BotTask | null>(null);
   const [result, setResult] = useState<TaskResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function runTask(task: BotTask) {
+    const startedAt = new Date().toISOString();
     setPendingTask(task);
     setResult(null);
+    setMonitors((items) =>
+      items.map((item) =>
+        item.task === task
+          ? {
+              ...item,
+              status: "running",
+              lastRunAt: startedAt,
+              lastErrorMessage: null,
+              durationMs: null,
+            }
+          : item,
+      ),
+    );
+
     startTransition(async () => {
       try {
         const response = await fetch("/api/admin/run-bot-task", {
@@ -57,54 +84,159 @@ export function BotCenterClient() {
           body: JSON.stringify({ task }),
         });
         const data = (await response.json().catch(() => null)) as TaskResult | null;
-        setResult(
-          data ?? {
-            ok: false,
-            error: "Bot görevi JSON cevabı döndürmedi.",
-          },
-        );
-      } catch (error) {
-        setResult({
+        const fallback: TaskResult = {
           ok: false,
+          task,
+          error: "Bot görevi JSON cevabı döndürmedi.",
+        };
+        const nextResult = data ?? fallback;
+        setResult(nextResult);
+        updateMonitorFromResult(task, startedAt, nextResult);
+      } catch (error) {
+        const nextResult: TaskResult = {
+          ok: false,
+          task,
           error: error instanceof Error ? error.message : "Bilinmeyen hata",
-        });
+        };
+        setResult(nextResult);
+        updateMonitorFromResult(task, startedAt, nextResult);
       } finally {
         setPendingTask(null);
       }
     });
   }
 
+  function updateMonitorFromResult(
+    task: BotTask,
+    startedAt: string,
+    taskResult: TaskResult,
+  ) {
+    const finishedAt = new Date().toISOString();
+    setMonitors((items) =>
+      items.map((item) => {
+        if (item.task !== task) return item;
+        const metrics = taskResult.metrics;
+        const ok = Boolean(taskResult.ok);
+        return {
+          ...item,
+          botName: taskResult.botName ?? item.botName,
+          status: ok ? "success" : "failed",
+          lastRunAt: startedAt,
+          lastSuccessAt: ok ? finishedAt : item.lastSuccessAt,
+          lastErrorAt: ok ? item.lastErrorAt : finishedAt,
+          lastErrorMessage: ok ? null : taskResult.error ?? extractError(taskResult.data),
+          foundCount: metrics?.found ?? item.foundCount,
+          importedCount: metrics?.imported ?? item.importedCount,
+          updatedCount: metrics?.updated ?? item.updatedCount,
+          matchedProductCount:
+            metrics?.matchedProducts ?? item.matchedProductCount,
+          skippedCount: metrics?.skipped ?? item.skippedCount,
+          errorCount: metrics?.errorCount ?? item.errorCount,
+          durationMs: Math.max(
+            0,
+            new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+          ),
+        };
+      }),
+    );
+  }
+
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        {TASKS.map((item) => (
-          <div
-            key={item.task}
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {monitors.map((monitor) => (
+          <article
+            key={monitor.task}
             className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]"
           >
-            <h2 className="text-lg font-black tracking-[-0.025em]">
-              {item.title}
-            </h2>
-            <p className="mt-2 min-h-12 text-sm leading-6 text-black/50">
-              {item.description}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black tracking-[-0.025em]">
+                  {monitor.botName}
+                </h2>
+                <p className="mt-2 min-h-12 text-sm leading-6 text-black/50">
+                  {TASK_DESCRIPTIONS[monitor.task]}
+                </p>
+              </div>
+              <StatusBadge status={monitor.status} />
+            </div>
             <button
               type="button"
-              onClick={() => runTask(item.task)}
+              onClick={() => runTask(monitor.task)}
               disabled={isPending}
               className="orange-button mt-5 w-full py-3 disabled:opacity-50"
             >
-              {pendingTask === item.task ? "Çalıştırılıyor..." : "Çalıştır"}
+              {pendingTask === monitor.task ? "Çalıştırılıyor..." : "Çalıştır"}
             </button>
-          </div>
+          </article>
         ))}
-      </div>
+      </section>
+
+      <section className="rounded-2xl border border-black/8 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
+        <div className="border-b border-black/7 p-5">
+          <h2 className="text-xl font-black tracking-[-0.03em]">
+            Bot canlılık izleme
+          </h2>
+          <p className="mt-2 text-sm text-black/45">
+            Son çalışma durumları, sayaçlar ve hata mesajları bot_runs kayıtlarından
+            okunur.
+          </p>
+        </div>
+        <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+          <table className="w-full min-w-[1320px] text-left text-sm">
+            <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
+              <tr>
+                <th className="px-4 py-3">Bot adı</th>
+                <th className="px-4 py-3">Durum</th>
+                <th className="px-4 py-3">Son çalışma</th>
+                <th className="px-4 py-3">Son başarı</th>
+                <th className="px-4 py-3">Son hata</th>
+                <th className="px-4 py-3 text-center">Bulunan</th>
+                <th className="px-4 py-3 text-center">Eklenen</th>
+                <th className="px-4 py-3 text-center">Güncellenen</th>
+                <th className="px-4 py-3 text-center">Eşleşen ürün</th>
+                <th className="px-4 py-3 text-center">Süre</th>
+                <th className="px-4 py-3">Son hata mesajı</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monitors.map((monitor) => (
+                <tr key={monitor.task} className="border-t border-black/7 align-top">
+                  <td className="px-4 py-4 font-black">{monitor.botName}</td>
+                  <td className="px-4 py-4">
+                    <StatusBadge status={monitor.status} />
+                  </td>
+                  <td className="px-4 py-4 text-black/55">
+                    {formatDate(monitor.lastRunAt)}
+                  </td>
+                  <td className="px-4 py-4 text-black/55">
+                    {formatDate(monitor.lastSuccessAt)}
+                  </td>
+                  <td className="px-4 py-4 text-black/55">
+                    {formatDate(monitor.lastErrorAt)}
+                  </td>
+                  <CountCell value={monitor.foundCount} />
+                  <CountCell value={monitor.importedCount} accent="green" />
+                  <CountCell value={monitor.updatedCount} accent="blue" />
+                  <CountCell value={monitor.matchedProductCount} accent="orange" />
+                  <td className="px-4 py-4 text-center font-black">
+                    {formatDuration(monitor.durationMs)}
+                  </td>
+                  <td className="max-w-80 break-words px-4 py-4 text-xs leading-5 text-red-700">
+                    {monitor.lastErrorMessage ?? "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
         <h2 className="text-lg font-black tracking-[-0.025em]">Sonuç</h2>
         {!result ? (
           <p className="mt-3 text-sm text-black/45">
-            Henüz bir bot görevi çalıştırılmadı.
+            Henüz bu oturumda bir bot görevi çalıştırılmadı.
           </p>
         ) : (
           <div
@@ -115,7 +247,9 @@ export function BotCenterClient() {
             }`}
           >
             <p className="font-black">
-              {result.ok ? "Bot görevi başarıyla tamamlandı." : "Bot görevi hata verdi."}
+              {result.ok
+                ? "Bot görevi başarıyla tamamlandı."
+                : "Bot görevi hata verdi."}
             </p>
             <pre className="mt-4 max-h-[420px] overflow-auto rounded-xl bg-white/70 p-4 text-xs leading-5 text-black">
               {JSON.stringify(result, null, 2)}
@@ -125,4 +259,74 @@ export function BotCenterClient() {
       </section>
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const className =
+    status === "success" || status === "completed"
+      ? "bg-green-100 text-green-700"
+      : status === "failed" || status === "error"
+        ? "bg-red-100 text-red-700"
+        : status === "running"
+          ? "bg-amber-100 text-amber-800"
+          : "bg-black/7 text-black/45";
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-black ${className}`}>
+      {statusLabel(status)}
+    </span>
+  );
+}
+
+function CountCell({
+  value,
+  accent,
+}: {
+  value: number;
+  accent?: "green" | "blue" | "orange";
+}) {
+  const className =
+    accent === "green"
+      ? "text-green-700"
+      : accent === "blue"
+        ? "text-blue-700"
+        : accent === "orange"
+          ? "text-[#ff6b00]"
+          : "";
+  return (
+    <td className={`px-4 py-4 text-center text-lg font-black ${className}`}>
+      {value.toLocaleString("tr-TR")}
+    </td>
+  );
+}
+
+function statusLabel(status: string) {
+  if (status === "success" || status === "completed") return "success";
+  if (status === "failed" || status === "error") return "failed";
+  if (status === "running") return "running";
+  return "idle";
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("tr-TR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatDuration(value: number | null) {
+  if (value === null) return "-";
+  if (value < 1000) return `${Math.round(value)} ms`;
+  if (value < 60_000) return `${(value / 1000).toFixed(1)} sn`;
+  const minutes = Math.floor(value / 60_000);
+  const seconds = Math.round((value % 60_000) / 1000);
+  return `${minutes} dk ${seconds} sn`;
+}
+
+function extractError(data: unknown) {
+  if (!data || typeof data !== "object") return "Bot görevi başarısız tamamlandı.";
+  const record = data as Record<string, unknown>;
+  return typeof record.error === "string"
+    ? record.error
+    : "Bot görevi başarısız tamamlandı.";
 }

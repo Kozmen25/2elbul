@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
   let updated = 0;
   let failed = 0;
   let noResults = 0;
+  let matchedProducts = 0;
 
   for (const job of jobs) {
     const nextAttempts = Number(job.attempts ?? 0) + 1;
@@ -187,6 +188,7 @@ export async function POST(request: NextRequest) {
 
       imported += importResult.imported;
       updated += importResult.updated;
+      matchedProducts += importResult.matchedProducts;
       results.push({
         id: job.id,
         ok: true,
@@ -228,6 +230,7 @@ export async function POST(request: NextRequest) {
     updated,
     failed,
     noResults,
+    matchedProducts,
     results,
   });
 }
@@ -314,9 +317,11 @@ async function importListings(
 ) {
   let imported = 0;
   let updated = 0;
+  const matchedProductIds = new Set<string>();
 
   for (const listing of listings) {
     const productId = await ensureProduct(supabase, listing, job.query);
+    matchedProductIds.add(String(productId));
     const externalId = listing.externalId || deterministicExternalId(job, listing);
     const existing = await findExistingListing(supabase, listing.sourceName, externalId);
     const payload: Record<string, unknown> = {
@@ -336,7 +341,7 @@ async function importListings(
     else imported += 1;
   }
 
-  return { imported, updated };
+  return { imported, updated, matchedProducts: matchedProductIds.size };
 }
 
 async function ensureProduct(
