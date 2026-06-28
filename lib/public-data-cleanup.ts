@@ -18,23 +18,46 @@ const blockedTerms = [
 const blockedSources = ["test kaynağı", "test kaynagi", "mock adapter", "demo bot"];
 
 export function isPublicDemoProductName(name: string | null | undefined) {
-  const normalized = normalizePublicCleanupText(name);
-  if (!normalized) return false;
-  return blockedTerms.some((term) => normalized.includes(term));
+  return getPublicDemoProductReasons(name).length > 0;
 }
 
 export function isPublicDemoListing(listing: PublicListingLike) {
+  return getPublicDemoListingReasons(listing).length > 0;
+}
+
+export function getPublicDemoProductReasons(name: string | null | undefined) {
+  const normalized = normalizePublicCleanupText(name);
+  if (!normalized) return [];
+
+  return blockedTerms
+    .filter((term) => normalized.includes(term))
+    .map((term) => `Ürün adında "${term}" ifadesi var`);
+}
+
+export function getPublicDemoListingReasons(listing: PublicListingLike) {
   const source = normalizePublicCleanupText(listing.source);
   const url = normalizePublicCleanupText(listing.url);
   const title = normalizePublicCleanupText(listing.title);
   const productName = normalizePublicCleanupText(listing.productName);
+  const reasons: string[] = [];
 
-  if (blockedSources.includes(source)) return true;
-  if (url.includes("demo.2elbul.com")) return true;
+  if (blockedSources.includes(source)) {
+    reasons.push(`Şüpheli kaynak: ${listing.source ?? "bilinmiyor"}`);
+  }
+  if (url.includes("demo.2elbul.com")) {
+    reasons.push("Demo URL alan adı kullanılıyor");
+  }
 
-  return [title, productName].some((value) =>
-    blockedTerms.some((term) => value.includes(term)),
-  );
+  for (const term of blockedTerms) {
+    if (title.includes(term)) {
+      reasons.push(`İlan başlığında "${term}" ifadesi var`);
+    }
+    if (productName.includes(term)) {
+      reasons.push(`Ürün adında "${term}" ifadesi var`);
+    }
+  }
+
+  return [...new Set(reasons)];
 }
 
 function normalizePublicCleanupText(value: string | null | undefined) {

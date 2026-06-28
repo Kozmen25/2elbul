@@ -1454,3 +1454,19 @@ Kontrol edilen public yuzeyler:
 Demo veya test verileri veritabanindan otomatik silinmez. Canliya cikmadan once
 Supabase'de demo kaynakli kayitlar kaldiysa manuel temizlik yapilabilir; admin
 panel ve bot test akislari bu temizlikten etkilenmez.
+
+## Admin Veri Temizligi
+
+`/admin/data-cleanup` sayfasi demo/test kayitlari guvenli dry-run modunda
+listeler.
+
+Sayfa sunlari gosterir:
+
+- Demo/test urun adaylari
+- Demo/test ilan adaylari
+- Supheli kaynak adaylari
+- Her aday icin baslik/ad, kaynak, fiyat, olusturulma tarihi ve sebep
+
+Bu ilk surum veri silmez. Toplu silme ve tekil silme ozellikle eklenmedi; amac
+canliya cikmadan once hangi kayitlarin public filtrelere takildigini admin
+panelden gormektir. Yeni SQL gerekmez.

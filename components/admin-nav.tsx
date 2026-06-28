@@ -6,6 +6,7 @@ import {
   Bot,
   Boxes,
   ChevronLeft,
+  ClipboardCheck,
   DatabaseZap,
   Globe2,
   LayoutDashboard,
@@ -23,6 +24,7 @@ import { useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 
 const links = [
+  { href: "/admin/data-cleanup", label: "Veri Temizligi", icon: ClipboardCheck },
   { href: "/admin", label: "Genel Bakış", icon: LayoutDashboard },
   { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
   { href: "/admin/products", label: "Ürünler", icon: Boxes },
