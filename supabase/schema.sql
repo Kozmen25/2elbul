@@ -26,11 +26,15 @@ create table if not exists public.listings (
   condition text not null,
   image_url text,
   status text not null default 'published'
-    check (status in ('pending', 'published', 'rejected')),
+    check (status in ('pending', 'published', 'rejected', 'active', 'inactive')),
   published_at timestamptz,
   imported_at timestamptz,
   raw_payload jsonb,
   user_id uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  first_seen_at timestamptz,
+  last_seen_at timestamptz,
+  inactive_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -51,6 +55,10 @@ alter table public.listings
   add column if not exists imported_at timestamptz,
   add column if not exists raw_payload jsonb,
   add column if not exists user_id uuid references auth.users(id) on delete set null,
+  add column if not exists updated_at timestamptz default now(),
+  add column if not exists first_seen_at timestamptz,
+  add column if not exists last_seen_at timestamptz,
+  add column if not exists inactive_at timestamptz,
   add column if not exists created_at timestamptz default now();
 
 create table if not exists public.search_events (
@@ -142,7 +150,7 @@ create policy "Listings are publicly readable"
   on public.listings
   for select
   to anon, authenticated
-  using (true);
+  using (status in ('published', 'active'));
 
 drop policy if exists "Anyone can submit listings" on public.listings;
 create policy "Anyone can submit listings"

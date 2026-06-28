@@ -23,4 +23,12 @@ create policy "Public can read price history"
   on public.price_history
   for select
   to anon, authenticated
-  using (true);
+  using (
+    listing_id is null
+    or exists (
+      select 1
+      from public.listings
+      where listings.id = price_history.listing_id
+        and listings.status in ('published', 'active')
+    )
+  );

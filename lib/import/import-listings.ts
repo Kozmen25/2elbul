@@ -48,6 +48,7 @@ export async function importListings(
           url: listing.url,
           condition: listing.condition,
           image_url: listing.imageUrl,
+          status: "published",
           published_at: listing.publishedAt,
           imported_at: new Date().toISOString(),
           raw_payload: listing.rawPayload,

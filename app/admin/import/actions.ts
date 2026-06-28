@@ -3,6 +3,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireAdminUser } from "@/lib/admin";
 import { normalizeImageUrls } from "@/lib/bots/image-urls";
+import { createListingExternalId } from "@/lib/bots/listing-sync";
 import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 
 export type ImportError = {
@@ -151,6 +152,7 @@ export async function importAdminListings(
       .from("listings")
       .insert({
         product_id: productId,
+        external_id: createListingExternalId(listing.url),
         title: listing.title,
         price: listing.price,
         city: listing.city,
@@ -158,6 +160,9 @@ export async function importAdminListings(
         url: listing.url,
         condition: listing.condition,
         image_url: listing.imageUrl,
+        status: "published",
+        imported_at: new Date().toISOString(),
+        raw_payload: rawRecord,
       });
 
     if (listingInsertError) {

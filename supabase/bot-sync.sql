@@ -15,6 +15,23 @@ create index if not exists price_history_product_recorded_at_idx
 create index if not exists price_history_listing_recorded_at_idx
   on public.price_history(listing_id, recorded_at);
 
+alter table public.price_history enable row level security;
+
+drop policy if exists "Public can read price history" on public.price_history;
+create policy "Public can read price history"
+  on public.price_history
+  for select
+  to anon, authenticated
+  using (
+    listing_id is null
+    or exists (
+      select 1
+      from public.listings
+      where listings.id = price_history.listing_id
+        and listings.status in ('published', 'active')
+    )
+  );
+
 alter table public.listings
   add column if not exists source_id bigint references public.sources(id) on delete set null,
   add column if not exists description text null,
@@ -29,7 +46,9 @@ alter table public.listings
   add column if not exists source_type text null,
   add column if not exists category text null,
   add column if not exists updated_at timestamptz not null default now(),
-  add column if not exists last_seen_at timestamptz null;
+  add column if not exists first_seen_at timestamptz null,
+  add column if not exists last_seen_at timestamptz null,
+  add column if not exists inactive_at timestamptz null;
 
 alter table public.listings
   drop constraint if exists listings_status_check;
@@ -248,6 +267,7 @@ begin
     category = item.category,
     raw_payload = item.raw_payload,
     status = case when listing.status = 'inactive' then 'active' else listing.status end,
+    inactive_at = case when listing.status = 'inactive' then null else listing.inactive_at end,
     last_seen_at = now()
   from tmp_source_sync_items item
   where listing.id = item.matched_listing_id
@@ -294,13 +314,13 @@ begin
       source_id, external_id, product_id, title, price, city, source, url,
       condition, image_url, description, old_price, brand, model, storage, ram,
       color, warranty, seller_name, source_type, category, status, raw_payload,
-      imported_at, last_seen_at
+      imported_at, first_seen_at, last_seen_at
     )
     select
       p_source_id, external_id, product_id, title, price, city, source, url,
       condition, image_url, description, old_price, brand, model, storage, ram,
       color, warranty, seller_name, source_type, category, status, raw_payload,
-      now(), now()
+      now(), now(), now()
     from tmp_source_sync_items
     where matched_listing_id is null
     on conflict do nothing
@@ -327,7 +347,9 @@ begin
 
   with inactive_rows as (
     update public.listings listing
-    set status = 'inactive'
+    set
+      status = 'inactive',
+      inactive_at = coalesce(listing.inactive_at, now())
     where listing.source_id = p_source_id
       and listing.status <> 'inactive'
       and not exists (
