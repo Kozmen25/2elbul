@@ -54,6 +54,8 @@ export async function safeFetchHtml(
     timeoutMs?: number;
     userAgent?: string;
     maxBytes?: number;
+    retries?: number;
+    retryDelayMs?: number;
   } = {},
 ) {
   const parsedUrl = new URL(url);
@@ -63,57 +65,66 @@ export async function safeFetchHtml(
 
   const timeoutMs = options.timeoutMs ?? 15_000;
   const maxBytes = options.maxBytes ?? 5_000_000;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const retries = options.retries ?? 1;
+  const retryDelayMs = options.retryDelayMs ?? 700;
+  let lastError: unknown = null;
 
-  try {
-    const response = await fetch(parsedUrl, {
-      cache: "no-store",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.7",
-        "User-Agent": options.userAgent ?? DEFAULT_USER_AGENT,
-      },
-    });
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-      throw new Error(`Kaynak HTTP ${response.status} yanıtı verdi.`);
+    try {
+      const response = await fetch(parsedUrl, {
+        cache: "no-store",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.7",
+          "User-Agent": options.userAgent ?? DEFAULT_USER_AGENT,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Kaynak HTTP ${response.status} yanıtı verdi.`);
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (
+        contentType &&
+        !contentType.includes("text/html") &&
+        !contentType.includes("application/xhtml+xml")
+      ) {
+        throw new Error(`Beklenmeyen içerik türü: ${contentType}`);
+      }
+
+      const contentLength = Number(response.headers.get("content-length"));
+      if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+        throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
+      }
+
+      const html = await response.text();
+      if (Buffer.byteLength(html, "utf8") > maxBytes) {
+        throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
+      }
+
+      return {
+        html,
+        finalUrl: response.url || parsedUrl.toString(),
+        status: response.status,
+      };
+    } catch (error) {
+      lastError =
+        error instanceof Error && error.name === "AbortError"
+          ? new Error(`Kaynak isteği ${timeoutMs} ms içinde tamamlanamadı.`)
+          : error;
+      if (attempt < retries) await sleep(retryDelayMs * (attempt + 1));
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (
-      contentType &&
-      !contentType.includes("text/html") &&
-      !contentType.includes("application/xhtml+xml")
-    ) {
-      throw new Error(`Beklenmeyen içerik türü: ${contentType}`);
-    }
-
-    const contentLength = Number(response.headers.get("content-length"));
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-      throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
-    }
-
-    const html = await response.text();
-    if (Buffer.byteLength(html, "utf8") > maxBytes) {
-      throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
-    }
-
-    return {
-      html,
-      finalUrl: response.url || parsedUrl.toString(),
-      status: response.status,
-    };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Kaynak isteği ${timeoutMs} ms içinde tamamlanamadı.`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw lastError;
 }
 
 export function extractImageUrl(
@@ -132,6 +143,7 @@ export function extractImageUrl(
   const value =
     element.getAttribute("data-zoom-image") ||
     element.getAttribute("data-large-image") ||
+    element.getAttribute("data-original") ||
     element.getAttribute("data-src") ||
     element.getAttribute("data-lazy-src") ||
     srcsetCandidate ||
@@ -154,6 +166,27 @@ export function extractImageUrls(
     }
   }
   return [...urls];
+}
+
+export async function validateImageUrls(
+  urls: string[],
+  options: { timeoutMs?: number; delayMs?: number; maxImages?: number } = {},
+) {
+  const valid: string[] = [];
+  const seen = new Set<string>();
+  const maxImages = options.maxImages ?? 8;
+
+  for (const url of urls) {
+    if (valid.length >= maxImages) break;
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    if (await isValidImageUrl(url, options.timeoutMs ?? 5000)) {
+      valid.push(url);
+    }
+    if (options.delayMs) await sleep(options.delayMs);
+  }
+
+  return valid;
 }
 
 export function normalizePrice(text: unknown) {
@@ -185,10 +218,7 @@ export function normalizeCondition(
   return "İkinci El";
 }
 
-export function elementText(
-  root: HtmlRootLike,
-  selectors: string[],
-) {
+export function elementText(root: HtmlRootLike, selectors: string[]) {
   for (const selector of selectors) {
     const value = root.querySelector(selector)?.textContent?.trim();
     if (value) return value;
@@ -206,4 +236,32 @@ export function elementAttribute(
     if (value) return value;
   }
   return "";
+}
+
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function isValidImageUrl(url: string, timeoutMs: number) {
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(parsed, {
+        method: "HEAD",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "User-Agent": DEFAULT_USER_AGENT },
+      });
+      if (!response.ok) return false;
+      const contentType = response.headers.get("content-type") ?? "";
+      return contentType.toLowerCase().startsWith("image/");
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    return false;
+  }
 }

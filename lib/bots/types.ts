@@ -1,3 +1,5 @@
+import type { HtmlRootLike } from "@/lib/bots/html-utils";
+
 export type SourceIntegrationMode = "api" | "scrape";
 
 export type SourceIntegrationConfig = {
@@ -16,6 +18,7 @@ export type BotAdapterListing = {
   product_name: string;
   title: string;
   price: number;
+  old_price?: number | null;
   city: string;
   source: string;
   url: string;
@@ -23,6 +26,15 @@ export type BotAdapterListing = {
   description?: string | null;
   image_url: string | null;
   image_urls: string[];
+  brand?: string | null;
+  model?: string | null;
+  storage?: string | null;
+  ram?: string | null;
+  color?: string | null;
+  warranty?: string | null;
+  seller_name?: string | null;
+  source_type?: string | null;
+  category?: string | null;
   status: "pending" | "published" | "active" | "inactive";
 };
 
@@ -37,4 +49,3 @@ export type SourceConnector = {
     config: SourceIntegrationConfig,
   ) => Promise<BotAdapterListing[]>;
 };
-import type { HtmlRootLike } from "@/lib/bots/html-utils";

@@ -1,19 +1,26 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
+import { Header } from "@/components/header";
+import { MaintenanceGate } from "@/components/maintenance-gate";
+import { getSiteGeneralSettings } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: "2ElBul | İkinci Elin Doğru Fiyatı",
-  description: "İkinci el ürünleri karşılaştır, doğru fiyatı bul ve ücretsiz ilan ver.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const general = await getSiteGeneralSettings();
+  return {
+    title: `${general.siteName} | İkinci Elin Doğru Fiyatı`,
+    description: general.siteDescription,
+  };
+}
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="tr">
       <body>
         <Header />
-        <main>{children}</main>
+        <main>
+          <MaintenanceGate>{children}</MaintenanceGate>
+        </main>
         <Footer />
       </body>
     </html>

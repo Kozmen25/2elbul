@@ -5,6 +5,7 @@ import type {
   ListingSource,
 } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import type { PriceHistoryRecord } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { createSupabaseClient } from "@/lib/supabase";
 
@@ -17,6 +18,7 @@ export type ProductRecord = {
 export type ProductDetailData = {
   product: ProductRecord;
   listings: Listing[];
+  priceHistory: PriceHistoryRecord[];
 };
 
 type ProductRow = {
@@ -99,7 +101,7 @@ export async function getProductDetail(
       "Supabase product listings query failed:",
       listingsResult.error,
     );
-    return { product, listings: [] };
+    return { product, listings: [], priceHistory: [] };
   }
 
   const listings = (listingsResult.data ?? [])
@@ -117,5 +119,36 @@ export async function getProductDetail(
     }))
     .filter((listing) => Number.isFinite(listing.price));
 
-  return { product, listings };
+  const historyResult = await supabase
+    .from("price_history")
+    .select("price, recorded_at")
+    .eq("product_id", product.id)
+    .order("recorded_at", { ascending: true })
+    .limit(2000);
+
+  if (historyResult.error && !isMissingPriceHistoryTable(historyResult.error)) {
+    console.error("Supabase product price history query failed:", historyResult.error);
+  }
+
+  const priceHistory = historyResult.error
+    ? []
+    : (historyResult.data ?? [])
+        .map((record) => ({
+          price: Number(record.price),
+          recordedAt: String(record.recorded_at),
+        }))
+        .filter((record) => Number.isFinite(record.price));
+
+  return { product, listings, priceHistory };
+}
+
+function isMissingPriceHistoryTable(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "42P01" ||
+    record.code === "PGRST205" ||
+    text.includes("price_history")
+  );
 }

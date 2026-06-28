@@ -1,4 +1,5 @@
 import type { BotAdapterListing } from "@/lib/bots/types";
+import { createListingExternalId } from "@/lib/bots/listing-sync";
 
 type DemoProduct = {
   name: string;
@@ -114,13 +115,16 @@ export function createDemoListings(
     const condition = getCondition(sourceName);
     const detail = randomItem(product.titleDetails);
 
+    const url = `https://demo.2elbul.com/${sourceSlug}/${runToken}-${index + 1}`;
+
     return {
+      external_id: createListingExternalId(url),
       product_name: product.name,
       title: `${product.name} ${detail} ${condition}`,
       price: randomPrice(product.minPrice, product.maxPrice),
       city: randomItem(cities),
       source: sourceName,
-      url: `https://demo.2elbul.com/${sourceSlug}/${runToken}-${index + 1}`,
+      url,
       condition,
       image_url: product.imageUrls[0] ?? null,
       image_urls: product.imageUrls,

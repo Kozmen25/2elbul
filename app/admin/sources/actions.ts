@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
-import { runSourceScrapeBot } from "@/lib/bots/source-runner";
+import {
+  insertListingsLegacy,
+  normalizeSyncStatus,
+  syncListingsForSource,
+} from "@/lib/bots/listing-sync";
+import type { BotAdapterListing } from "@/lib/bots/types";
+import { isSupportedScrapeSource, runSourceScrapeBot } from "@/lib/bots/source-runner";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createDemoListings } from "./demo-data";
 
@@ -256,92 +262,37 @@ export async function runDemoBot(
       : "pending",
   );
   let imported = 0;
+  let updated = 0;
+  let inactive = 0;
+  let reactivated = 0;
   let skipped = 0;
   let errorCount = 0;
   const errors: string[] = [];
 
   try {
-    const productNames = [
-      ...new Set(listings.map((listing) => listing.product_name)),
-    ];
-    const { data: existingProducts, error: productLookupError } = await supabase
-      .from("products")
-      .select("id, name")
-      .in("name", productNames);
+    const syncListings: BotAdapterListing[] = listings.map((listing) => ({
+      ...listing,
+      status:
+        listing.status === "pending"
+          ? "pending"
+          : (normalizeSyncStatus(listing.status) as BotAdapterListing["status"]),
+    }));
 
-    if (productLookupError) throw productLookupError;
-
-    const productIds = new Map(
-      (existingProducts ?? []).map((product) => [
-        String(product.name),
-        product.id as string | number,
-      ]),
-    );
-
-    for (const productName of productNames) {
-      if (productIds.has(productName)) continue;
-      const { data: createdProduct, error: productInsertError } = await supabase
-        .from("products")
-        .insert({ name: productName })
-        .select("id")
-        .single();
-
-      if (productInsertError || !createdProduct) {
-        const message =
-          productInsertError?.message ?? `${productName} oluşturulamadı.`;
-        console.error("Demo bot product insert failed:", productInsertError);
-        errors.push(`${productName}: ${message}`);
-        continue;
-      }
-      productIds.set(productName, createdProduct.id);
+    let result;
+    try {
+      result = await syncListingsForSource(supabase, sourceId, syncListings);
+    } catch (syncError) {
+      console.warn("Demo bot sync RPC unavailable, falling back:", syncError);
+      result = await insertListingsLegacy(supabase, syncListings);
     }
 
-    const urls = listings.map((listing) => listing.url);
-    const { data: existingListings, error: duplicateError } = await supabase
-      .from("listings")
-      .select("url")
-      .in("url", urls);
-
-    if (duplicateError) throw duplicateError;
-    const existingUrls = new Set(
-      (existingListings ?? []).map((listing) => String(listing.url)),
-    );
-
-    for (const listing of listings) {
-      if (existingUrls.has(listing.url)) {
-        skipped += 1;
-        continue;
-      }
-
-      const productId = productIds.get(listing.product_name);
-      if (!productId) {
-        errorCount += 1;
-        errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
-        continue;
-      }
-
-      const { error: listingInsertError } = await supabase
-        .from("listings")
-        .insert({
-          product_id: productId,
-          title: listing.title,
-          price: listing.price,
-          city: listing.city,
-          source: listing.source,
-          url: listing.url,
-          condition: listing.condition,
-          image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-          status: listing.status,
-        });
-
-      if (listingInsertError) {
-        console.error("Demo bot listing insert failed:", listingInsertError);
-        errorCount += 1;
-        errors.push(`${listing.title}: ${listingInsertError.message}`);
-        continue;
-      }
-      imported += 1;
-    }
+    imported = result.imported;
+    updated = result.updated;
+    inactive = result.inactive;
+    reactivated = result.reactivated;
+    skipped = result.skipped;
+    errorCount = result.errorCount;
+    errors.push(...result.errors);
   } catch (error) {
     console.error("Demo bot execution failed:", error);
     errorCount += Math.max(listings.length - imported - skipped, 1);
@@ -358,6 +309,9 @@ export async function runDemoBot(
       status: finalStatus,
       found_count: listings.length,
       imported_count: imported,
+      updated_count: updated,
+      inactive_count: inactive,
+      reactivated_count: reactivated,
       skipped_count: skipped,
       error_count: errorCount,
       error_message: errorMessage,
@@ -414,8 +368,8 @@ export async function runDemoBot(
     ok: finalStatus === "success",
     message:
       finalStatus === "success"
-        ? `Test çekimi tamamlandı: ${imported} eklendi, ${skipped} atlandı.`
-        : `Test çekimi hatayla tamamlandı: ${imported} eklendi, ${skipped} atlandı, ${errorCount} hata.`,
+        ? `Test çekimi tamamlandı: ${imported} yeni, ${updated} güncellendi, ${skipped} atlandı.`
+        : `Test çekimi hatayla tamamlandı: ${imported} yeni, ${updated} güncellendi, ${skipped} atlandı, ${errorCount} hata.`,
   };
 }
 
@@ -472,11 +426,11 @@ export async function runRealBot(
     };
   }
 
-  if (!["easycep", "getmobil"].includes(source.slug)) {
+  if (!isSupportedScrapeSource(source.slug)) {
     return {
       ok: false,
       message:
-        "Gerçek test çekimi şu anda yalnızca EasyCep ve Getmobil için hazır.",
+        "Gerçek test çekimi bu kaynak için henüz hazır değil.",
     };
   }
 

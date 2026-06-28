@@ -5,6 +5,7 @@ import type {
   ListingSource,
 } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import { calculateMarketStats } from "@/lib/price-insights";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SearchResultsClient } from "./search-results-client";
@@ -148,27 +149,24 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     }
   }
 
-  const productTotals = listings.reduce<
-    Record<string, { total: number; count: number }>
-  >((totals, listing) => {
-    const current = totals[listing.productName] ?? { total: 0, count: 0 };
-    totals[listing.productName] = {
-      total: current.total + listing.price,
-      count: current.count + 1,
-    };
+  const productTotals = listings.reduce<Record<string, number[]>>((totals, listing) => {
+    totals[listing.productName] = [
+      ...(totals[listing.productName] ?? []),
+      listing.price,
+    ];
     return totals;
   }, {});
 
   const productAverages = Object.fromEntries(
-    Object.entries(productTotals).map(([productName, value]) => [
+    Object.entries(productTotals).map(([productName, prices]) => [
       productName,
-      value.total / value.count,
+      calculateMarketStats(prices)?.marketValue ?? prices[0] ?? 0,
     ]),
   );
   const productCounts = Object.fromEntries(
-    Object.entries(productTotals).map(([productName, value]) => [
+    Object.entries(productTotals).map(([productName, prices]) => [
       productName,
-      value.count,
+      prices.length,
     ]),
   );
 

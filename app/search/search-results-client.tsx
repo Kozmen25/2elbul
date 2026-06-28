@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { LISTING_CONDITIONS, type Listing } from "@/lib/listings";
+import { calculateOpportunityRating } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { recordSearch } from "./actions";
 
@@ -29,16 +30,6 @@ type SearchResultsClientProps = {
   loadError?: string;
   favoriteListingIds: string[];
   isAuthenticated: boolean;
-};
-
-type PriceRating = {
-  label:
-    | "Çok ucuz, dikkat et"
-    | "İyi fırsat"
-    | "Normal fiyat"
-    | "Pahalı"
-    | "Karşılaştırma için daha fazla veri gerekli";
-  className: string;
 };
 
 const formatPrice = (price: number) =>
@@ -403,45 +394,6 @@ function ConditionBadge({ condition }: { condition: string }) {
   );
 }
 
-function getPriceRating(
-  price: number,
-  averagePrice: number,
-  listingCount: number,
-): PriceRating {
-  if (listingCount <= 1) {
-    return {
-      label: "Karşılaştırma için daha fazla veri gerekli",
-      className: "border-blue-200 bg-blue-50 text-blue-700",
-    };
-  }
-
-  if (price < averagePrice * 0.8) {
-    return {
-      label: "Çok ucuz, dikkat et",
-      className: "border-red-200 bg-red-50 text-red-700",
-    };
-  }
-
-  if (price < averagePrice * 0.9) {
-    return {
-      label: "İyi fırsat",
-      className: "border-green-200 bg-green-50 text-green-700",
-    };
-  }
-
-  if (price > averagePrice * 1.15) {
-    return {
-      label: "Pahalı",
-      className: "border-amber-200 bg-amber-50 text-amber-700",
-    };
-  }
-
-  return {
-    label: "Normal fiyat",
-    className: "border-slate-200 bg-slate-50 text-slate-600",
-  };
-}
-
 function PriceRatingBadge({
   price,
   averagePrice,
@@ -451,7 +403,8 @@ function PriceRatingBadge({
   averagePrice: number;
   listingCount: number;
 }) {
-  const rating = getPriceRating(price, averagePrice, listingCount);
+  const rating = calculateOpportunityRating(price, averagePrice, listingCount);
+  const stars = "★★★★★".slice(0, rating.stars);
 
   return (
     <div className="mt-3">
@@ -459,11 +412,16 @@ function PriceRatingBadge({
         className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-bold ${rating.className}`}
         title={
           listingCount > 1
-            ? `Ürün ortalaması: ${formatPrice(Math.round(averagePrice))}`
+            ? `Piyasa değeri: ${formatPrice(Math.round(averagePrice))}`
             : "Karşılaştırılabilir tek ilan var"
         }
       >
-        {rating.label}
+        {stars} {rating.label}
+        {listingCount > 1 && rating.percent !== 0
+          ? ` · %${Math.abs(rating.percent)} ${
+              rating.percent > 0 ? "ucuz" : "pahalı"
+            }`
+          : ""}
       </span>
     </div>
   );

@@ -1,10 +1,24 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-const adminEmails = new Set([
+const DEFAULT_ADMIN_EMAILS = [
   "kozmen25@gmail.com",
   "ozmebomer9@gmail.com",
-]);
+];
+
+function parseAdminEmails() {
+  const raw = process.env.ADMIN_EMAILS?.trim();
+  if (!raw) return DEFAULT_ADMIN_EMAILS;
+
+  const parsed = raw
+    .split(",")
+    .map((email) => email.trim().toLocaleLowerCase("en-US"))
+    .filter(Boolean);
+
+  return parsed.length ? parsed : DEFAULT_ADMIN_EMAILS;
+}
+
+const adminEmails = new Set(parseAdminEmails());
 
 export function isAdminEmail(email: string | null | undefined) {
   if (!email) return false;

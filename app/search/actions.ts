@@ -8,20 +8,19 @@ export async function recordSearch(query: string) {
 
   if (!supabase || !normalizedQuery) return;
 
+  const searchPattern = `%${normalizedQuery}%`;
   const { data: products, error: productError } = await supabase
     .from("products")
-    .select("id, name");
+    .select("id, name")
+    .ilike("name", searchPattern)
+    .limit(1);
 
   if (productError) {
     console.error("Supabase search tracking product query failed:", productError);
     return;
   }
 
-  const normalizedSearch = normalizedQuery.toLocaleLowerCase("tr-TR");
-  const product = (products ?? []).find((item) =>
-    String(item.name).toLocaleLowerCase("tr-TR").includes(normalizedSearch),
-  );
-
+  const product = products?.[0];
   if (!product) return;
 
   const { error } = await supabase.from("search_events").insert({

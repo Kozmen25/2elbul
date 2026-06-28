@@ -13,6 +13,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
 import { ListingImage } from "@/components/listing-image";
+import { PriceAlertsList } from "@/components/price-alerts-list";
+import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const formatPrice = (price: number) =>
@@ -44,16 +46,11 @@ export default async function AccountPage() {
       .eq("user_id", data.user.id),
     supabase
       .from("price_alerts")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", data.user.id),
-    supabase
-      .from("listings")
-      .select(
-        "id, product_id, title, price, city, source, url, condition, image_url, created_at",
-      )
+      .select("id, target_price, created_at, product_id, products(name)")
       .eq("user_id", data.user.id)
-      .order("created_at", { ascending: false })
-      .limit(6),
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+    fetchUserListings(supabase, data.user.id),
   ]);
 
   if (favoritesResult.error) {
@@ -67,8 +64,17 @@ export default async function AccountPage() {
   }
 
   const favoriteCount = favoritesResult.count ?? 0;
-  const alertCount = alertsResult.count ?? 0;
+  const alertRows = alertsResult.data ?? [];
+  const alertCount = alertRows.length;
   const listings = listingsResult.data ?? [];
+  const priceAlerts = alertRows.map((alert) => ({
+    id: Number(alert.id),
+    productName: String(
+      (alert.products as { name?: string } | null)?.name ?? "Ürün",
+    ),
+    targetPrice: Number(alert.target_price),
+    createdAt: String(alert.created_at),
+  }));
 
   return (
     <section className="min-h-[calc(100vh-145px)] bg-[#fafaf8] py-10 sm:py-14">
@@ -155,9 +161,20 @@ export default async function AccountPage() {
                     alt={String(listing.title)}
                   />
                   <div className="mt-4 flex items-start justify-between gap-3">
-                    <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-black/50">
-                      {String(listing.condition)}
-                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-black/50">
+                        {String(listing.condition)}
+                      </span>
+                      {"status" in listing && listing.status ? (
+                        <span
+                          className={`rounded-full px-3 py-1.5 text-xs font-bold ${listingStatusClass(
+                            String(listing.status),
+                          )}`}
+                        >
+                          {listingStatusLabel(String(listing.status))}
+                        </span>
+                      ) : null}
+                    </div>
                     <span className="text-xs font-semibold text-black/35">
                       {formatDate(String(listing.created_at))}
                     </span>
@@ -195,9 +212,66 @@ export default async function AccountPage() {
             </div>
           )}
         </section>
+
+        <section className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-9">
+          <p className="text-sm font-bold text-[#ff6b00]">Fiyat alarmları</p>
+          <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
+            Takip ettiğim ürünler
+          </h2>
+          <p className="mt-2 text-sm text-black/45">
+            Ürün sayfasından hedef fiyat belirleyerek yeni alarm ekleyebilirsiniz.
+          </p>
+          <PriceAlertsList alerts={priceAlerts} />
+        </section>
       </div>
     </section>
   );
+}
+
+async function fetchUserListings(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
+  userId: string,
+) {
+  const withStatus = await supabase
+    .from("listings")
+    .select(
+      "id, product_id, title, price, city, source, url, condition, image_url, status, created_at",
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  if (!withStatus.error) return withStatus;
+
+  if (isMissingStatusColumn(withStatus.error)) {
+    return supabase
+      .from("listings")
+      .select(
+        "id, product_id, title, price, city, source, url, condition, image_url, created_at",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(6);
+  }
+
+  return withStatus;
+}
+
+function listingStatusLabel(status: string) {
+  if (status === "published" || status === "active") return "Yayında";
+  if (status === "pending") return "Onay bekliyor";
+  if (status === "rejected") return "Reddedildi";
+  if (status === "inactive") return "Pasif";
+  return status;
+}
+
+function listingStatusClass(status: string) {
+  if (status === "published" || status === "active") {
+    return "bg-green-100 text-green-700";
+  }
+  if (status === "pending") return "bg-amber-100 text-amber-700";
+  if (status === "rejected") return "bg-red-100 text-red-700";
+  return "bg-black/7 text-black/55";
 }
 
 function InfoCard({

@@ -342,8 +342,9 @@ Admin kullanımı:
 
 Genel kaynak altyapısı resmi API, izinli veri sağlayıcı, webhook veya ayrı bir
 bot worker çıktısının güvenli şekilde kaydedilmesi için yönetim ve kayıt
-katmanını hazırlar. Buna ek olarak EasyCep ve Getmobil için aşağıda açıklanan
-tek sayfalık, en fazla 10 ürünle sınırlı yönetici test çekimi bulunur.
+katmanını hazırlar. Buna ek olarak EasyCep, Getmobil, Hepsiburada Yenilenmiş,
+Teknosa Yenilenmiş, MediaMarkt Yenilenmiş ve Yenilenmiş Market için aşağıda
+açıklanan tek sayfalık, en fazla 10 ürünle sınırlı yönetici test çekimi bulunur.
 
 ### Gerçek Kaynak Connector Altyapısı
 
@@ -356,9 +357,11 @@ Her kaynak adaptörü ilanları şu ortak formatta döndürmelidir:
 
 ```json
 {
+  "external_id": "provider-product-123",
   "product_name": "iPhone 13",
   "title": "iPhone 13 128GB Yenilenmiş",
   "price": 21999,
+  "old_price": 23999,
   "city": "İstanbul",
   "source": "EasyCep",
   "url": "https://easycep.com/urun/ornek",
@@ -368,6 +371,15 @@ Her kaynak adaptörü ilanları şu ortak formatta döndürmelidir:
     "https://cdn.example.com/main.jpg",
     "https://cdn.example.com/side.jpg"
   ],
+  "brand": "Apple",
+  "model": "iPhone 13",
+  "storage": "128GB",
+  "ram": null,
+  "color": "Siyah",
+  "warranty": "12 ay",
+  "seller_name": "EasyCep",
+  "source_type": "refurbished_retailer",
+  "category": "telefon",
   "status": "pending"
 }
 ```
@@ -381,18 +393,27 @@ geçerli HTTP/HTTPS adresini kaydeder. Galeri listesi harici importlarda
 Gerçek HTML görsel ayrıştırma altyapısı:
 
 - `lib/bots/html-utils.ts`: `absoluteUrl`, `extractImageUrl`,
-  `extractImageUrls`, `normalizePrice` ve `normalizeCondition`
+  `extractImageUrls`, `validateImageUrls`, `safeFetchHtml`, `normalizePrice` ve
+  `normalizeCondition`
 - `lib/bots/adapters/easycep.ts`: EasyCep ürün adı, fiyat, ürün linki, ana
   görsel ve galeri parser iskeleti
 - `lib/bots/adapters/getmobil.ts`: Getmobil ürün adı, fiyat, ürün linki ve
   galeri parser iskeleti
+- `lib/bots/adapters/commerce.ts`: Hepsiburada Yenilenmiş, Teknosa Yenilenmiş,
+  MediaMarkt Yenilenmiş ve Yenilenmiş Market için ortak JSON-LD / DOM ürün
+  parser'ı
+- `lib/bots/adapters/hepsiburada-yenilenmis.ts`
+- `lib/bots/adapters/teknosa-yenilenmis.ts`
+- `lib/bots/adapters/mediamarkt-yenilenmis.ts`
+- `lib/bots/adapters/yenilenmis-market.ts`
 
-EasyCep ve Getmobil kategori adaptörleri Cheerio ile sunucu tarafında çalışır.
-Önce sayfadaki Schema.org `ItemList` / JSON-LD ürün verisini okur, gerektiğinde
-DOM ürün şemasına düşer. Relative `src`, `data-src`, `srcset`, lazy-load ve Open
-Graph görselleri mutlak URL'ye çevrilir. Kaynak sayfada geçerli görsel varsa bu
-URL korunur; yalnızca görsel yoksa kartların mevcut ürün fallback SVG'si devreye
-girer.
+Gerçek kaynak adaptörleri Cheerio ile sunucu tarafında çalışır. Önce sayfadaki
+Schema.org `Product`, `ProductGroup` ve `ItemList` / JSON-LD ürün verisini okur,
+gerektiğinde DOM ürün kartlarına düşer. Relative `src`, `data-src`, `srcset`,
+lazy-load ve Open Graph görselleri mutlak URL'ye çevrilir. Görsel URL'leri
+HEAD isteğiyle doğrulanır; 404 veya `image/*` olmayan adresler kaydedilmez.
+Telefon, tablet, akıllı saat, bilgisayar, ekran kartı ve oyun konsolu
+kategorileri ürün başlığından otomatik sınıflandırılır.
 
 Gerçek entegrasyon eklerken:
 
@@ -423,9 +444,14 @@ ekler:
 
 `/api/cron/run-sources` rotası aktif, `cron_enabled = true`,
 `integration_type = 'scrape'` ve gerçek adaptörü hazır olan kaynakları
-çalıştırır. Şimdilik EasyCep ve Getmobil desteklenir. Her çalışma `bot_runs`
-tablosuna yazılır, `fetch_limit` kadar ürünle sınırlanır ve aynı URL daha önce
-eklenmişse atlanır.
+çalıştırır. Desteklenen scrape kaynakları: EasyCep, Getmobil, Yenilenmiş
+Market, Teknosa Yenilenmiş, Hepsiburada Yenilenmiş ve MediaMarkt Yenilenmiş.
+Her kaynağın admin panelindeki `cron_schedule` değeri, son çalışmadan bu
+yana geçen süre ile karşılaştırılır; aralık dolmadan kaynak atlanır. Vercel
+Cron günde iki kez tetiklense bile saatlik planlı kaynaklar yalnızca aralık
+dolduğunda çalışır. Her çalışma `bot_runs` tablosuna yazılır, `fetch_limit`
+kadar ürünle sınırlanır ve aynı URL daha önce eklenmişse güncellenir veya
+atlanır.
 
 Cron rotası public kullanıma kapalıdır. İsteklerde aşağıdaki yöntemlerden
 biriyle `CRON_SECRET` gönderilmelidir:
@@ -496,29 +522,76 @@ Senkronizasyon RPC fonksiyonu tek transaction içinde çalışır ve kaynak bazl
 advisory lock kullanır. `source_id + external_id` ve `source_id + url` unique
 indexleri aynı anda çalışan botlarda duplicate kayıt oluşmasını engeller.
 
-### EasyCep ve Getmobil Gerçek Test Çekimi
+### Fiyat Geçmişi
 
-Admin paneli EasyCep ve Getmobil telefon kategori sayfaları için sınırlı gerçek
-test çekimini destekler:
+Ürün detay sayfasındaki profesyonel fiyat geçmişi grafiği için Supabase **SQL
+Editor** içinde şu migration dosyasını çalıştırın:
+
+```text
+supabase/price-history.sql
+```
+
+Bu migration `price_history` tablosunu oluşturur:
+
+- `id`
+- `product_id`
+- `listing_id`
+- `source`
+- `price`
+- `recorded_at`
+
+Bot senkronizasyonu `sync_source_listings()` RPC fonksiyonu içinde fiyat
+geçmişini otomatik günceller. Yeni bot ilanı eklendiğinde ilk fiyat kaydı
+oluşturulur. Mevcut ilan tekrar bulunduğunda fiyat değişmişse yeni
+`price_history` kaydı yazılır. Fiyat değişmemişse aynı gün aynı fiyat için ikinci
+kayıt oluşturulmaz.
+
+Ürün detay sayfası `/product/[slug]` altında Recharts tabanlı gerçek grafik
+kullanır. Grafik şu aralıkları destekler:
+
+- Son 7 gün
+- Son 30 gün
+- Son 90 gün
+- Tümü
+
+Grafikte en düşük fiyat yeşil, ortalama fiyat turuncu, en yüksek fiyat kırmızı
+ve outlier filtreli piyasa değeri siyah kesikli çizgiyle gösterilir. Grafiğin
+altında bugünkü fiyat, 7/30/90 günlük değişim yüzdeleri, en düşük ve en yüksek
+fiyat kartları yer alır.
+
+Piyasa değeri yalnızca basit ortalama değildir. Sistem önce çok uç fiyatları
+IQR ve median tabanlı filtreyle çıkarır; sonra median ve ortalamayı ağırlıklı
+birleştirerek daha dengeli piyasa değeri hesaplar. Arama kartlarındaki yıldızlı
+fırsat rozeti de aynı piyasa değerini kullanır. Piyasanın yaklaşık `%40` altında
+kalan ilanlar ürün detayında **Şüpheli ucuz ilanlar** bölümünde ayrıca gösterilir.
+
+### Gerçek Test Çekimi
+
+Admin paneli aşağıdaki kaynaklar için sınırlı gerçek test çekimini destekler:
 
 ```text
 EasyCep: https://easycep.com/kategori/cep-telefonu-1
 Getmobil: https://getmobil.com/satin-al/cep-telefonu/
+Hepsiburada Yenilenmiş: https://www.hepsiburada.com/ara?q=yenilenmi%C5%9F
+Teknosa Yenilenmiş: https://www.teknosa.com/arama/?s=yenilenmi%C5%9F
+MediaMarkt Yenilenmiş: https://www.mediamarkt.com.tr/tr/search.html?query=yenilenmi%C5%9F
+Yenilenmiş Market: https://www.yenilenmismarket.com/
 ```
 
 Kullanım:
 
 1. `supabase/source-integration-settings.sql` migration dosyasını çalıştırın.
 2. Admin hesabıyla giriş yapıp `/admin/sources` sayfasını açın.
-3. EasyCep veya Getmobil satırındaki **Gerçek test çekimi** butonuna basın.
+3. Desteklenen kaynak satırındaki **Gerçek test çekimi** butonuna basın.
 4. Çalışmayı `/admin/bot-runs`, eklenen ilanları `/admin/listings` sayfasından
    kontrol edin.
 5. İlanları kontrol ettikten sonra admin ilan yönetiminden yayınlayın.
 
-Gerçek test çekimi yalnızca tek kategori sayfasına bir HTTP isteği gönderir,
-ürün detay sayfalarını ayrıca açmaz ve en fazla 10 ürünü işler. İstekte açık bir
-User-Agent, 15 saniyelik timeout ve 5 MB HTML sınırı kullanılır. Çekilen ilanlar
-kaynak ayarından bağımsız olarak `pending` kaydedilir.
+Gerçek test çekimi yalnızca tek kategori/arama sayfasına sınırlı istek gönderir,
+ürün detay sayfalarını ayrıca agresif şekilde açmaz ve en fazla 10 ürünü işler.
+İstekte açık bir User-Agent, 15 saniyelik timeout, retry, kısa rate-limit
+beklemeleri ve 5 MB HTML sınırı kullanılır. Çekilen ilanlar kaynak ayarından
+bağımsız olarak `pending` kaydedilir.
 
 Aynı URL daha önce `listings` tablosunda varsa kayıt atlanır. Eksik ürünler
 `products` tablosunda oluşturulur. Çalışma sonunda `bot_runs` sayaçları ile
@@ -669,14 +742,37 @@ Admin paneli aşağıdaki rotalardan oluşur:
 - `/admin/users`: Supabase Auth kullanıcıları ve favori sayıları
 - `/admin/import`: JSON, CSV ve Excel içe aktarma
 - `/admin/stats`: platform istatistikleri
-- `/admin/settings`: site ayarları taslağı
+- `/admin/settings`: site ayarları ve bakım modu
 
-Erişim yalnızca `lib/admin.ts` içinde tanımlı admin e-posta adreslerine açıktır:
+### Site Ayarları ve İstatistik RPC
+
+Admin panelindeki site adı, açıklama ve bakım modu ayarlarını etkinleştirmek
+için Supabase **SQL Editor** içinde şu dosyayı çalıştırın:
 
 ```text
-kozmen25@gmail.com
-ozmebomer9@gmail.com
+supabase/site-settings.sql
 ```
+
+Bu migration `site_settings` tablosunu, bakım modu varsayılanlarını ve
+`/admin/stats` sayfasının kullandığı `get_admin_platform_stats()` RPC
+fonksiyonunu oluşturur.
+
+### Fiyat Alarmları
+
+Kullanıcılar ürün detay sayfasından (`/product/[slug]`) hedef fiyat
+belirleyerek fiyat alarmı oluşturabilir. Alarmlar Hesabım sayfasında
+listelenir ve kaldırılabilir. Tablo kurulumu için temel `schema.sql`
+yeterlidir.
+
+Erişim yalnızca `ADMIN_EMAILS` ortam değişkeninde tanımlı (veya varsayılan)
+admin e-posta adreslerine açıktır:
+
+```env
+ADMIN_EMAILS=kozmen25@gmail.com,ozmebomer9@gmail.com
+```
+
+`ADMIN_EMAILS` tanımlı değilse uygulama `lib/admin.ts` içindeki varsayılan
+listeyi kullanır.
 
 Admin güvenliği hem ortak `/admin` layout katmanında hem de veri değiştiren
 server action fonksiyonlarında tekrar doğrulanır. Yetkisiz kullanıcılar admin
@@ -700,8 +796,8 @@ listesinden silinmeye karşı korumalıdır.
 Sahibinden, Letgo ve Facebook Marketplace için ortak bir aktarım API'si
 bulunur. Bu üç kaynak için uygulama HTML çekimi yapmaz; kullanma yetkiniz olan
 resmi API, veri sağlayıcı, CSV dönüştürücü veya şirket içi entegrasyon çıktısını
-normalize ederek Supabase'e aktarır. EasyCep ve Getmobil’in sınırlı kategori
-testi ayrı olarak **EasyCep ve Getmobil Gerçek Test Çekimi** bölümünde
+normalize ederek Supabase'e aktarır. EasyCep, Getmobil ve yenilenmiş cihaz
+kaynaklarının sınırlı kategori testi ayrı olarak **Gerçek Test Çekimi** bölümünde
 açıklanmıştır.
 
 ```text
@@ -838,6 +934,7 @@ gereklidir. `IMPORT_API_KEY` yalnızca import API rotası, `CRON_SECRET` ise
 SUPABASE_SERVICE_ROLE_KEY
 IMPORT_API_KEY
 CRON_SECRET
+ADMIN_EMAILS
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY`, `IMPORT_API_KEY` ve `CRON_SECRET` değerlerine

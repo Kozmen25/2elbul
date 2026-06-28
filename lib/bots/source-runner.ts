@@ -1,13 +1,11 @@
 import "server-only";
 
-import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { SCRAPE_READY_SLUGS, fetchListingsForSource } from "@/lib/bots/connectors";
 import {
-  EASYCEP_PHONE_CATEGORY_URL,
-  fetchEasyCepListings,
-  fetchGetmobilListings,
-  GETMOBIL_PHONE_CATEGORY_URL,
-} from "@/lib/bots/adapters";
+  normalizeSyncStatus,
+  syncListingsForSource,
+} from "@/lib/bots/listing-sync";
 import type { BotAdapterListing } from "@/lib/bots/types";
 
 export type SourceRunRecord = {
@@ -43,16 +41,8 @@ type RunSourceOptions = {
   forceStatus?: "pending" | "published" | "active";
 };
 
-type SyncRpcResult = {
-  inserted?: number;
-  updated?: number;
-  inactive?: number;
-  reactivated?: number;
-  skipped?: number;
-};
-
 export function isSupportedScrapeSource(slug: string) {
-  return ["easycep", "getmobil"].includes(slug);
+  return SCRAPE_READY_SLUGS.includes(slug);
 }
 
 export async function runSourceScrapeBot(
@@ -63,7 +53,7 @@ export async function runSourceScrapeBot(
   if (!isSupportedScrapeSource(source.slug)) {
     return emptyFailedResult(
       source,
-      "Gerçek çekim şu anda yalnızca EasyCep ve Getmobil için hazır.",
+      "Gerçek çekim bu kaynak için henüz hazır değil. Desteklenen kaynaklar: EasyCep, Getmobil, Yenilenmiş Market, Teknosa, Hepsiburada ve MediaMarkt.",
     );
   }
 
@@ -109,16 +99,11 @@ export async function runSourceScrapeBot(
   let finalStatus: "success" | "failed" = "success";
 
   try {
-    listings =
-      source.slug === "easycep"
-        ? await fetchEasyCepListings(
-            source.scrape_url || EASYCEP_PHONE_CATEGORY_URL,
-            limit,
-          )
-        : await fetchGetmobilListings(
-            source.scrape_url || GETMOBIL_PHONE_CATEGORY_URL,
-            limit,
-          );
+    listings = await fetchListingsForSource(
+      source.slug,
+      source.scrape_url,
+      limit,
+    );
     listings = listings.slice(0, limit).map((listing) => ({
       ...listing,
       status: listingStatus,
@@ -127,7 +112,7 @@ export async function runSourceScrapeBot(
     if (!listings.length) {
       errors.push("Ürün bulunamadı veya HTML yapısı değişmiş olabilir");
     } else {
-      const result = await syncListings(supabase, source.id, listings);
+      const result = await syncListingsForSource(supabase, source.id, listings);
       imported = result.imported;
       updated = result.updated;
       inactive = result.inactive;
@@ -207,115 +192,6 @@ export async function runSourceScrapeBot(
   };
 }
 
-async function syncListings(
-  supabase: SupabaseClient,
-  sourceId: number,
-  listings: BotAdapterListing[],
-) {
-  let imported = 0;
-  let updated = 0;
-  let inactive = 0;
-  let reactivated = 0;
-  let skipped = 0;
-  let errorCount = 0;
-  const errors: string[] = [];
-  const productNames = [
-    ...new Set(listings.map((listing) => listing.product_name)),
-  ];
-  const { data: existingProducts, error: productLookupError } = await supabase
-    .from("products")
-    .select("id, name")
-    .in("name", productNames);
-
-  if (productLookupError) throw productLookupError;
-
-  const productIds = new Map(
-    (existingProducts ?? []).map((product) => [
-      String(product.name),
-      product.id as string | number,
-    ]),
-  );
-
-  for (const productName of productNames) {
-    if (productIds.has(productName)) continue;
-    const { data: createdProduct, error: productInsertError } = await supabase
-      .from("products")
-      .insert({ name: productName })
-      .select("id")
-      .single();
-
-    if (productInsertError || !createdProduct) {
-      const message =
-        productInsertError?.message ?? `${productName} oluşturulamadı.`;
-      console.error("Source bot product insert failed:", productInsertError);
-      errors.push(`${productName}: ${message}`);
-      continue;
-    }
-    productIds.set(productName, createdProduct.id);
-  }
-
-  const payload = [];
-  for (const listing of listings) {
-    const productId = productIds.get(listing.product_name);
-    if (!productId) {
-      errorCount += 1;
-      errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
-      continue;
-    }
-
-    payload.push({
-      external_id: listing.external_id || createExternalId(listing.url),
-      product_id: productId,
-      title: listing.title,
-      price: listing.price,
-      city: listing.city,
-      source: listing.source,
-      url: listing.url,
-      condition: listing.condition,
-      image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-      description: listing.description ?? null,
-      status: normalizeSyncStatus(listing.status),
-      raw_payload: listing,
-    });
-  }
-
-  if (!payload.length) {
-    return {
-      imported,
-      updated,
-      inactive,
-      reactivated,
-      skipped,
-      errorCount,
-      errors,
-    };
-  }
-
-  const { data, error } = await supabase.rpc("sync_source_listings", {
-    p_source_id: sourceId,
-    p_items: payload,
-  });
-
-  if (error) throw error;
-
-  const result = (data ?? {}) as SyncRpcResult;
-  imported = Number(result.inserted ?? 0);
-  updated = Number(result.updated ?? 0);
-  inactive = Number(result.inactive ?? 0);
-  reactivated = Number(result.reactivated ?? 0);
-  skipped = Number(result.skipped ?? 0);
-
-  return {
-    imported,
-    updated,
-    inactive,
-    reactivated,
-    skipped,
-    errorCount,
-    errors,
-  };
-}
-
 async function updateSourceStats(
   supabase: SupabaseClient,
   source: SourceRunRecord,
@@ -371,18 +247,6 @@ function normalizeLimit(value: unknown, maxLimit?: number) {
 
 function normalizeImportMode(value: unknown) {
   return value === "published" || value === "pending" ? value : null;
-}
-
-function normalizeSyncStatus(value: unknown) {
-  if (value === "pending" || value === "inactive" || value === "active") {
-    return value;
-  }
-  if (value === "published") return "active";
-  return "active";
-}
-
-function createExternalId(url: string) {
-  return createHash("sha1").update(url.trim().toLowerCase()).digest("hex");
 }
 
 function getErrorMessage(error: unknown) {

@@ -51,7 +51,14 @@ where bot_listing_status in ('pending', 'published');
 
 update public.sources
 set integration_type = 'scrape'
-where slug in ('easycep', 'getmobil');
+where slug in (
+  'easycep',
+  'getmobil',
+  'hepsiburada-yenilenmis',
+  'teknosa-yenilenmis',
+  'mediamarkt-yenilenmis',
+  'yenilenmis-market'
+);
 
 update public.sources
 set scrape_url = 'https://easycep.com/kategori/cep-telefonu-1'
@@ -61,4 +68,24 @@ where slug = 'easycep'
 update public.sources
 set scrape_url = 'https://getmobil.com/satin-al/cep-telefonu/'
 where slug = 'getmobil'
+  and (scrape_url is null or scrape_url = '');
+
+update public.sources
+set scrape_url = 'https://www.hepsiburada.com/ara?q=yenilenmi%C5%9F'
+where slug = 'hepsiburada-yenilenmis'
+  and (scrape_url is null or scrape_url = '');
+
+update public.sources
+set scrape_url = 'https://www.teknosa.com/arama/?s=yenilenmi%C5%9F'
+where slug = 'teknosa-yenilenmis'
+  and (scrape_url is null or scrape_url = '');
+
+update public.sources
+set scrape_url = 'https://www.mediamarkt.com.tr/tr/search.html?query=yenilenmi%C5%9F'
+where slug = 'mediamarkt-yenilenmis'
+  and (scrape_url is null or scrape_url = '');
+
+update public.sources
+set scrape_url = 'https://www.yenilenmismarket.com/'
+where slug = 'yenilenmis-market'
   and (scrape_url is null or scrape_url = '');

@@ -7,11 +7,19 @@ import {
   MapPin,
   Store,
   Tag,
+  TriangleAlert,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
+import { PriceAlertForm } from "@/components/price-alert-form";
+import { PriceHistoryChart } from "@/components/price-history-chart";
 import type { Listing } from "@/lib/listings";
+import {
+  buildDailyPriceHistory,
+  calculateMarketStats,
+  summarizePriceHistory,
+} from "@/lib/price-insights";
 import {
   getProductBySlug,
   getProductDetail,
@@ -59,14 +67,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const detail = await getProductDetail(slug);
   if (!detail) notFound();
 
-  const { product, listings } = detail;
+  const { product, listings, priceHistory } = detail;
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
-  const lowestPrice = listingCount ? Math.min(...prices) : 0;
-  const highestPrice = listingCount ? Math.max(...prices) : 0;
-  const averagePrice = listingCount
-    ? Math.round(prices.reduce((total, price) => total + price, 0) / listingCount)
-    : 0;
+  const marketStats = calculateMarketStats(prices);
+  const lowestPrice = marketStats?.lowest ?? 0;
+  const highestPrice = marketStats?.highest ?? 0;
+  const marketValue = marketStats?.marketValue ?? 0;
+  const dailyPriceHistory = buildDailyPriceHistory(priceHistory);
+  const priceHistorySummary = summarizePriceHistory(dailyPriceHistory);
   const newestListing = [...listings].sort(
     (a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -80,6 +89,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     .slice(0, 5);
+  const suspiciousListings = marketValue
+    ? listings
+        .filter((listing) => listing.price <= marketValue * 0.6)
+        .sort((a, b) => a.price - b.price)
+        .slice(0, 5)
+    : [];
 
   const cityCounts = [...countBy(listings, (listing) => listing.city).entries()]
     .map(([city, count]) => ({ city, count }))
@@ -136,8 +151,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <div className="mt-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-5">
           <StatCard label="Toplam ilan" value={`${listingCount}`} />
           <StatCard
-            label="Ortalama fiyat"
-            value={listingCount ? formatPrice(averagePrice) : "—"}
+            label="Piyasa değeri"
+            value={listingCount ? formatPrice(marketValue) : "—"}
           />
           <StatCard
             label="En düşük fiyat"
@@ -155,14 +170,38 @@ export default async function ProductPage({ params }: ProductPageProps) {
           />
         </div>
 
+        <div className="mt-6 max-w-md">
+          <PriceAlertForm
+            productId={product.id}
+            productName={product.name}
+            suggestedPrice={listingCount ? lowestPrice : null}
+            isAuthenticated={isAuthenticated}
+            loginNext={loginNext}
+          />
+        </div>
+
         <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
           <SectionTitle
             icon={ChartNoAxesCombined}
-            eyebrow="Fiyat hareketi"
-            title="Fiyat trendi"
+            eyebrow="Fiyat geçmişi"
+            title="Piyasa fiyat hareketi"
           />
-          <PriceTrendChart listings={listings} />
+          <PriceHistoryChart
+            points={dailyPriceHistory}
+            summary={priceHistorySummary}
+          />
         </section>
+
+        <ProductListingSection
+          eyebrow="Riskli fiyat"
+          title="Şüpheli ucuz ilanlar"
+          icon={TriangleAlert}
+          listings={suspiciousListings}
+          favoriteIds={favoriteIds}
+          isAuthenticated={isAuthenticated}
+          loginNext={loginNext}
+          emptyMessage="Piyasanın çok altında şüpheli ilan bulunmadı."
+        />
 
         <ProductListingSection
           eyebrow="Fiyat avantajı"
@@ -249,120 +288,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
       </div>
     </main>
-  );
-}
-
-function PriceTrendChart({ listings }: { listings: Listing[] }) {
-  const grouped = new Map<string, { total: number; count: number }>();
-  for (const listing of listings) {
-    const date = listing.createdAt.slice(0, 10);
-    const current = grouped.get(date) ?? { total: 0, count: 0 };
-    grouped.set(date, {
-      total: current.total + listing.price,
-      count: current.count + 1,
-    });
-  }
-
-  const points = [...grouped.entries()]
-    .map(([date, value]) => ({
-      date,
-      price: Math.round(value.total / value.count),
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (points.length < 2) {
-    return (
-      <EmptyState text="Fiyat grafiği için daha fazla veri gerekli." />
-    );
-  }
-
-  const width = 720;
-  const height = 260;
-  const paddingX = 34;
-  const paddingY = 30;
-  const minPrice = Math.min(...points.map((point) => point.price));
-  const maxPrice = Math.max(...points.map((point) => point.price));
-  const priceRange = Math.max(maxPrice - minPrice, 1);
-  const coordinates = points.map((point, index) => ({
-    ...point,
-    x:
-      paddingX +
-      (index / Math.max(points.length - 1, 1)) * (width - paddingX * 2),
-    y:
-      paddingY +
-      ((maxPrice - point.price) / priceRange) * (height - paddingY * 2),
-  }));
-  const polyline = coordinates
-    .map((point) => `${point.x},${point.y}`)
-    .join(" ");
-
-  return (
-    <div className="mt-6 min-w-0">
-      <div className="mb-3 flex flex-wrap justify-between gap-2 text-xs font-bold text-black/45">
-        <span>En yüksek: {formatPrice(maxPrice)}</span>
-        <span>En düşük: {formatPrice(minPrice)}</span>
-      </div>
-      <div className="w-full overflow-hidden rounded-2xl border border-black/8 bg-[#fafaf8] p-2 sm:p-4">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={`${points[0].date} ile ${points.at(-1)?.date} arasındaki fiyat trendi`}
-          className="h-auto w-full"
-        >
-          <defs>
-            <linearGradient id="priceArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ff6b00" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="#ff6b00" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {[0, 1, 2, 3].map((line) => {
-            const y = paddingY + (line / 3) * (height - paddingY * 2);
-            return (
-              <line
-                key={line}
-                x1={paddingX}
-                y1={y}
-                x2={width - paddingX}
-                y2={y}
-                stroke="#e5e5e5"
-                strokeDasharray="5 6"
-              />
-            );
-          })}
-          <polygon
-            points={`${paddingX},${height - paddingY} ${polyline} ${width - paddingX},${height - paddingY}`}
-            fill="url(#priceArea)"
-          />
-          <polyline
-            points={polyline}
-            fill="none"
-            stroke="#ff6b00"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {coordinates.map((point) => (
-            <circle
-              key={point.date}
-              cx={point.x}
-              cy={point.y}
-              r="5"
-              fill="#ffffff"
-              stroke="#ff6b00"
-              strokeWidth="4"
-            >
-              <title>
-                {formatDate(point.date)}: {formatPrice(point.price)}
-              </title>
-            </circle>
-          ))}
-        </svg>
-      </div>
-      <div className="mt-3 flex justify-between gap-4 text-xs text-black/40">
-        <span>{formatDate(points[0].date)}</span>
-        <span className="text-right">{formatDate(points.at(-1)!.date)}</span>
-      </div>
-    </div>
   );
 }
 

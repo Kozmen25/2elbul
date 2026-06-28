@@ -57,6 +57,15 @@ const emptySource: SourceInput = {
   productLimit: 100,
 };
 
+const realScrapeSourceSlugs = new Set([
+  "easycep",
+  "getmobil",
+  "hepsiburada-yenilenmis",
+  "teknosa-yenilenmis",
+  "mediamarkt-yenilenmis",
+  "yenilenmis-market",
+]);
+
 export function SourceManager({
   sources,
   publishModeAvailable,
@@ -298,7 +307,7 @@ export function SourceManager({
                       disabled={
                         pending ||
                         !publishModeAvailable ||
-                        !["easycep", "getmobil"].includes(source.slug)
+                        !realScrapeSourceSlugs.has(source.slug)
                       }
                       onClick={() => {
                         if (
@@ -311,7 +320,7 @@ export function SourceManager({
                       }}
                       className="grid size-9 place-items-center rounded-lg border border-purple-200 bg-purple-50 text-purple-700 disabled:cursor-not-allowed disabled:opacity-45"
                       title={
-                        ["easycep", "getmobil"].includes(source.slug)
+                        realScrapeSourceSlugs.has(source.slug)
                           ? "Tek sayfalık sınırlı gerçek test çekimi"
                           : "Bu kaynak adaptörü hazırlanıyor"
                       }
@@ -644,7 +653,7 @@ function SourceCard({
   runAction: (action: () => Promise<SourceActionResult>) => void;
   openEdit: (source: AdminSource) => void;
 }) {
-  const realBotReady = ["easycep", "getmobil"].includes(source.slug);
+  const realBotReady = realScrapeSourceSlugs.has(source.slug);
 
   return (
     <article className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.035)]">
