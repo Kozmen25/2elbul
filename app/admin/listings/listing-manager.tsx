@@ -151,7 +151,7 @@ export function ListingManager({
       )}
 
       <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch]">
-        <table className="w-full min-w-[1180px] text-left text-sm">
+        <table className="w-full min-w-[1280px] text-left text-sm">
           <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
             <tr>
               <th className="px-4 py-3">
@@ -173,6 +173,7 @@ export function ListingManager({
               <th className="px-4 py-3">İlan</th>
               <th className="px-4 py-3">Ürün</th>
               <th className="px-4 py-3">Fiyat</th>
+              <th className="px-4 py-3">Fırsat etiketi</th>
               <th className="px-4 py-3">Konum / Kaynak</th>
               <th className="px-4 py-3">Durum</th>
               <th className="px-4 py-3">Tarih</th>
@@ -212,8 +213,10 @@ export function ListingManager({
                 <td className="px-4 py-4 font-bold">{listing.productName}</td>
                 <td className="px-4 py-4 font-black">
                   {formatPrice(listing.price)}
+                </td>
+                <td className="px-4 py-4">
                   <span
-                    className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${listing.priceAnalysis.className}`}
+                    className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${listing.priceAnalysis.className}`}
                   >
                     {listing.priceAnalysis.label}
                   </span>

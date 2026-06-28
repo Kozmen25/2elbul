@@ -24,9 +24,9 @@ const links = [
   { href: "/admin", label: "Genel Bakış", icon: LayoutDashboard },
   { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
   { href: "/admin/products", label: "Ürünler", icon: Boxes },
+  { href: "/admin/search-demands", label: "Arama Talepleri", icon: Search },
   { href: "/admin/sources", label: "Kaynaklar", icon: Globe2 },
   { href: "/admin/bot-runs", label: "Bot Çalışmaları", icon: Bot },
-  { href: "/admin/search-demands", label: "Arama Talepleri", icon: Search },
   { href: "/admin/users", label: "Kullanıcılar", icon: Users },
   { href: "/admin/import", label: "İçe Aktar", icon: DatabaseZap },
   { href: "/admin/stats", label: "İstatistikler", icon: BarChart3 },
@@ -53,9 +53,9 @@ export function AdminNav({ email }: { email: string }) {
       </div>
 
       <aside
-        className={`${open ? "block" : "hidden"} shrink-0 border-b border-black/8 bg-[#111] text-white lg:sticky lg:top-0 lg:block lg:h-screen lg:w-[260px] lg:border-b-0`}
+        className={`${open ? "block" : "hidden"} shrink-0 overflow-y-auto border-b border-black/8 bg-[#111] text-white lg:sticky lg:top-0 lg:block lg:h-screen lg:w-[260px] lg:border-b-0`}
       >
-        <div className="flex h-full flex-col p-4 sm:p-5">
+        <div className="flex min-h-full flex-col p-4 sm:p-5">
           <div className="hidden rounded-2xl bg-white p-4 lg:block">
             <BrandLogo />
           </div>

@@ -33,7 +33,11 @@ type SearchResultsClientProps = {
   loadError?: string;
   favoriteListingIds: string[];
   isAuthenticated: boolean;
+  shouldQueueSearchDemand: boolean;
 };
+
+const searchDemandMessage =
+  "Bu ürün için piyasayı tarıyoruz. Yeni ilanlar geldikçe sonuçlar güncellenecek.";
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("tr-TR", {
@@ -56,6 +60,7 @@ export function SearchResultsClient({
   loadError = "",
   favoriteListingIds,
   isAuthenticated,
+  shouldQueueSearchDemand,
 }: SearchResultsClientProps) {
   const [city, setCity] = useState("");
   const [source, setSource] = useState("");
@@ -64,7 +69,9 @@ export function SearchResultsClient({
   const [maximumPrice, setMaximumPrice] = useState("");
   const [sort, setSort] = useState<SortOption>("price-asc");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [demandMessage, setDemandMessage] = useState("");
+  const [demandMessage, setDemandMessage] = useState(
+    shouldQueueSearchDemand ? searchDemandMessage : "",
+  );
 
   useEffect(() => {
     if (!query) return;
@@ -77,17 +84,14 @@ export function SearchResultsClient({
   }, [query]);
 
   useEffect(() => {
-    if (!query || initialListings.length >= 3) {
+    if (!shouldQueueSearchDemand) {
       setDemandMessage("");
       return;
     }
 
     const demandKey = `2elbul-search-demand:${query.toLocaleLowerCase("tr-TR")}`;
-    setDemandMessage(
-      "Bu ürün için piyasayı tarıyoruz. Yeni ilanlar geldikçe sonuçlar güncellenecek.",
-    );
+    setDemandMessage(searchDemandMessage);
     if (sessionStorage.getItem(demandKey)) return;
-    sessionStorage.setItem(demandKey, "1");
 
     void fetch("/api/search-demand", {
       method: "POST",
@@ -96,10 +100,18 @@ export function SearchResultsClient({
         query,
         resultCount: initialListings.length,
       }),
-    }).catch((error) => {
-      console.error("Search demand request failed:", error);
-    });
-  }, [initialListings.length, query]);
+    })
+      .then((response) => {
+        if (response.ok) {
+          sessionStorage.setItem(demandKey, "1");
+          return;
+        }
+        console.error("Search demand request failed:", response.status);
+      })
+      .catch((error) => {
+        console.error("Search demand request failed:", error);
+      });
+  }, [initialListings.length, query, shouldQueueSearchDemand]);
 
   const cities = useMemo(
     () => [...new Set(initialListings.map((listing) => listing.city))].sort(),

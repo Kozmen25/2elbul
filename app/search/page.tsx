@@ -194,6 +194,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         loadError={loadError}
         favoriteListingIds={favoriteListingIds}
         isAuthenticated={isAuthenticated}
+        shouldQueueSearchDemand={Boolean(query && listings.length < 3 && !loadError)}
       />
     </>
   );
