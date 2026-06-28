@@ -1189,3 +1189,22 @@ tools/build.bat
 tools/lint-build.bat
 tools/push-build.bat
 ```
+
+## Admin Bot Merkezi
+
+Admin panelinde `/admin/bot-center` sayfasi bot ve cron gorevlerini tek yerden calistirmak icin kullanilir. Sayfadaki butonlar tarayicidan dogrudan cron endpointlerine gitmez; once guvenli admin API rotasina istek atar:
+
+```text
+POST /api/admin/run-bot-task
+```
+
+Desteklenen gorevler:
+
+```text
+search_queue  -> /api/cron/process-search-queue
+sources       -> /api/cron/run-sources
+price_alerts  -> /api/cron/check-price-alerts
+daily         -> /api/cron/daily
+```
+
+Bu API rotasi kullanicinin admin olup olmadigini server tarafinda kontrol eder. Admin olmayan kullanicilar 403 alir. `CRON_SECRET` yalnizca server tarafinda okunur ve client tarafina gonderilmez.

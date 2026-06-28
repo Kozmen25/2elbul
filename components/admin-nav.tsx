@@ -26,6 +26,7 @@ const links = [
   { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
   { href: "/admin/products", label: "Ürünler", icon: Boxes },
   { href: "/admin/search-demands", label: "Arama Talepleri", icon: Search },
+  { href: "/admin/bot-center", label: "Bot Merkezi", icon: Bot },
   { href: "/admin/price-alerts", label: "Fiyat Alarmları", icon: BellRing },
   { href: "/admin/sources", label: "Kaynaklar", icon: Globe2 },
   { href: "/admin/bot-runs", label: "Bot Çalışmaları", icon: Bot },
