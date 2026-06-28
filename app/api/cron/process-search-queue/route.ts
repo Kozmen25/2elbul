@@ -236,13 +236,14 @@ async function importAdapterListings(
 
   for (const listing of listings) {
     const productId = await ensureProduct(supabase, job.query);
-    const existing = await findExistingListing(supabase, listing);
+    const externalId = ensureExternalId(job, source, listing);
+    const existing = await findExistingListing(supabase, listing, externalId);
     const previousPrice = existing?.price ? Number(existing.price) : null;
 
     const payload: Record<string, unknown> = {
       product_id: productId,
       source_id: source.id || null,
-      external_id: listing.externalId,
+      external_id: externalId,
       title: listing.title,
       price: listing.price,
       city: listing.city ?? "Türkiye",
@@ -256,7 +257,11 @@ async function importAdapterListings(
       last_seen_at: new Date().toISOString(),
     };
 
-    const data = await upsertListingWithSchemaFallback(supabase, payload);
+    const data = await saveListingWithSchemaFallback(
+      supabase,
+      payload,
+      existing?.id ?? null,
+    );
 
     if (existing) updated += 1;
     else imported += 1;
@@ -284,14 +289,19 @@ async function ensureProduct(
   query: string,
 ) {
   const productName = normalizeProductName(query);
+
+  const existing = await supabase
+    .from("products")
+    .select("id")
+    .eq("name", productName)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+  if (existing.data?.id) return Number(existing.data.id);
+
   const { data, error } = await supabase
     .from("products")
-    .upsert(
-      {
-        name: productName,
-      },
-      { onConflict: "name" },
-    )
+    .insert({ name: productName })
     .select("id")
     .single();
 
@@ -302,18 +312,26 @@ async function ensureProduct(
   return Number(data.id);
 }
 
-async function upsertListingWithSchemaFallback(
+async function saveListingWithSchemaFallback(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
+  existingId: string | number | null,
 ) {
   let currentPayload = { ...payload };
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const result = await supabase
-      .from("listings")
-      .upsert(currentPayload, { onConflict: "source,external_id" })
-      .select("id, price")
-      .single();
+    const result = existingId
+      ? await supabase
+          .from("listings")
+          .update(currentPayload)
+          .eq("id", existingId)
+          .select("id, price")
+          .single()
+      : await supabase
+          .from("listings")
+          .insert(currentPayload)
+          .select("id, price")
+          .single();
 
     if (!result.error) return result.data;
 
@@ -323,7 +341,7 @@ async function upsertListingWithSchemaFallback(
     }
 
     console.error(
-      `Search queue listing upsert skipped missing column: ${missingColumn}`,
+      `Search queue listing save skipped missing column: ${missingColumn}`,
       result.error,
     );
     const { [missingColumn]: _removed, ...nextPayload } = currentPayload;
@@ -336,12 +354,13 @@ async function upsertListingWithSchemaFallback(
 async function findExistingListing(
   supabase: SupabaseClient,
   listing: NormalizedListing,
+  externalId: string,
 ) {
   const { data, error } = await supabase
     .from("listings")
     .select("id, price")
     .eq("source", listing.sourceName)
-    .eq("external_id", listing.externalId)
+    .eq("external_id", externalId)
     .maybeSingle();
 
   if (error) throw error;
@@ -405,6 +424,29 @@ async function updateQueueSuccess(
 
 function normalizeProductName(query: string) {
   return query.trim().replace(/\s+/g, " ") || "Aranan ürün";
+}
+
+function ensureExternalId(
+  job: QueueJob,
+  source: SourceRow,
+  listing: NormalizedListing,
+) {
+  const existing = listing.externalId?.trim();
+  if (existing) return existing;
+
+  return [
+    "search",
+    source.slug || "mock",
+    job.normalized_query || normalizeProductName(job.query),
+    listing.url || listing.title,
+  ]
+    .join("-")
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 180);
 }
 
 function hasValidSecret(request: NextRequest, secret: string) {
