@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  getSourceAdapter,
+  getInstantSearchAdapters,
   type NormalizedListing,
+  type SourceAdapter,
 } from "@/lib/source-adapters";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -29,6 +30,12 @@ type ImportedListingResult = {
   imported: number;
   updated: number;
   skipped: number;
+};
+
+type SearchAdapterResult = {
+  adapterSlug: string;
+  sourceName: string;
+  listings: NormalizedListing[];
 };
 
 export async function GET(request: NextRequest) {
@@ -108,19 +115,17 @@ export async function GET(request: NextRequest) {
 
     try {
       const source = getJobSource(job, sourceMap);
-      const adapter = getSourceAdapter(source.slug);
-      const listings = await adapter.search({
-        query: job.query,
-        normalizedQuery: job.normalized_query,
-        sourceId: source.id,
-        sourceName: source.name,
-        sourceSlug: source.slug,
-        limit: 3,
-      });
+      const searchResult = await runInstantSearchAdapters(source, job);
+      const listings = searchResult.listings;
+      const importSource = {
+        id: source.id,
+        name: searchResult.sourceName || source.name,
+        slug: searchResult.adapterSlug || source.slug,
+      };
       const importResult = await importAdapterListings(
         supabase,
         job,
-        source,
+        importSource,
         listings,
       );
       const finishedAt = new Date().toISOString();
@@ -132,6 +137,7 @@ export async function GET(request: NextRequest) {
         nextAttempts,
         listings.length,
         importResult,
+        searchResult,
       );
 
       completed += 1;
@@ -142,6 +148,8 @@ export async function GET(request: NextRequest) {
         id: job.id,
         ok: true,
         status: "completed",
+        adapter: searchResult.adapterSlug,
+        sourceName: searchResult.sourceName,
         found: listings.length,
         ...importResult,
       });
@@ -222,6 +230,50 @@ function getJobSource(job: QueueJob, sourceMap: Map<number, SourceRow>): SourceR
     name: "2ElBul Demo",
     slug: "mock",
   };
+}
+
+async function runInstantSearchAdapters(
+  source: SourceRow,
+  job: QueueJob,
+): Promise<SearchAdapterResult> {
+  const adapters = getInstantSearchAdapters();
+
+  for (const adapter of adapters) {
+    const listings = await searchAdapter(adapter, source, job);
+    if (listings.length > 0) {
+      return {
+        adapterSlug: adapter.slug,
+        sourceName: listings[0]?.sourceName ?? source.name,
+        listings,
+      };
+    }
+  }
+
+  return {
+    adapterSlug: adapters[0]?.slug ?? "none",
+    sourceName: source.name,
+    listings: [],
+  };
+}
+
+async function searchAdapter(
+  adapter: SourceAdapter,
+  source: SourceRow,
+  job: QueueJob,
+) {
+  try {
+    return await adapter.search({
+      query: job.query,
+      normalizedQuery: job.normalized_query,
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceSlug: source.slug,
+      limit: 3,
+    });
+  } catch (error) {
+    console.error(`Instant search adapter failed: ${adapter.slug}`, error);
+    return [];
+  }
 }
 
 async function importAdapterListings(
@@ -395,8 +447,9 @@ async function updateQueueSuccess(
   attempts: number,
   found: number,
   importResult: ImportedListingResult,
+  searchResult: SearchAdapterResult,
 ) {
-  const message = `Adapter tamamlandı. Bulunan: ${found}, eklenen: ${importResult.imported}, güncellenen: ${importResult.updated}, atlanan: ${importResult.skipped}.`;
+  const message = `Adapter tamamlandı. Kaynak: ${searchResult.sourceName} (${searchResult.adapterSlug}). Bulunan: ${found}, eklenen: ${importResult.imported}, güncellenen: ${importResult.updated}, atlanan: ${importResult.skipped}.`;
 
   const finishUpdate = await supabase
     .from("bot_queue")

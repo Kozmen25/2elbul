@@ -1,13 +1,28 @@
 import type { SourceAdapter } from "@/lib/source-adapters/types";
+import { easyCepSourceAdapter } from "@/lib/source-adapters/easycep-adapter";
 import { mockSourceAdapter } from "@/lib/source-adapters/mock-adapter";
 
 const adapters = new Map<string, SourceAdapter>([
+  [easyCepSourceAdapter.slug, easyCepSourceAdapter],
   [mockSourceAdapter.slug, mockSourceAdapter],
 ]);
 
 export function getSourceAdapter(sourceSlug?: string | null) {
   if (!sourceSlug) return mockSourceAdapter;
   return adapters.get(sourceSlug) ?? mockSourceAdapter;
+}
+
+export function getInstantSearchAdapters() {
+  const adaptersToRun: SourceAdapter[] = [easyCepSourceAdapter];
+  if (isMockFallbackEnabled()) adaptersToRun.push(mockSourceAdapter);
+  return adaptersToRun;
+}
+
+export function isMockFallbackEnabled() {
+  return (
+    process.env.ENABLE_MOCK_SEARCH_ADAPTER === "true" ||
+    process.env.NODE_ENV !== "production"
+  );
 }
 
 export type {
