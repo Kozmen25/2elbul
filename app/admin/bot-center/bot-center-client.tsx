@@ -21,6 +21,26 @@ export type BotMonitor = {
   durationMs: number | null;
 };
 
+export type SourceHealthMonitor = {
+  sourceId: number;
+  sourceName: string;
+  sourceSlug: string;
+  adapterType: string;
+  enabled: boolean;
+  healthStatus: "healthy" | "warning" | "failed" | "unknown";
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
+  foundCount: number;
+  importedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  matchedProductCount: number;
+  durationMs: number | null;
+  successRate24h: number | null;
+};
+
 type TaskResult = {
   ok: boolean;
   task?: BotTask;
@@ -48,11 +68,15 @@ const TASK_DESCRIPTIONS: Record<BotTask, string> = {
 
 export function BotCenterClient({
   initialMonitors,
+  initialSourceHealth,
 }: {
   initialMonitors: BotMonitor[];
+  initialSourceHealth: SourceHealthMonitor[];
 }) {
   const [monitors, setMonitors] = useState(initialMonitors);
+  const [sourceHealth, setSourceHealth] = useState(initialSourceHealth);
   const [pendingTask, setPendingTask] = useState<BotTask | null>(null);
+  const [pendingSourceId, setPendingSourceId] = useState<number | null>(null);
   const [result, setResult] = useState<TaskResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -102,6 +126,64 @@ export function BotCenterClient({
         updateMonitorFromResult(task, startedAt, nextResult);
       } finally {
         setPendingTask(null);
+      }
+    });
+  }
+
+  function runSourceHealthCheck(sourceId: number) {
+    setPendingSourceId(sourceId);
+    startTransition(async () => {
+      try {
+        const response = await fetch("/api/admin/source-health/check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sourceId }),
+        });
+        const data = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          sourceId?: number;
+          healthStatus?: SourceHealthMonitor["healthStatus"];
+          message?: string | null;
+        } | null;
+
+        setSourceHealth((items) =>
+          items.map((item) =>
+            item.sourceId === sourceId
+              ? {
+                  ...item,
+                  healthStatus:
+                    data?.healthStatus ??
+                    (response.ok && data?.ok ? "healthy" : "failed"),
+                  lastErrorAt:
+                    response.ok && data?.ok
+                      ? item.lastErrorAt
+                      : new Date().toISOString(),
+                  lastErrorMessage:
+                    response.ok && data?.ok
+                      ? null
+                      : data?.message ?? "Health check başarısız oldu.",
+                }
+              : item,
+          ),
+        );
+      } catch (error) {
+        setSourceHealth((items) =>
+          items.map((item) =>
+            item.sourceId === sourceId
+              ? {
+                  ...item,
+                  healthStatus: "failed",
+                  lastErrorAt: new Date().toISOString(),
+                  lastErrorMessage:
+                    error instanceof Error ? error.message : "Bilinmeyen hata",
+                }
+              : item,
+          ),
+        );
+      } finally {
+        setPendingSourceId(null);
       }
     });
   }
@@ -232,6 +314,107 @@ export function BotCenterClient({
         </div>
       </section>
 
+      <section className="rounded-2xl border border-black/8 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
+        <div className="border-b border-black/7 p-5">
+          <h2 className="text-xl font-black tracking-[-0.03em]">
+            Kaynak Sağlığı
+          </h2>
+          <p className="mt-2 text-sm text-black/45">
+            Her kaynak için adapter durumu, son bot sonuçları ve son 24 saat
+            başarı oranı burada izlenir.
+          </p>
+        </div>
+        <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+          <table className="w-full min-w-[1420px] text-left text-sm">
+            <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
+              <tr>
+                <th className="px-4 py-3">Kaynak</th>
+                <th className="px-4 py-3">Adapter</th>
+                <th className="px-4 py-3">Enabled</th>
+                <th className="px-4 py-3">Health</th>
+                <th className="px-4 py-3">Son çalışma</th>
+                <th className="px-4 py-3">Son başarı</th>
+                <th className="px-4 py-3">Son hata</th>
+                <th className="px-4 py-3 text-center">Bulunan</th>
+                <th className="px-4 py-3 text-center">Eklenen</th>
+                <th className="px-4 py-3 text-center">Güncellenen</th>
+                <th className="px-4 py-3 text-center">Atlanan</th>
+                <th className="px-4 py-3 text-center">Eşleşen ürün</th>
+                <th className="px-4 py-3 text-center">Süre</th>
+                <th className="px-4 py-3 text-center">24s başarı</th>
+                <th className="px-4 py-3">Son hata mesajı</th>
+                <th className="px-4 py-3 text-right">İşlem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sourceHealth.map((source) => (
+                <tr key={source.sourceId} className="border-t border-black/7 align-top">
+                  <td className="px-4 py-4">
+                    <p className="font-black">{source.sourceName}</p>
+                    <p className="mt-1 text-xs font-semibold text-black/35">
+                      {source.sourceSlug}
+                    </p>
+                  </td>
+                  <td className="px-4 py-4 font-bold text-black/55">
+                    {source.adapterType}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-black ${source.enabled ? "bg-green-100 text-green-700" : "bg-black/7 text-black/45"}`}>
+                      {source.enabled ? "Aktif" : "Pasif"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <HealthBadge status={source.healthStatus} />
+                  </td>
+                  <td className="px-4 py-4 text-black/55">
+                    {formatDate(source.lastRunAt)}
+                  </td>
+                  <td className="px-4 py-4 text-black/55">
+                    {formatDate(source.lastSuccessAt)}
+                  </td>
+                  <td className="px-4 py-4 text-black/55">
+                    {formatDate(source.lastErrorAt)}
+                  </td>
+                  <CountCell value={source.foundCount} />
+                  <CountCell value={source.importedCount} accent="green" />
+                  <CountCell value={source.updatedCount} accent="blue" />
+                  <CountCell value={source.skippedCount} />
+                  <CountCell value={source.matchedProductCount} accent="orange" />
+                  <td className="px-4 py-4 text-center font-black">
+                    {formatDuration(source.durationMs)}
+                  </td>
+                  <td className="px-4 py-4 text-center font-black">
+                    {source.successRate24h === null ? "-" : `%${source.successRate24h}`}
+                  </td>
+                  <td className="max-w-80 break-words px-4 py-4 text-xs leading-5 text-red-700">
+                    {source.lastErrorMessage ?? "-"}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => runSourceHealthCheck(source.sourceId)}
+                      disabled={pendingSourceId === source.sourceId || isPending}
+                      className="rounded-xl border border-[#ff6b00]/25 px-3 py-2 text-xs font-black text-[#d95700] disabled:opacity-50"
+                    >
+                      {pendingSourceId === source.sourceId
+                        ? "Kontrol ediliyor"
+                        : "Health check çalıştır"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!sourceHealth.length && (
+                <tr>
+                  <td colSpan={16} className="px-4 py-10 text-center text-sm font-semibold text-black/45">
+                    Kaynak kaydı bulunamadı.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
         <h2 className="text-lg font-black tracking-[-0.025em]">Sonuç</h2>
         {!result ? (
@@ -258,6 +441,31 @@ export function BotCenterClient({
         )}
       </section>
     </div>
+  );
+}
+
+function HealthBadge({ status }: { status: SourceHealthMonitor["healthStatus"] }) {
+  const className =
+    status === "healthy"
+      ? "bg-green-100 text-green-700"
+      : status === "warning"
+        ? "bg-amber-100 text-amber-800"
+        : status === "failed"
+          ? "bg-red-100 text-red-700"
+          : "bg-black/7 text-black/45";
+  const label =
+    status === "healthy"
+      ? "healthy"
+      : status === "warning"
+        ? "warning"
+        : status === "failed"
+          ? "failed"
+          : "unknown";
+
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-black ${className}`}>
+      {label}
+    </span>
   );
 }
 

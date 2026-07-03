@@ -1688,3 +1688,32 @@ Default durum:
 - Yeni SQL gerekmez.
 - Kaynak erisilemez veya HTML degisirse Bot Merkezi hata mesajini gosterir; sistem
   kirilmaz.
+
+## Adapter Health Center v1
+
+Adapter Health Center, Bot Merkezi icinde kaynak/adaptor sagligini izlemek icin
+eklendi. Yeni SQL gerekmez; mevcut `sources` ve `bot_runs` verileri kullanilir.
+
+Gosterilen metrikler:
+
+- Kaynak adi ve adapter tipi
+- Enabled durumu
+- Health check sonucu: `healthy`, `warning`, `failed`, `unknown`
+- Son calisma, son basari ve son hata zamani
+- Son hata mesaji
+- Bulunan, eklenen, guncellenen, atlanan ve eslesen urun sayilari
+- Calisma suresi
+- Son 24 saat basari orani
+
+Admin-only health check endpoint:
+
+```text
+POST /api/admin/source-health/check
+Body: { "sourceId": 1 }
+```
+
+Guvenlik:
+
+- Sadece admin kullanicilar cagirabilir.
+- Service role key client tarafina cikmaz.
+- Adapter hata verirse UI kirilmaz; hata mesaji kaynak satirinda gosterilir.
