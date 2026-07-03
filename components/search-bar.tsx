@@ -75,7 +75,7 @@ export function SearchBar({
     event.preventDefault();
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
-    if (city) params.set("sehir", city);
+    if (city) params.set("city", city);
     setSuggestionsOpen(false);
     router.push(`${actionPath}?${params.toString()}`);
   }

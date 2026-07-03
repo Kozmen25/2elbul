@@ -9,6 +9,7 @@ import {
   MapPin,
   UserRound,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
@@ -16,6 +17,14 @@ import { ListingImage } from "@/components/listing-image";
 import { PriceAlertsList } from "@/components/price-alerts-list";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+export const metadata: Metadata = {
+  title: "Hesabım | 2ElBul",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("tr-TR", {

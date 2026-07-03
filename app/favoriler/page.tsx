@@ -5,10 +5,19 @@ import {
   MapPin,
   Store,
 } from "lucide-react";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+export const metadata: Metadata = {
+  title: "Favorilerim | 2ElBul",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("tr-TR", {
