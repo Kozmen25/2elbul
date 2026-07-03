@@ -7,12 +7,14 @@ create table if not exists public.price_history (
   listing_id bigint null references public.listings(id) on delete set null,
   source text not null default 'Bilinmeyen kaynak',
   price bigint not null,
-  recorded_at timestamptz not null default now()
+  recorded_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
 );
 
 alter table public.price_history
   add column if not exists source text not null default 'Bilinmeyen kaynak',
-  add column if not exists recorded_at timestamptz not null default now();
+  add column if not exists recorded_at timestamptz not null default now(),
+  add column if not exists created_at timestamptz not null default now();
 
 create index if not exists price_history_listing_price_recorded_at_idx
   on public.price_history(listing_id, price, recorded_at);

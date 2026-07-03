@@ -7,7 +7,8 @@ create table if not exists public.price_history (
   listing_id bigint null references public.listings(id) on delete set null,
   source text not null,
   price bigint not null,
-  recorded_at timestamptz not null default now()
+  recorded_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
 );
 
 create index if not exists price_history_product_recorded_at_idx

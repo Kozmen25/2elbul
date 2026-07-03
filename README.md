@@ -1838,3 +1838,5 @@ Guvenlik ve kurallar:
 - Ayni listing icin ayni gun ayni fiyat tekrar yazilmaz.
 - Yeni SQL gerekmez; `price_history` tablosu ve kolonlari daha onceki migration
   ile hazir olmalidir.
+- Production dogrulamasinda `created_at` kolonu eksikse
+  `supabase/migrations/price-history-created-at.sql` dosyasini calistirin.
