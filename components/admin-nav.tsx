@@ -57,6 +57,7 @@ const groups = [
       { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
       { href: "/admin/products", label: "Ürünler", icon: Boxes },
       { href: "/admin/product-matcher", label: "Ürün Eşleştirici", icon: WandSparkles },
+      { href: "/admin/data-quality", label: "Veri Kalitesi", icon: ShieldCheck },
       { href: "/admin/data-cleanup", label: "Veri Temizliği", icon: ClipboardCheck },
       { href: "/admin/import", label: "İçe Aktar", icon: DatabaseZap },
     ],

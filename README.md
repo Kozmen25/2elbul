@@ -1779,3 +1779,34 @@ Hizli aksiyonlar:
 - Urun Eslestiriciye git
 - Veri Temizligine git
 - Piyasa Merkezini goruntule
+
+## Data Quality Center
+
+`/admin/data-quality` sayfasi, gercek kaynaklardan gelen verilerin kalitesini
+olcmek ve sorunlu kayitlari admin panelden gormek icin eklendi. Yeni SQL
+gerekmez; mevcut `listings`, `products`, `sources` ve `bot_runs` verileri
+kullanilir.
+
+Gosterilen ozetler:
+
+- Overall Data Quality
+- Fiyat Kalitesi
+- Matcher Kalitesi
+- Kaynak Kalitesi
+- Gorsel Kalitesi
+- Son 24 saatte yeni, guncellenen, pasife alinan ve hatali kayit sayilari
+
+Kaynak bazli metrikler:
+
+- Toplam cekilen kayit
+- Normalize edilen kayit
+- Import edilen kayit
+- Guncellenen kayit
+- Skip edilen kayit
+- Hatali kayit
+- Fiyat/URL/gorsel eksikligi
+- Product eslesme orani
+- Ortalama islem suresi
+
+Problemli kayit tablosu ilk 20 sorunu gosterir: fiyat yok, url yok, matcher
+basarisiz, image yok ve duplicate supheli.
