@@ -16,6 +16,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
+import {
+  calculateProductIntelligence,
+  type IntelligenceOpportunityLabel,
+} from "@/lib/intelligence-engine";
 import { LISTING_CONDITIONS, type Listing } from "@/lib/listings";
 import {
   analyzeListingPrice,
@@ -38,6 +42,8 @@ type ProductSummary = {
   highestPrice: number;
   newestAt: string;
   confidenceScore: number | null;
+  intelligenceLabel: IntelligenceOpportunityLabel;
+  intelligenceScore: number;
   confidenceLabel: "Yüksek güven" | "Orta güven" | "Düşük güven" | "Veri yetersiz";
 };
 
@@ -882,11 +888,18 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
                 <h3 className="min-w-0 break-words text-lg font-black leading-6">
                   {product.productName}
                 </h3>
-                <span
-                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-black ${getConfidenceClassName(product.confidenceLabel)}`}
-                >
-                  {product.confidenceLabel}
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${getIntelligenceClassName(product.intelligenceLabel)}`}
+                  >
+                    {product.intelligenceLabel}
+                  </span>
+                  <span
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${getConfidenceClassName(product.confidenceLabel)}`}
+                  >
+                    {product.confidenceLabel}
+                  </span>
+                </div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <MiniMetric label="İlan" value={`${product.listingCount}`} />
@@ -1102,6 +1115,12 @@ function buildProductSummaries(
     const total = prices.reduce((sum, price) => sum + price, 0);
     const averagePrice = prices.length ? Math.round(total / prices.length) : 0;
     const confidence = calculateProductConfidence(productListings, averagePrice);
+    const intelligence = calculateProductIntelligence({
+      listings: productListings.map((listing) => ({
+        price: listing.price,
+        createdAt: listing.createdAt,
+      })),
+    });
     const newestAt = productListings
       .map((listing) => listing.createdAt)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
@@ -1116,6 +1135,8 @@ function buildProductSummaries(
       highestPrice: prices.length ? Math.max(...prices) : 0,
       newestAt,
       confidenceScore: confidence.score,
+      intelligenceLabel: intelligence.opportunity.label,
+      intelligenceScore: intelligence.opportunity.score,
       confidenceLabel: confidence.label,
     };
   });
@@ -1166,6 +1187,14 @@ function getConfidenceClassName(label: ProductSummary["confidenceLabel"]) {
   if (label === "Yüksek güven") return "border-green-200 bg-green-50 text-green-700";
   if (label === "Orta güven") return "border-amber-200 bg-amber-50 text-amber-700";
   if (label === "Düşük güven") return "border-red-200 bg-red-50 text-red-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function getIntelligenceClassName(label: IntelligenceOpportunityLabel) {
+  if (label === "Güçlü fırsat") return "border-green-200 bg-green-50 text-green-700";
+  if (label === "Takip etmeye değer") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (label === "Dikkatli incele") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (label === "Normal piyasa") return "border-slate-200 bg-slate-50 text-slate-700";
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 

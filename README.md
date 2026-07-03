@@ -1493,3 +1493,24 @@ kullanilir. Ikisi de yoksa yeni SQL gerekir:
 ```sql
 alter table public.listings add column if not exists status text default 'published';
 ```
+
+## 2ElBul Intelligence Engine v1
+
+2ElBul Intelligence Engine, mevcut `products`, `listings`, `price_history` ve
+`search_demands` verilerinden kural tabanli karar destek sinyali uretir.
+
+Hesaplanan ciktılar:
+
+- Piyasa degeri: ortalama, medyan, minimum, maksimum, fiyat araligi ve ilan sayisi
+- Trend: yukselen, dusen, stabil veya bilinmeyen fiyat sinyali
+- Talep: toplam ve son donem arama ilgisine gore dusuk, orta veya yuksek talep
+- Firsat skoru: 0-100 arasi skor ve "Guclu firsat", "Takip etmeye deger",
+  "Normal piyasa", "Dikkatli incele" veya "Veri yetersiz" etiketi
+- Alim onerisi: `buy_now`, `watch`, `wait` veya `insufficient_data`
+
+Motor saf fonksiyonlardan olusur ve database baglantisi kurmaz:
+`lib/intelligence-engine.ts`. Urun detay sayfasinda "2ElBul Intelligence"
+karti, arama urun kartlarinda ise kucuk intelligence rozeti olarak gosterilir.
+
+Yeni SQL gerekmez. Veri azsa motor "Veri yetersiz" doner ve sistem mevcut
+ilan karsilastirma akisini bozmadan calismaya devam eder.

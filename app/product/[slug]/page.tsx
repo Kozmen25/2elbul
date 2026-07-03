@@ -14,6 +14,7 @@ import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertForm } from "@/components/price-alert-form";
+import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { Listing } from "@/lib/listings";
 import { calculateMarketStats } from "@/lib/price-insights";
 import {
@@ -100,7 +101,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const detail = await getProductDetail(slug);
   if (!detail) notFound();
 
-  const { product, listings, decisionInsight, bestDeals, relatedProducts } =
+  const { product, listings, intelligence, decisionInsight, bestDeals, relatedProducts } =
     detail;
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
@@ -269,8 +270,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
 
         <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)_minmax(300px,0.8fr)]">
-          <AdvancedPriceInsightCard insight={decisionInsight.smartPrice} />
+          <IntelligenceCard intelligence={intelligence} />
 
+          <AdvancedPriceInsightCard insight={decisionInsight.smartPrice} />
+        </div>
+
+        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(280px,0.8fr)_minmax(300px,0.8fr)]">
           <ConfidenceScoreCard insight={decisionInsight.confidence} />
 
           <BestDealCard
@@ -579,6 +584,81 @@ function RelatedMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate text-xs font-black" title={value}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function IntelligenceCard({
+  intelligence,
+}: {
+  intelligence: ProductIntelligence;
+}) {
+  return (
+    <section className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(255,107,0,0.08)] sm:p-8">
+      <SectionTitle
+        icon={ChartNoAxesCombined}
+        eyebrow="Karar destek motoru"
+        title="2ElBul Intelligence"
+      />
+      <div className="mt-5 rounded-2xl border border-[#ff6b00]/20 bg-white p-4">
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-[#d95700]">
+          Alim onerisi
+        </p>
+        <h3 className="mt-2 text-2xl font-black tracking-[-0.04em]">
+          {intelligence.recommendation.title}
+        </h3>
+        <p className="mt-3 text-sm font-semibold leading-6 text-black/58">
+          {intelligence.recommendation.description}
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <IntelligenceMetric
+          label="Firsat skoru"
+          value={`${intelligence.opportunity.score}/100`}
+          badge={intelligence.opportunity.label}
+        />
+        <IntelligenceMetric
+          label="Piyasa trendi"
+          value={formatTrendDirection(intelligence.trend.direction)}
+          badge={intelligence.trend.changePercent === null ? "Veri yok" : `%${Math.abs(intelligence.trend.changePercent)} ${intelligence.trend.changePercent < 0 ? "dusus" : "degisim"}`}
+        />
+        <IntelligenceMetric
+          label="Talep seviyesi"
+          value={formatDemandLevel(intelligence.demand.demandLevel)}
+          badge={`${intelligence.demand.recentSearchCount} yeni arama`}
+        />
+      </div>
+
+      <div className="mt-4 space-y-2 text-sm font-semibold leading-6 text-black/58">
+        <p>{intelligence.opportunity.explanation}</p>
+        <p>{intelligence.trend.explanation}</p>
+        <p>{intelligence.demand.explanation}</p>
+      </div>
+    </section>
+  );
+}
+
+function IntelligenceMetric({
+  label,
+  value,
+  badge,
+}: {
+  label: string;
+  value: string;
+  badge: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-black/8 bg-white p-4">
+      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
+        {label}
+      </p>
+      <p className="mt-2 truncate text-base font-black" title={value}>
+        {value}
+      </p>
+      <span className="mt-3 inline-flex max-w-full truncate rounded-full bg-[#fff1e7] px-3 py-1 text-[11px] font-black text-[#d95700]">
+        {badge}
+      </span>
     </div>
   );
 }
@@ -1003,6 +1083,20 @@ function formatDealDifference(value: number | null) {
   if (value < 0) return `%${absolute} altında`;
   if (value > 0) return `%${absolute} üstünde`;
   return "ortalama seviyesinde";
+}
+
+function formatTrendDirection(direction: ProductIntelligence["trend"]["direction"]) {
+  if (direction === "rising") return "Yukseliyor";
+  if (direction === "falling") return "Dusuyor";
+  if (direction === "stable") return "Stabil";
+  return "Bilinmiyor";
+}
+
+function formatDemandLevel(level: ProductIntelligence["demand"]["demandLevel"]) {
+  if (level === "high") return "Yuksek";
+  if (level === "medium") return "Orta";
+  if (level === "low") return "Dusuk";
+  return "Bilinmiyor";
 }
 
 function buildProductJsonLd({

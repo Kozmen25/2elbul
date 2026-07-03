@@ -4,6 +4,10 @@ import type {
   ListingCondition,
   ListingSource,
 } from "@/lib/listings";
+import {
+  calculateProductIntelligence,
+  type ProductIntelligence,
+} from "@/lib/intelligence-engine";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import {
   calculateMarketStats,
@@ -11,6 +15,7 @@ import {
 } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
+import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseClient } from "@/lib/supabase";
 
 export type ProductRecord = {
@@ -24,6 +29,7 @@ export type ProductDetailData = {
   product: ProductRecord;
   listings: Listing[];
   priceHistory: PriceHistoryRecord[];
+  intelligence: ProductIntelligence;
   decisionInsight: ProductDecisionInsight;
   bestDeals: ProductBestDeal[];
   relatedProducts: RelatedProductSummary[];
@@ -94,6 +100,12 @@ type RelatedListingRow = {
   title?: string | null;
   source?: string | null;
   url?: string | null;
+};
+
+type SearchDemandRow = {
+  query?: string | null;
+  normalized_query?: string | null;
+  requested_at?: string | null;
 };
 
 export const getProductBySlug = cache(
@@ -212,6 +224,7 @@ export async function getProductDetail(
       product,
       listings: [],
       priceHistory: [],
+      intelligence: calculateProductIntelligence({ listings: [] }),
       decisionInsight: buildProductDecisionInsight(product.name, [], []),
       bestDeals: [],
       relatedProducts: await getRelatedProducts(supabase, product),
@@ -261,11 +274,17 @@ export async function getProductDetail(
           recordedAt: String(record.recorded_at),
         }))
         .filter((record) => Number.isFinite(record.price));
+  const demand = await getProductSearchDemandStats(supabase, product.name);
 
   return {
     product,
     listings,
     priceHistory,
+    intelligence: calculateProductIntelligence({
+      listings,
+      priceHistory,
+      demand,
+    }),
     decisionInsight: buildProductDecisionInsight(
       product.name,
       listings,
@@ -274,6 +293,57 @@ export async function getProductDetail(
     bestDeals: buildProductBestDeals(listings),
     relatedProducts: await getRelatedProducts(supabase, product),
   };
+}
+
+async function getProductSearchDemandStats(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  productName: string,
+) {
+  const normalizedProduct = normalizeSearchDemandQuery(productName);
+  if (!normalizedProduct) return { searchCount: 0, recentSearchCount: 0 };
+
+  const result = await supabase
+    .from("search_demands")
+    .select("query, normalized_query, requested_at")
+    .order("requested_at", { ascending: false })
+    .limit(500);
+
+  if (result.error) {
+    if (!isMissingSearchDemandTable(result.error)) {
+      console.error("Supabase product search demand query failed:", result.error);
+    }
+    return { searchCount: 0, recentSearchCount: 0 };
+  }
+
+  const productTokens = new Set(
+    normalizedProduct.split(" ").filter((token) => token.length >= 2),
+  );
+  const recentCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let searchCount = 0;
+  let recentSearchCount = 0;
+
+  for (const row of (result.data ?? []) as SearchDemandRow[]) {
+    const normalizedQuery = normalizeSearchDemandQuery(
+      row.normalized_query || row.query || "",
+    );
+    if (!normalizedQuery) continue;
+    const queryTokens = new Set(
+      normalizedQuery.split(" ").filter((token) => token.length >= 2),
+    );
+    const overlaps = [...productTokens].filter((token) => queryTokens.has(token));
+    const isMatch =
+      normalizedQuery.includes(normalizedProduct) ||
+      normalizedProduct.includes(normalizedQuery) ||
+      overlaps.length >= Math.min(2, productTokens.size);
+
+    if (!isMatch) continue;
+    searchCount += 1;
+    if (row.requested_at && new Date(row.requested_at).getTime() >= recentCutoff) {
+      recentSearchCount += 1;
+    }
+  }
+
+  return { searchCount, recentSearchCount };
 }
 
 export function buildProductDecisionInsight(
@@ -684,6 +754,17 @@ function isMissingPriceHistoryTable(error: unknown) {
     record.code === "42P01" ||
     record.code === "PGRST205" ||
     text.includes("price_history")
+  );
+}
+
+function isMissingSearchDemandTable(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "42P01" ||
+    record.code === "PGRST205" ||
+    text.includes("search_demands")
   );
 }
 

@@ -258,6 +258,33 @@ export default async function Home() {
 
       <section className="border-t border-black/7 bg-white py-12 sm:py-16">
         <div className="container-shell">
+          <div className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-6 shadow-[0_18px_60px_rgba(255,107,0,0.08)] sm:p-8 lg:p-10">
+            <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+                  Piyasa zekasi
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
+                  2ElBul sadece fiyat gostermez, piyasa sinyali uretir.
+                </h2>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-black/60 sm:text-base">
+                  Intelligence Engine; ilan sayisi, fiyat araligi, gecmis fiyat
+                  hareketi ve arama talebini birlestirerek al-sat kararini daha
+                  net yorumlamana yardimci olur.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <IntelligenceSignal title="Firsat skoru" description="En ucuz ilan piyasa ortalamasina gore yorumlanir." />
+                <IntelligenceSignal title="Trend sinyali" description="Fiyatlar yukseliyor mu, dusuyor mu takip edilir." />
+                <IntelligenceSignal title="Talep seviyesi" description="Arama ilgisi artarsa karar destegi buna gore guclenir." />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-black/7 bg-white py-12 sm:py-16">
+        <div className="container-shell">
           <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
@@ -555,6 +582,24 @@ function HomeSection({
         {children}
       </div>
     </section>
+  );
+}
+
+function IntelligenceSignal({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#ff6b00]/15 bg-white p-5">
+      <span className="grid size-10 place-items-center rounded-xl bg-[#111] text-white">
+        <BarChart3 size={18} />
+      </span>
+      <h3 className="mt-4 font-black">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-black/50">{description}</p>
+    </div>
   );
 }
 
