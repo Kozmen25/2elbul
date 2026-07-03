@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotAdapterListing } from "@/lib/bots/types";
 import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import { recordListingPriceHistory } from "@/lib/price-history";
 
 type SyncRpcResult = {
   inserted?: number;
@@ -241,23 +242,37 @@ export async function insertListingsLegacy(
 
     const status =
       listing.status === "pending" ? "pending" : normalizeSyncStatus(listing.status);
-    const { error: listingInsertError } = await supabase.from("listings").insert({
-      product_id: productId,
-      title: listing.title,
-      price: listing.price,
-      city: listing.city,
-      source: listing.source,
-      url: listing.url,
-      condition: listing.condition,
-      image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-      status,
-    });
+    const { data: createdListing, error: listingInsertError } = await supabase
+      .from("listings")
+      .insert({
+        product_id: productId,
+        title: listing.title,
+        price: listing.price,
+        city: listing.city,
+        source: listing.source,
+        url: listing.url,
+        condition: listing.condition,
+        image_url: listing.image_url ?? listing.image_urls[0] ?? null,
+        status,
+      })
+      .select("id")
+      .single();
 
-    if (listingInsertError) {
+    if (listingInsertError || !createdListing) {
       errorCount += 1;
-      errors.push(`${listing.title}: ${listingInsertError.message}`);
+      errors.push(
+        `${listing.title}: ${
+          listingInsertError?.message ?? "ilan kaydi olusturulamadi."
+        }`,
+      );
       continue;
     }
+    await recordListingPriceHistory(supabase, {
+      productId,
+      listingId: createdListing.id,
+      source: listing.source,
+      price: listing.price,
+    });
     imported += 1;
   }
 

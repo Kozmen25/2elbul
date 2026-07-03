@@ -6,6 +6,7 @@ import {
   type SourceAdapter,
 } from "@/lib/source-adapters";
 import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import { recordListingPriceHistory } from "@/lib/price-history";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -357,12 +358,8 @@ async function importAdapterListings(
     if (existing) updated += 1;
     else imported += 1;
 
-    if (
-      data?.id &&
-      previousPrice !== null &&
-      previousPrice !== Number(listing.price)
-    ) {
-      await insertPriceHistorySafely(supabase, {
+    if (data?.id && (!existing || previousPrice !== Number(listing.price))) {
+      await recordListingPriceHistory(supabase, {
         productId,
         listingId: Number(data.id),
         source: listing.sourceName,
@@ -470,27 +467,6 @@ async function findExistingListing(
 
   if (error) throw error;
   return data as { id: number | string; price: number | string } | null;
-}
-
-async function insertPriceHistorySafely(
-  supabase: SupabaseClient,
-  input: {
-    productId: number;
-    listingId: number;
-    source: string;
-    price: number;
-  },
-) {
-  const { error } = await supabase.from("price_history").insert({
-    product_id: input.productId,
-    listing_id: input.listingId,
-    source: input.source,
-    price: input.price,
-  });
-
-  if (error) {
-    console.error("Search queue price history insert failed:", error);
-  }
 }
 
 async function updateQueueSuccess(

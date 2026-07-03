@@ -1548,3 +1548,44 @@ Sayfa bolumleri:
 Basit filtre linkleri `?view=` query parametresiyle calisir:
 `opportunities`, `falling`, `searched`, `listed`. Hesaplama server-side
 `getHomeData()` ve `lib/market-pulse.ts` uzerinden yapilir. Yeni SQL gerekmez.
+
+## Price History Gerceklestirme
+
+Fiyat gecmisi artik bot ve arama kuyrugu akislarinda guvenilir sekilde
+beslenir. Ortak helper: `lib/price-history.ts`.
+
+Yazma kurallari:
+
+- Ilan ilk kez eklendiyse `price_history` kaydi olusturulur.
+- Ilan fiyati degistiyse yeni `price_history` kaydi olusturulur.
+- Fiyat degismediyse tekrar kayit yazilmaz.
+- Ayni listing icin ayni gun ayni fiyat ikinci kez yazilmaz.
+- `price_history` semasi eksikse uygulama patlamaz; hata server log'una yazilir.
+
+Baglanan akislar:
+
+- `/api/cron/process-search-queue`
+- `lib/bots/listing-sync.ts` legacy insert yolu
+- `supabase/bot-sync.sql` icindeki `sync_source_listings` RPC yolu
+- `supabase/migrations/price-history-backfill-support.sql` trigger destegi
+
+Calistirilmasi onerilen migration:
+
+```sql
+-- Supabase SQL Editor
+-- Dosya: supabase/migrations/price-history-backfill-support.sql
+```
+
+Bu migration `listings` insert/update price trigger'i ekler ve tum import
+yollarinda fiyat gecmisini yakalar. Ayrica guvenli backfill fonksiyonu ekler:
+
+```sql
+-- Once dry-run:
+select * from public.backfill_price_history_from_listings(500, true);
+
+-- Sonra kontrollu yazma:
+select * from public.backfill_price_history_from_listings(500, false);
+```
+
+Backfill otomatik calismaz; canli veriyi silmez veya degistirmez. Sadece aktif
+ilanlardan eksik ilk fiyat gecmisi kayitlarini olusturur.
