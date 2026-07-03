@@ -1689,6 +1689,27 @@ Default durum:
 - Kaynak erisilemez veya HTML degisirse Bot Merkezi hata mesajini gosterir; sistem
   kirilmaz.
 
+## Getmobil Adapter v1
+
+Ikinci standart gercek kaynak adaptoru Getmobil icin eklendi:
+
+- `lib/bots/adapters/getmobil-adapter.ts`
+
+Adapter davranisi:
+
+- `sourceSlug = getmobil` olan kaynaklar otomatik Getmobil standart adapterini
+  kullanir.
+- `sync()` public Getmobil telefon kategori sayfasini mevcut guvenli parser
+  uzerinden okur ve standart listing formatina cevirir.
+- `search(query)` cekilen public veri icinde baslik/urun eslesmesi yapar.
+- Eksik fiyat veya URL varsa kayit import edilmez, `skipped` sayacina yansir.
+- Ag hatasi veya HTML/JSON-LD degisikliginde sistem kirilmaz; `errors` dolu
+  standart sonuc doner.
+- `healthCheck()` kaynak erisilemezse `ok: false` ve okunabilir mesaj doner.
+
+Yeni SQL gerekmez. Health sonucu Bot Merkezi > Kaynak Sagligi bolumunden
+izlenebilir.
+
 ## Adapter Health Center v1
 
 Adapter Health Center, Bot Merkezi icinde kaynak/adaptor sagligini izlemek icin

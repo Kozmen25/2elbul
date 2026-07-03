@@ -17,6 +17,7 @@ import {
 import { parseEasyCepProductPage } from "@/lib/bots/adapters/easycep";
 import { createEasyCepStandardAdapter } from "@/lib/bots/adapters/easycep-adapter";
 import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
+import { createGetmobilStandardAdapter } from "@/lib/bots/adapters/getmobil-adapter";
 import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
 import type {
   BotAdapterListing,
@@ -97,6 +98,9 @@ export function getSourceConnector(
 export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
   if (config.sourceSlug === "easycep") {
     return createEasyCepStandardAdapter(config);
+  }
+  if (config.sourceSlug === "getmobil") {
+    return createGetmobilStandardAdapter(config);
   }
 
   const connector = getSourceConnector(config);
