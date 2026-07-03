@@ -1514,3 +1514,20 @@ karti, arama urun kartlarinda ise kucuk intelligence rozeti olarak gosterilir.
 
 Yeni SQL gerekmez. Veri azsa motor "Veri yetersiz" doner ve sistem mevcut
 ilan karsilastirma akisini bozmadan calismaya devam eder.
+
+## Piyasa Nabzi v1
+
+Piyasa Nabzi, Intelligence Engine ciktisini global ana sayfa sinyallerine
+donusturur. Yeni veri kaynagi veya yeni SQL gerektirmez; mevcut urun, ilan ve
+arama verileriyle calisir.
+
+Ana sayfada gosterilen sinyaller:
+
+- En cok arananlar
+- En cok ilani olanlar
+- One cikan firsatlar
+- Fiyati dusenler
+
+Hesaplama `lib/market-pulse.ts` icindeki saf helper ile yapilir. Ana sayfa
+verileri server-side hazirlanir, client'a yalnizca kucuk ozet kartlari gider.
+Yeterli veri yoksa bolum kirilmaz ve profesyonel bos durum metinleri gosterilir.

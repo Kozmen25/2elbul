@@ -1,7 +1,10 @@
 import type { ListingCondition, ListingSource } from "@/lib/listings";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import { buildMarketPulse, type MarketPulse } from "@/lib/market-pulse";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
+
+export type { MarketPulseItem } from "@/lib/market-pulse";
 
 export type HomeListing = {
   id: string;
@@ -58,6 +61,7 @@ export type HomeData = {
   popularListedProducts: PopularListedProduct[];
   priceDrops: PriceDrop[];
   popularCategories: PopularCategory[];
+  marketPulse: MarketPulse;
   error: string;
 };
 
@@ -93,6 +97,7 @@ export async function getHomeData(): Promise<HomeData> {
     popularListedProducts: [],
     priceDrops: [],
     popularCategories: [],
+    marketPulse: buildMarketPulse({ products: [], listings: [] }),
     error: "",
   };
   const supabase = createSupabaseClient();
@@ -110,6 +115,7 @@ export async function getHomeData(): Promise<HomeData> {
     categoriesResult,
     priceDataResult,
     searchEventsResult,
+    searchDemandsResult,
   ] =
     await Promise.all([
       supabase.from("products").select("id, name"),
@@ -122,6 +128,11 @@ export async function getHomeData(): Promise<HomeData> {
         .from("search_events")
         .select("product_id, created_at")
         .order("created_at", { ascending: false })
+        .limit(1000),
+      supabase
+        .from("search_demands")
+        .select("query, normalized_query, requested_at")
+        .order("requested_at", { ascending: false })
         .limit(1000),
     ]);
 
@@ -213,6 +224,21 @@ export async function getHomeData(): Promise<HomeData> {
     const productId = String(event.product_id);
     searchCounts.set(productId, (searchCounts.get(productId) ?? 0) + 1);
   }
+  const marketPulseSearches = [
+    ...(searchEventsResult.error
+      ? []
+      : (searchEventsResult.data ?? []).map((event) => ({
+          productId: String(event.product_id),
+          createdAt: String(event.created_at ?? ""),
+        }))),
+    ...(searchDemandsResult.error
+      ? []
+      : (searchDemandsResult.data ?? []).map((demand) => ({
+          query: String(demand.query ?? ""),
+          normalizedQuery: String(demand.normalized_query ?? ""),
+          createdAt: String(demand.requested_at ?? ""),
+        }))),
+  ];
 
   const popularProducts = [...searchCounts.entries()]
     .map(([productId, searchCount]) => ({
@@ -384,6 +410,19 @@ export async function getHomeData(): Promise<HomeData> {
       .map(([name, listingCount]) => ({ name, listingCount }))
       .sort((a, b) => b.listingCount - a.listingCount)
       .slice(0, 6),
+    marketPulse: buildMarketPulse({
+      products: products.map((product) => ({
+        id: product.id,
+        name: String(product.name),
+      })),
+      listings: publicListings.map((listing) => ({
+        productName: listing.productName,
+        price: listing.price,
+        createdAt: listing.createdAt,
+      })),
+      searches: marketPulseSearches,
+      limit: 5,
+    }),
     error: "",
   };
 }
