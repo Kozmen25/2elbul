@@ -15,6 +15,7 @@ import {
   YENILENMIS_MARKET_CATEGORY_URL,
 } from "@/lib/bots/adapters";
 import { parseEasyCepProductPage } from "@/lib/bots/adapters/easycep";
+import { createEasyCepStandardAdapter } from "@/lib/bots/adapters/easycep-adapter";
 import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
 import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
 import type {
@@ -94,6 +95,10 @@ export function getSourceConnector(
 }
 
 export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
+  if (config.sourceSlug === "easycep") {
+    return createEasyCepStandardAdapter(config);
+  }
+
   const connector = getSourceConnector(config);
   return createStandardSourceAdapter({
     config,

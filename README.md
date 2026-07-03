@@ -1658,3 +1658,33 @@ Standart sonuc metrikleri:
 mevcut `listing-sync` akisina aktarir. Bu sayede Bot Merkezi metrikleri ayni
 kalirken gelecekte yeni kaynak eklemek daha kontrollu hale gelir. Yeni SQL
 gerekmez.
+
+## Ilk Gercek Kaynak Adaptoru v1
+
+Ilk standart gercek kaynak adaptoru EasyCep icin eklendi:
+
+- `lib/bots/adapters/easycep-adapter.ts`
+
+Neden EasyCep?
+
+- Yenilenmis cihaz odakli oldugu icin 2ElBul veri modeline uygun.
+- Public kategori sayfasi ve mevcut JSON-LD/HTML parser altyapisi var.
+- Login, captcha bypass veya agresif scraping gerektirmeden guvenli test
+  edilebilir.
+
+Adapter davranisi:
+
+- `sync()` public EasyCep kategori sayfasindan mevcut guvenli fetch/parser
+  katmanini kullanarak ilanlari normalize eder.
+- `search(query)` ayni public veri uzerinden basit baslik/urun eslesmesi yapar.
+- `normalizeListing(raw)` eksik fiyat veya URL varsa `null` doner.
+- `healthCheck()` kaynak erisilemezse hata firlatmaz, `ok: false` ve mesaj doner.
+- Sonuc her zaman standart `found`, `skipped`, `errors`, `duration_ms` metrikleriyle
+  doner.
+
+Default durum:
+
+- `sourceSlug = easycep` olan kaynaklar icin standart adapter otomatik kullanilir.
+- Yeni SQL gerekmez.
+- Kaynak erisilemez veya HTML degisirse Bot Merkezi hata mesajini gosterir; sistem
+  kirilmaz.
