@@ -1531,3 +1531,20 @@ Ana sayfada gosterilen sinyaller:
 Hesaplama `lib/market-pulse.ts` icindeki saf helper ile yapilir. Ana sayfa
 verileri server-side hazirlanir, client'a yalnizca kucuk ozet kartlari gider.
 Yeterli veri yoksa bolum kirilmaz ve profesyonel bos durum metinleri gosterilir.
+
+## Piyasa Merkezi v1
+
+`/market` public sayfasi, Piyasa Nabzi sinyallerini daha detayli bir merkezde
+gosterir.
+
+Sayfa bolumleri:
+
+- En cok aranan urunler
+- En cok ilani olan urunler
+- One cikan firsatlar
+- Fiyati dusen urunler
+- Veri yetersiz urunler
+
+Basit filtre linkleri `?view=` query parametresiyle calisir:
+`opportunities`, `falling`, `searched`, `listed`. Hesaplama server-side
+`getHomeData()` ve `lib/market-pulse.ts` uzerinden yapilir. Yeni SQL gerekmez.

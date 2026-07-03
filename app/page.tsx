@@ -407,6 +407,13 @@ export default async function Home() {
           2ElBul, ikinci el piyasasındaki arama, ilan ve fiyat sinyallerini
           analiz ederek öne çıkan ürünleri gösterir.
         </div>
+        <Link
+          href="/market"
+          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#ff6b00]/25 bg-white px-4 py-2 text-sm font-black text-[#d95700] transition hover:border-[#ff6b00]/45 hover:bg-[#fff7f1]"
+        >
+          Piyasa Merkezini Gör
+          <ArrowUpRight size={16} />
+        </Link>
         <div className="grid gap-5 xl:grid-cols-2">
           <MarketPulseGroup
             title="En çok arananlar"

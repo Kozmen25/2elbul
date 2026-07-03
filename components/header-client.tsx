@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   Home,
+  BarChart3,
   Heart,
   LogIn,
   LogOut,
@@ -42,6 +43,9 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
         <nav className="hidden items-center gap-6 text-sm font-semibold md:flex">
           <Link href="/" className="transition-colors hover:text-[#ff6b00]">
             Ana Sayfa
+          </Link>
+          <Link href="/market" className="transition-colors hover:text-[#ff6b00]">
+            Piyasa Merkezi
           </Link>
           <Link href="/listing-ekle" className="orange-button px-4 py-2.5">
             <Plus size={17} strokeWidth={2.5} />
@@ -155,6 +159,12 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
               className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-black/4"
             >
               <Home size={18} /> Ana Sayfa
+            </Link>
+            <Link
+              href="/market"
+              className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-black/4"
+            >
+              <BarChart3 size={18} className="text-[#ff6b00]" /> Piyasa Merkezi
             </Link>
             <Link
               href="/listing-ekle"
