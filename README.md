@@ -1810,3 +1810,31 @@ Kaynak bazli metrikler:
 
 Problemli kayit tablosu ilk 20 sorunu gosterir: fiyat yok, url yok, matcher
 basarisiz, image yok ve duplicate supheli.
+
+## Price History Backfill
+
+Canli DB'de `price_history` bos kaldiginda ilk gecmis kayitlarini guvenli
+sekilde olusturmak icin admin-only backfill eklendi.
+
+Calistirma:
+
+1. Admin olarak `/admin/data-quality` sayfasini acin.
+2. `Price History Backfill Calistir` butonuna basin.
+3. Sonucta taranan, yazilan, atlanan ve hatali kayit sayilarini kontrol edin.
+
+Endpoint:
+
+```http
+POST /api/admin/price-history/backfill
+Body: { "limit": 100 }
+```
+
+Guvenlik ve kurallar:
+
+- Sadece admin kullanicilar calistirabilir.
+- `SUPABASE_SERVICE_ROLE_KEY` sadece server-side route icinde kullanilir.
+- Ilk surum en fazla 100 published/active listing tarar.
+- `product_id`, `listing_id` veya `price` eksikse kayit atlanir.
+- Ayni listing icin ayni gun ayni fiyat tekrar yazilmaz.
+- Yeni SQL gerekmez; `price_history` tablosu ve kolonlari daha onceki migration
+  ile hazir olmalidir.

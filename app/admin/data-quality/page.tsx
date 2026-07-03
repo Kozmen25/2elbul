@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { AdminEmpty, AdminPageHeader, AdminStatCard } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { PriceHistoryBackfillButton } from "./price-history-backfill-button";
 
 type ListingRow = {
   id: unknown;
@@ -76,6 +77,8 @@ export default async function AdminDataQualityPage() {
         </AdminEmpty>
       ) : (
         <div className="grid gap-6">
+          <PriceHistoryBackfillButton />
+
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <AdminStatCard
               label="Overall Data Quality"
