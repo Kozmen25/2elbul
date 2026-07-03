@@ -233,7 +233,7 @@ export default async function Home() {
               Nasil calisir?
             </p>
             <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
-              Aradigin urunun piyasa resmini dakikalar icinde gor.
+              Aradigin urunun ikinci el piyasa degerini dakikalar icinde gor.
             </h2>
           </div>
 
