@@ -20,6 +20,13 @@ export type IntelligenceTrendDirection =
   | "unknown";
 
 export type IntelligenceDemandLevel = "low" | "medium" | "high" | "unknown";
+export type IntelligenceTrendStrength =
+  | "Güçlü yükseliş"
+  | "Hafif yükseliş"
+  | "Stabil"
+  | "Hafif düşüş"
+  | "Güçlü düşüş"
+  | "Veri yok";
 
 export type IntelligenceOpportunityLabel =
   | "Güçlü fırsat"
@@ -34,6 +41,9 @@ export type IntelligenceRecommendationAction =
   | "wait"
   | "insufficient_data";
 
+export type IntelligenceDecisionLabel = "Şimdi Al" | "Bekle" | "Takip Et" | "Veri Az";
+export type IntelligenceScoreLevel = "low" | "medium" | "high" | "unknown";
+
 export type ProductIntelligence = {
   marketValue: {
     averagePrice: number | null;
@@ -45,6 +55,7 @@ export type ProductIntelligence = {
   };
   trend: {
     direction: IntelligenceTrendDirection;
+    strengthLabel: IntelligenceTrendStrength;
     changePercent: number | null;
     periodLabel: string;
     explanation: string;
@@ -64,6 +75,16 @@ export type ProductIntelligence = {
     action: IntelligenceRecommendationAction;
     title: string;
     description: string;
+  };
+  decisionSupport: {
+    buyScore: number;
+    waitScore: number;
+    volatilityScore: number;
+    volatilityLevel: IntelligenceScoreLevel;
+    liquidityScore: number;
+    liquidityLevel: IntelligenceScoreLevel;
+    label: IntelligenceDecisionLabel;
+    explanation: string;
   };
 };
 
@@ -85,6 +106,7 @@ const insufficientIntelligence: ProductIntelligence = {
   },
   trend: {
     direction: "unknown",
+    strengthLabel: "Veri yok",
     changePercent: null,
     periodLabel: "Veri yok",
     explanation: "Trend hesaplamak için yeterli fiyat geçmişi bulunmuyor.",
@@ -105,6 +127,17 @@ const insufficientIntelligence: ProductIntelligence = {
     title: "Veri yetersiz",
     description:
       "Bu ürün için sağlıklı karar desteği üretecek kadar ilan veya geçmiş veri yok.",
+  },
+  decisionSupport: {
+    buyScore: 0,
+    waitScore: 0,
+    volatilityScore: 0,
+    volatilityLevel: "unknown",
+    liquidityScore: 0,
+    liquidityLevel: "unknown",
+    label: "Veri Az",
+    explanation:
+      "Satın alma tavsiyesi için en az 3 karşılaştırılabilir ilan ve mümkünse fiyat geçmişi gerekir.",
   },
 };
 
@@ -137,6 +170,16 @@ export function calculateProductIntelligence(
     demandLevel: demand.demandLevel,
     changePercent: trend.changePercent,
   });
+  const decisionSupport = buildDecisionSupport({
+    prices,
+    listings: input.listings,
+    priceHistory: input.priceHistory ?? [],
+    marketValue,
+    trend,
+    demand,
+    opportunityScore: opportunity.score,
+    now: input.now ?? new Date(),
+  });
 
   return {
     marketValue,
@@ -144,6 +187,7 @@ export function calculateProductIntelligence(
     demand,
     opportunity,
     recommendation,
+    decisionSupport,
   };
 }
 
@@ -199,6 +243,7 @@ function buildTrend(
   const changePercent = roundPercent(((last.price - first.price) / first.price) * 100);
   const direction: IntelligenceTrendDirection =
     changePercent <= -4 ? "falling" : changePercent >= 4 ? "rising" : "stable";
+  const strengthLabel = buildTrendStrength(changePercent);
   const days = Math.max(
     1,
     Math.round(
@@ -210,6 +255,7 @@ function buildTrend(
 
   return {
     direction,
+    strengthLabel,
     changePercent,
     periodLabel,
     explanation:
@@ -218,6 +264,102 @@ function buildTrend(
         : direction === "rising"
           ? `Fiyat sinyali ${periodLabel} içinde yaklaşık %${changePercent} yükseliş gösteriyor.`
           : `Fiyat sinyali ${periodLabel} içinde dengeli seyrediyor.`,
+  };
+}
+
+function buildDecisionSupport({
+  prices,
+  listings,
+  priceHistory,
+  marketValue,
+  trend,
+  demand,
+  opportunityScore,
+  now,
+}: {
+  prices: number[];
+  listings: IntelligenceListingInput[];
+  priceHistory: IntelligencePriceHistoryInput[];
+  marketValue: ProductIntelligence["marketValue"];
+  trend: ProductIntelligence["trend"];
+  demand: ProductIntelligence["demand"];
+  opportunityScore: number;
+  now: Date;
+}): ProductIntelligence["decisionSupport"] {
+  if (
+    prices.length < 3 ||
+    !marketValue.averagePrice ||
+    !marketValue.medianPrice ||
+    !marketValue.minPrice
+  ) {
+    return insufficientIntelligence.decisionSupport;
+  }
+
+  const averagePrice = marketValue.averagePrice;
+  const medianPrice = marketValue.medianPrice;
+  const minPrice = marketValue.minPrice;
+  const cheapestAverageDiscount = ((averagePrice - minPrice) / averagePrice) * 100;
+  const cheapestMedianDiscount = ((medianPrice - minPrice) / medianPrice) * 100;
+  const volatilityRatio = calculateVolatilityRatio(prices, averagePrice);
+  const volatilityScore = clampScore(Math.round(volatilityRatio * 160));
+  const volatilityLevel = scoreLevel(volatilityScore, 25, 55);
+  const recentListingCount = countRecentListings(listings, now, 14);
+  const recentDropRate = calculateRecentDropRate(priceHistory, listings);
+  const liquidityScore = buildLiquidityScore({
+    listingCount: prices.length,
+    recentListingCount,
+    demandLevel: demand.demandLevel,
+    searchCount: demand.searchCount,
+  });
+  const liquidityLevel = scoreLevel(liquidityScore, 35, 65);
+  const confidenceProxy = clampScore(
+    35 + Math.min(30, prices.length * 4) + Math.max(0, 35 - volatilityScore),
+  );
+
+  let buyScore = 38;
+  buyScore += Math.min(35, Math.max(0, cheapestAverageDiscount) * 1.25);
+  buyScore += Math.min(12, Math.max(0, cheapestMedianDiscount) * 0.45);
+  buyScore += trend.direction === "stable" ? 9 : trend.direction === "rising" ? 7 : -8;
+  buyScore += demand.demandLevel === "high" ? 7 : demand.demandLevel === "medium" ? 4 : 0;
+  buyScore += liquidityScore >= 65 ? 7 : liquidityScore >= 35 ? 3 : -5;
+  buyScore += confidenceProxy >= 70 ? 7 : confidenceProxy >= 55 ? 3 : -8;
+  buyScore -= volatilityScore >= 60 ? 18 : volatilityScore >= 35 ? 8 : 0;
+  buyScore = clampScore(Math.round((buyScore + opportunityScore) / 2));
+
+  let waitScore = 28;
+  waitScore += trend.direction === "falling" ? 28 : trend.direction === "stable" ? 6 : -8;
+  waitScore += Math.min(24, Math.max(0, recentDropRate) * 2.2);
+  waitScore += recentListingCount >= 5 ? 10 : recentListingCount >= 2 ? 5 : 0;
+  waitScore += demand.demandLevel === "low" ? 8 : demand.demandLevel === "medium" ? 3 : -5;
+  waitScore += volatilityScore >= 55 ? 11 : volatilityScore >= 35 ? 5 : -2;
+  waitScore -= cheapestAverageDiscount >= 12 && trend.direction !== "falling" ? 15 : 0;
+  waitScore = clampScore(Math.round(waitScore));
+
+  const label: IntelligenceDecisionLabel =
+    prices.length < 3
+      ? "Veri Az"
+      : buyScore >= 68 && buyScore >= waitScore + 8
+        ? "Şimdi Al"
+        : waitScore >= 62 && waitScore > buyScore
+          ? "Bekle"
+          : "Takip Et";
+
+  return {
+    buyScore,
+    waitScore,
+    volatilityScore,
+    volatilityLevel,
+    liquidityScore,
+    liquidityLevel,
+    label,
+    explanation: buildDecisionExplanation({
+      label,
+      trend,
+      cheapestAverageDiscount,
+      recentDropRate,
+      volatilityLevel,
+      liquidityLevel,
+    }),
   };
 }
 
@@ -389,4 +531,128 @@ function median(sorted: number[]) {
 
 function roundPercent(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+function buildTrendStrength(changePercent: number): IntelligenceTrendStrength {
+  if (changePercent <= -10) return "Güçlü düşüş";
+  if (changePercent <= -3) return "Hafif düşüş";
+  if (changePercent >= 10) return "Güçlü yükseliş";
+  if (changePercent >= 3) return "Hafif yükseliş";
+  return "Stabil";
+}
+
+function calculateVolatilityRatio(prices: number[], averagePrice: number) {
+  if (!prices.length || !averagePrice) return 0;
+  const variance =
+    prices.reduce((sum, price) => sum + (price - averagePrice) ** 2, 0) /
+    prices.length;
+  return Math.sqrt(variance) / averagePrice;
+}
+
+function countRecentListings(
+  listings: IntelligenceListingInput[],
+  now: Date,
+  days: number,
+) {
+  const cutoff = now.getTime() - days * 86_400_000;
+  return listings.filter((listing) => {
+    if (!listing.createdAt) return false;
+    const time = new Date(listing.createdAt).getTime();
+    return Number.isFinite(time) && time >= cutoff;
+  }).length;
+}
+
+function calculateRecentDropRate(
+  priceHistory: IntelligencePriceHistoryInput[],
+  listings: IntelligenceListingInput[],
+) {
+  const points = (
+    priceHistory.length >= 2
+      ? priceHistory.map((record) => ({
+          price: Number(record.price),
+          date: record.recordedAt,
+        }))
+      : listings.map((listing) => ({
+          price: Number(listing.price),
+          date: listing.createdAt ?? "",
+        }))
+  )
+    .filter((point) => Number.isFinite(point.price) && point.price > 0 && point.date)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  if (points.length < 2) return 0;
+  const recent = points.slice(-3);
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  if (!first || !last || first.price <= 0) return 0;
+  return roundPercent(((first.price - last.price) / first.price) * 100);
+}
+
+function buildLiquidityScore({
+  listingCount,
+  recentListingCount,
+  demandLevel,
+  searchCount,
+}: {
+  listingCount: number;
+  recentListingCount: number;
+  demandLevel: IntelligenceDemandLevel;
+  searchCount: number;
+}) {
+  let score = 12;
+  score += Math.min(42, listingCount * 5);
+  score += Math.min(22, recentListingCount * 6);
+  score += demandLevel === "high" ? 22 : demandLevel === "medium" ? 12 : demandLevel === "low" ? 4 : 0;
+  score += Math.min(14, Math.floor(searchCount / 3));
+  return clampScore(score);
+}
+
+function scoreLevel(
+  score: number,
+  mediumThreshold: number,
+  highThreshold: number,
+): IntelligenceScoreLevel {
+  if (!Number.isFinite(score)) return "unknown";
+  if (score >= highThreshold) return "high";
+  if (score >= mediumThreshold) return "medium";
+  return "low";
+}
+
+function buildDecisionExplanation({
+  label,
+  trend,
+  cheapestAverageDiscount,
+  recentDropRate,
+  volatilityLevel,
+  liquidityLevel,
+}: {
+  label: IntelligenceDecisionLabel;
+  trend: ProductIntelligence["trend"];
+  cheapestAverageDiscount: number;
+  recentDropRate: number;
+  volatilityLevel: IntelligenceScoreLevel;
+  liquidityLevel: IntelligenceScoreLevel;
+}) {
+  if (label === "Şimdi Al") {
+    return `Bu ürün ${trend.periodLabel} içinde ${trend.strengthLabel.toLocaleLowerCase("tr-TR")} sinyali veriyor. En ucuz ilan piyasa ortalamasının %${Math.max(0, roundPercent(cheapestAverageDiscount))} altında; şu an satın almak için uygun bir dönem olabilir.`;
+  }
+
+  if (label === "Bekle") {
+    return `Son fiyat sinyali ${trend.strengthLabel.toLocaleLowerCase("tr-TR")} yönünde. Son hareketlerde yaklaşık %${Math.max(0, recentDropRate)} düşüş görüldüğü için birkaç gün beklemek daha avantajlı olabilir.`;
+  }
+
+  if (volatilityLevel === "high") {
+    return "Fiyatlar dalgalı görünüyor. İlan detaylarını dikkatli inceleyip fiyat alarmıyla takip etmek daha sağlıklı olur.";
+  }
+
+  if (liquidityLevel === "high") {
+    return "Piyasa aktif; yeni ilan gelme ihtimali yüksek. Acele etmeden güçlü fırsatları takip etmek mantıklı.";
+  }
+
+  return "Veriler net bir alım veya bekleme sinyali üretmiyor. Bu ürün için fiyat alarmı kurup piyasayı izlemek daha dengeli bir karar olur.";
+}
+
+function clampScore(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
 }

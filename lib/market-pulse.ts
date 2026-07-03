@@ -1,6 +1,7 @@
 import {
   calculateProductIntelligence,
   type IntelligenceOpportunityLabel,
+  type IntelligenceDecisionLabel,
   type IntelligenceTrendDirection,
 } from "./intelligence-engine";
 import { createProductSlug } from "./product-slug";
@@ -34,6 +35,8 @@ export type MarketPulseItem = {
   lowestPrice: number | null;
   opportunityLabel: IntelligenceOpportunityLabel;
   opportunityScore: number;
+  buyScore: number;
+  decisionLabel: IntelligenceDecisionLabel;
   trendDirection: IntelligenceTrendDirection;
   trendChangePercent: number | null;
   searchCount: number;
@@ -133,6 +136,7 @@ export function buildMarketPulse({
       )
       .sort(
         (a, b) =>
+          b.buyScore - a.buyScore ||
           b.opportunityScore - a.opportunityScore ||
           (a.lowestPrice ?? Number.MAX_SAFE_INTEGER) -
             (b.lowestPrice ?? Number.MAX_SAFE_INTEGER),
@@ -182,6 +186,8 @@ function buildMarketPulseItem(
     lowestPrice: intelligence.marketValue.minPrice,
     opportunityLabel: intelligence.opportunity.label,
     opportunityScore: intelligence.opportunity.score,
+    buyScore: intelligence.decisionSupport.buyScore,
+    decisionLabel: intelligence.decisionSupport.label,
     trendDirection: intelligence.trend.direction,
     trendChangePercent: intelligence.trend.changePercent,
     searchCount,

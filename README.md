@@ -1515,6 +1515,25 @@ karti, arama urun kartlarinda ise kucuk intelligence rozeti olarak gosterilir.
 Yeni SQL gerekmez. Veri azsa motor "Veri yetersiz" doner ve sistem mevcut
 ilan karsilastirma akisini bozmadan calismaya devam eder.
 
+## Intelligence Engine v2
+
+Intelligence Engine v2, mevcut verilerden satin alma karari icin daha guclu
+skorlar uretir. Yeni veri kaynagi veya yeni SQL gerektirmez.
+
+Yeni sinyaller:
+
+- Buy Score: ortalama/medyan fiyata gore indirim, trend, talep, likidite ve
+  veri guvenilirligiyle hesaplanir.
+- Wait Score: dusus trendi, son fiyat hareketleri, yeni ilan hizi ve talep
+  sinyaliyle hesaplanir.
+- Volatility Score: fiyatlarin ne kadar dalgali oldugunu gosterir.
+- Liquidity Score: urunun piyasada ne kadar aktif oldugunu, ilan sayisi ve
+  arama talebiyle olcer.
+
+Urun detay sayfasinda "Satin Alma Tavsiyesi" karti; arama kartlarinda ise
+"Simdi Al", "Bekle", "Takip Et" veya "Veri Az" rozeti gosterilir. Piyasa
+Nabzi "One cikan firsatlar" listesi artik Buy Score'u oncelikli kullanir.
+
 ## Piyasa Nabzi v1
 
 Piyasa Nabzi, Intelligence Engine ciktisini global ana sayfa sinyallerine

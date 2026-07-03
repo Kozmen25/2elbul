@@ -18,6 +18,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import {
   calculateProductIntelligence,
+  type IntelligenceDecisionLabel,
   type IntelligenceOpportunityLabel,
 } from "@/lib/intelligence-engine";
 import { LISTING_CONDITIONS, type Listing } from "@/lib/listings";
@@ -44,6 +45,7 @@ type ProductSummary = {
   confidenceScore: number | null;
   intelligenceLabel: IntelligenceOpportunityLabel;
   intelligenceScore: number;
+  decisionLabel: IntelligenceDecisionLabel;
   confidenceLabel: "Yüksek güven" | "Orta güven" | "Düşük güven" | "Veri yetersiz";
 };
 
@@ -890,6 +892,11 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
                 </h3>
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <span
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${getDecisionClassName(product.decisionLabel)}`}
+                  >
+                    {product.decisionLabel}
+                  </span>
+                  <span
                     className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${getIntelligenceClassName(product.intelligenceLabel)}`}
                   >
                     {product.intelligenceLabel}
@@ -1137,6 +1144,7 @@ function buildProductSummaries(
       confidenceScore: confidence.score,
       intelligenceLabel: intelligence.opportunity.label,
       intelligenceScore: intelligence.opportunity.score,
+      decisionLabel: intelligence.decisionSupport.label,
       confidenceLabel: confidence.label,
     };
   });
@@ -1195,6 +1203,13 @@ function getIntelligenceClassName(label: IntelligenceOpportunityLabel) {
   if (label === "Takip etmeye değer") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (label === "Dikkatli incele") return "border-amber-200 bg-amber-50 text-amber-800";
   if (label === "Normal piyasa") return "border-slate-200 bg-slate-50 text-slate-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function getDecisionClassName(label: IntelligenceDecisionLabel) {
+  if (label === "Şimdi Al") return "border-green-200 bg-green-50 text-green-700";
+  if (label === "Bekle") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (label === "Takip Et") return "border-amber-200 bg-amber-50 text-amber-800";
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 

@@ -272,6 +272,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)_minmax(300px,0.8fr)]">
           <IntelligenceCard intelligence={intelligence} />
 
+          <DecisionSupportCard intelligence={intelligence} />
+
           <AdvancedPriceInsightCard insight={decisionInsight.smartPrice} />
         </div>
 
@@ -660,6 +662,56 @@ function IntelligenceMetric({
         {badge}
       </span>
     </div>
+  );
+}
+
+function DecisionSupportCard({
+  intelligence,
+}: {
+  intelligence: ProductIntelligence;
+}) {
+  const decision = intelligence.decisionSupport;
+
+  return (
+    <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <SectionTitle
+        icon={Clock3}
+        eyebrow="Karar destek"
+        title="Satın Alma Tavsiyesi"
+      />
+
+      <div className="mt-5 rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${getDecisionBadgeClassName(decision.label)}`}>
+          {decision.label}
+        </span>
+        <p className="mt-3 text-sm font-semibold leading-6 text-black/60">
+          {decision.explanation}
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <IntelligenceMetric
+          label="Buy Score"
+          value={`${decision.buyScore}/100`}
+          badge="Alım gücü"
+        />
+        <IntelligenceMetric
+          label="Wait Score"
+          value={`${decision.waitScore}/100`}
+          badge="Bekleme sinyali"
+        />
+        <IntelligenceMetric
+          label="Volatility"
+          value={`${decision.volatilityScore}/100`}
+          badge={formatScoreLevel(decision.volatilityLevel)}
+        />
+        <IntelligenceMetric
+          label="Liquidity"
+          value={`${decision.liquidityScore}/100`}
+          badge={formatScoreLevel(decision.liquidityLevel)}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -1097,6 +1149,24 @@ function formatDemandLevel(level: ProductIntelligence["demand"]["demandLevel"]) 
   if (level === "medium") return "Orta";
   if (level === "low") return "Dusuk";
   return "Bilinmiyor";
+}
+
+function formatScoreLevel(
+  level: ProductIntelligence["decisionSupport"]["volatilityLevel"],
+) {
+  if (level === "high") return "Yuksek";
+  if (level === "medium") return "Orta";
+  if (level === "low") return "Dusuk";
+  return "Veri yok";
+}
+
+function getDecisionBadgeClassName(
+  label: ProductIntelligence["decisionSupport"]["label"],
+) {
+  if (label === "Şimdi Al") return "border-green-200 bg-green-50 text-green-700";
+  if (label === "Bekle") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (label === "Takip Et") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
 function buildProductJsonLd({

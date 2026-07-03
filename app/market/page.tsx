@@ -225,14 +225,20 @@ function MarketProductCard({ item }: { item: MarketPulseItem }) {
             {item.listingCount} ilan · {item.searchCount} arama
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
-          {item.opportunityLabel}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="rounded-full border border-green-200 bg-white px-3 py-1.5 text-[11px] font-black text-green-700">
+            {item.decisionLabel}
+          </span>
+          <span className="rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
+            {item.opportunityLabel}
+          </span>
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3">
         <Metric label="Ortalama fiyat" value={item.averagePrice ? formatPrice(item.averagePrice) : "—"} />
         <Metric label="En düşük fiyat" value={item.lowestPrice ? formatPrice(item.lowestPrice) : "—"} accent />
+        <Metric label="Buy Score" value={`${item.buyScore}/100`} />
         <Metric label="Trend" value={formatTrend(item)} />
         <Metric label="Talep" value={formatDemand(item)} />
       </div>
