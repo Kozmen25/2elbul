@@ -1608,3 +1608,53 @@ select * from public.backfill_price_history_from_listings(500, false);
 
 Backfill otomatik calismaz; canli veriyi silmez veya degistirmez. Sadece aktif
 ilanlardan eksik ilk fiyat gecmisi kayitlarini olusturur.
+
+## Kaynak Adaptor Standardi v1
+
+Kaynak adaptor standardi, Sahibinden, Letgo, EasyCep, Getmobil ve yenilenmis
+cihaz kaynaklari gibi farkli sistemleri ayni sozlesme ile bot altyapisina
+baglamak icin eklendi. Bu sprintte yeni gercek scraping kaynagi eklenmedi.
+
+Standart dosya:
+
+- `lib/bots/adapters/types.ts`
+
+Adapter sozlesmesi:
+
+- `sourceId`
+- `sourceName`
+- `enabled`
+- `search(query)`
+- `sync()`
+- `normalizeListing(raw)`
+- `healthCheck()`
+
+Normalize edilen ilan formati:
+
+- `external_id`
+- `title`
+- `price`
+- `currency`
+- `url`
+- `image_url`
+- `source_id`
+- `source_name`
+- `location`
+- `condition`
+- `listed_at`
+- `raw_payload`
+
+Standart sonuc metrikleri:
+
+- `found`
+- `imported`
+- `updated`
+- `skipped`
+- `matched_product_count`
+- `errors`
+- `duration_ms`
+
+`lib/bots/source-runner.ts` artik kaynaklari standart adapter sonucundan okuyup
+mevcut `listing-sync` akisina aktarir. Bu sayede Bot Merkezi metrikleri ayni
+kalirken gelecekte yeni kaynak eklemek daha kontrollu hale gelir. Yeni SQL
+gerekmez.

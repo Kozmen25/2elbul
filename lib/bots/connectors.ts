@@ -16,6 +16,7 @@ import {
 } from "@/lib/bots/adapters";
 import { parseEasyCepProductPage } from "@/lib/bots/adapters/easycep";
 import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
+import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
 import type {
   BotAdapterListing,
   SourceConnector,
@@ -90,6 +91,15 @@ export function getSourceConnector(
       );
     },
   };
+}
+
+export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
+  const connector = getSourceConnector(config);
+  return createStandardSourceAdapter({
+    config,
+    enabled: connector.supportedModes.includes("scrape"),
+    fetchListings: () => connector.fetchListings(config),
+  });
 }
 
 export async function fetchListingsForSource(

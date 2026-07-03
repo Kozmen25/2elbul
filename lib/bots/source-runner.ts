@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { SCRAPE_READY_SLUGS, fetchListingsForSource } from "@/lib/bots/connectors";
+import {
+  SCRAPE_READY_SLUGS,
+  getStandardSourceAdapter,
+} from "@/lib/bots/connectors";
 import {
   normalizeSyncStatus,
   syncListingsForSource,
@@ -34,6 +37,7 @@ export type SourceRunResult = {
   matchedProducts: number;
   errorCount: number;
   errorMessage: string | null;
+  durationMs: number;
 };
 
 type RunSourceOptions = {
@@ -99,13 +103,26 @@ export async function runSourceScrapeBot(
   let errorCount = 0;
   const errors: string[] = [];
   let finalStatus: "success" | "failed" = "success";
+  let durationMs = 0;
 
   try {
-    listings = await fetchListingsForSource(
-      source.slug,
-      source.scrape_url,
-      limit,
-    );
+    const adapter = getStandardSourceAdapter({
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceSlug: source.slug,
+      apiUrl: null,
+      scrapeUrl: source.scrape_url ?? null,
+      cronEnabled: true,
+      cronSchedule: "",
+      productLimit: limit,
+    });
+    const adapterResult = await adapter.sync();
+    durationMs = adapterResult.duration_ms;
+    const adapterSkipped = adapterResult.skipped;
+    errorCount += adapterResult.errors.length;
+    errors.push(...adapterResult.errors);
+
+    listings = adapterResultToBotListings(adapterResult.listings);
     listings = listings.slice(0, limit).map((listing) => ({
       ...listing,
       status: listingStatus,
@@ -119,9 +136,9 @@ export async function runSourceScrapeBot(
       updated = result.updated;
       inactive = result.inactive;
       reactivated = result.reactivated;
-      skipped = result.skipped;
+      skipped = result.skipped + adapterSkipped;
       matchedProducts = result.matchedProducts;
-      errorCount = result.errorCount;
+      errorCount += result.errorCount;
       errors.push(...result.errors);
       if (errorCount > 0) finalStatus = "failed";
     }
@@ -195,7 +212,45 @@ export async function runSourceScrapeBot(
     matchedProducts,
     errorCount,
     errorMessage,
+    durationMs,
   };
+}
+
+function adapterResultToBotListings(
+  listings: Array<{
+    external_id: string;
+    title: string;
+    price: number;
+    url: string;
+    image_url: string | null;
+    source_name: string;
+    location: string | null;
+    condition: string;
+    raw_payload: Record<string, unknown> | null;
+  }>,
+): BotAdapterListing[] {
+  return listings.map((listing) => ({
+    external_id: listing.external_id,
+    product_name: getRawString(listing.raw_payload, "product_name") || listing.title,
+    title: listing.title,
+    price: listing.price,
+    city: listing.location ?? "Türkiye",
+    source: listing.source_name,
+    url: listing.url,
+    condition: listing.condition,
+    image_url: listing.image_url,
+    image_urls: listing.image_url ? [listing.image_url] : [],
+    brand: getRawString(listing.raw_payload, "brand"),
+    model: getRawString(listing.raw_payload, "model"),
+    category: getRawString(listing.raw_payload, "category"),
+    status: "published",
+    raw_payload: listing.raw_payload,
+  }) as BotAdapterListing);
+}
+
+function getRawString(payload: Record<string, unknown> | null, key: string) {
+  const value = payload?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 async function updateSourceStats(
@@ -243,6 +298,7 @@ function emptyFailedResult(
     matchedProducts: 0,
     errorCount: 1,
     errorMessage,
+    durationMs: 0,
   };
 }
 
