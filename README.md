@@ -1717,3 +1717,44 @@ Guvenlik:
 - Sadece admin kullanicilar cagirabilir.
 - Service role key client tarafina cikmaz.
 - Adapter hata verirse UI kirilmaz; hata mesaji kaynak satirinda gosterilir.
+
+## Admin Operations Center v1
+
+Admin ana sayfasi `/admin`, "2ElBul Operations Center" olarak yeniden
+duzenlendi. Yeni route eklenmedi; mevcut admin auth ve service-role server-side
+akisi korunur.
+
+Operations Center ozeti:
+
+- Toplam urun
+- Aktif ilan
+- Bugun eklenen ilan
+- Son 24 saat arama
+- Son bot calismasi
+- Son hata
+- Kaynak sagligi ozeti
+- Piyasa sinyali ozeti
+
+Admin menusu gruplara ayrildi:
+
+- Genel
+- Botlar
+- Kaynaklar
+- Intelligence
+- Veri
+- Kullanici
+- Sistem
+
+Bot Merkezi icinde anchor destekleri eklendi:
+
+- `/admin/bot-center#manual-tasks`
+- `/admin/bot-center#bot-runs`
+- `/admin/bot-center#source-health`
+
+Hizli aksiyonlar:
+
+- Bot Merkezi'ne git
+- Kaynak Sagligina git
+- Urun Eslestiriciye git
+- Veri Temizligine git
+- Piyasa Merkezini goruntule

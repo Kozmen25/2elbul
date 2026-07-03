@@ -225,7 +225,7 @@ export function BotCenterClient({
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section id="manual-tasks" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {monitors.map((monitor) => (
           <article
             key={monitor.task}
@@ -254,7 +254,7 @@ export function BotCenterClient({
         ))}
       </section>
 
-      <section className="rounded-2xl border border-black/8 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
+      <section id="bot-runs" className="rounded-2xl border border-black/8 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
         <div className="border-b border-black/7 p-5">
           <h2 className="text-xl font-black tracking-[-0.03em]">
             Bot canlılık izleme
@@ -314,7 +314,7 @@ export function BotCenterClient({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-black/8 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
+      <section id="source-health" className="rounded-2xl border border-black/8 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
         <div className="border-b border-black/7 p-5">
           <h2 className="text-xl font-black tracking-[-0.03em]">
             Kaynak Sağlığı

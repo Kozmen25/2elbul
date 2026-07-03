@@ -14,6 +14,7 @@ import {
   PackageSearch,
   Search,
   Settings,
+  ShieldCheck,
   Users,
   WandSparkles,
   X,
@@ -23,21 +24,54 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 
-const links = [
-  { href: "/admin/data-cleanup", label: "Veri Temizligi", icon: ClipboardCheck },
-  { href: "/admin", label: "Genel Bakış", icon: LayoutDashboard },
-  { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
-  { href: "/admin/products", label: "Ürünler", icon: Boxes },
-  { href: "/admin/product-matcher", label: "Ürün Eşleştirici", icon: WandSparkles },
-  { href: "/admin/search-demands", label: "Arama Talepleri", icon: Search },
-  { href: "/admin/bot-center", label: "Bot Merkezi", icon: Bot },
-  { href: "/admin/price-alerts", label: "Fiyat Alarmları", icon: BellRing },
-  { href: "/admin/sources", label: "Kaynaklar", icon: Globe2 },
-  { href: "/admin/bot-runs", label: "Bot Çalışmaları", icon: Bot },
-  { href: "/admin/users", label: "Kullanıcılar", icon: Users },
-  { href: "/admin/import", label: "İçe Aktar", icon: DatabaseZap },
-  { href: "/admin/stats", label: "İstatistikler", icon: BarChart3 },
-  { href: "/admin/settings", label: "Ayarlar", icon: Settings },
+const groups = [
+  {
+    title: "Genel",
+    links: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    title: "Botlar",
+    links: [
+      { href: "/admin/bot-center#manual-tasks", label: "Bot Merkezi", icon: Bot },
+      { href: "/admin/bot-runs", label: "Bot Çalışmaları", icon: Bot },
+      { href: "/admin/search-demands", label: "Arama Talepleri", icon: Search },
+    ],
+  },
+  {
+    title: "Kaynaklar",
+    links: [
+      { href: "/admin/sources", label: "Kaynaklar", icon: Globe2 },
+      { href: "/admin/bot-center#source-health", label: "Kaynak Sağlığı", icon: ShieldCheck },
+    ],
+  },
+  {
+    title: "Intelligence",
+    links: [
+      { href: "/market", label: "Piyasa Merkezi", icon: BarChart3 },
+      { href: "/admin/stats", label: "İstatistikler", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "Veri",
+    links: [
+      { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
+      { href: "/admin/products", label: "Ürünler", icon: Boxes },
+      { href: "/admin/product-matcher", label: "Ürün Eşleştirici", icon: WandSparkles },
+      { href: "/admin/data-cleanup", label: "Veri Temizliği", icon: ClipboardCheck },
+      { href: "/admin/import", label: "İçe Aktar", icon: DatabaseZap },
+    ],
+  },
+  {
+    title: "Kullanıcı",
+    links: [
+      { href: "/admin/price-alerts", label: "Fiyat Alarmları", icon: BellRing },
+      { href: "/admin/users", label: "Kullanıcılar", icon: Users },
+    ],
+  },
+  {
+    title: "Sistem",
+    links: [{ href: "/admin/settings", label: "Ayarlar", icon: Settings }],
+  },
 ];
 
 export function AdminNav({ email }: { email: string }) {
@@ -67,30 +101,40 @@ export function AdminNav({ email }: { email: string }) {
             <BrandLogo />
           </div>
           <p className="mt-5 px-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/35">
-            Yönetim paneli
+            Operasyon paneli
           </p>
-          <nav className="mt-3 grid gap-1.5">
-            {links.map(({ href, label, icon: Icon }) => {
-              const active =
-                href === "/admin"
-                  ? pathname === href
-                  : pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setOpen(false)}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${
-                    active
-                      ? "bg-[#ff6b00] text-white"
-                      : "text-white/65 hover:bg-white/8 hover:text-white"
-                  }`}
-                >
-                  <Icon size={19} />
-                  {label}
-                </Link>
-              );
-            })}
+          <nav className="mt-3 grid gap-4">
+            {groups.map((group) => (
+              <div key={group.title}>
+                <p className="px-3 text-[10px] font-black uppercase tracking-[0.16em] text-white/30">
+                  {group.title}
+                </p>
+                <div className="mt-1.5 grid gap-1">
+                  {group.links.map(({ href, label, icon: Icon }) => {
+                    const path = href.split("#")[0] ?? href;
+                    const active =
+                      path === "/admin"
+                        ? pathname === path
+                        : pathname.startsWith(path);
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => setOpen(false)}
+                        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
+                          active
+                            ? "bg-[#ff6b00] text-white"
+                            : "text-white/65 hover:bg-white/8 hover:text-white"
+                        }`}
+                      >
+                        <Icon size={18} />
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
           <div className="mt-5 border-t border-white/10 pt-4 lg:mt-auto">
             <p className="truncate px-3 text-xs text-white/40">{email}</p>
