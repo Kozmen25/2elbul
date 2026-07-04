@@ -2,7 +2,6 @@ export type ListingSource =
   | "Sahibinden"
   | "Letgo"
   | "Facebook Marketplace"
-  | "Dolap"
   | "EasyCep"
   | "Getmobil"
   | "Yenilenmiş Market"
@@ -24,7 +23,6 @@ export const LISTING_SOURCES: ListingSource[] = [
   "Sahibinden",
   "Letgo",
   "Facebook Marketplace",
-  "Dolap",
   "EasyCep",
   "Getmobil",
   "Yenilenmiş Market",
