@@ -7,6 +7,7 @@ import type {
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { buildProductPriceStats } from "@/lib/price-analysis";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
+import { resolveSearchIntent, scoreSearchResult } from "@/lib/search-intent";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SearchResultsClient } from "./search-results-client";
@@ -54,32 +55,54 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     loadError =
       "Supabase bağlantısı yapılandırılmamış. Ortam değişkenlerini kontrol edin.";
   } else if (query) {
-    const searchPattern = `%${query}%`;
-    const [matchingProductsResult, titleListingsResult] = await Promise.all([
-      supabase
-        .from("products")
-        .select("id, name")
-        .ilike("name", searchPattern),
-      searchPublishedListingsByTitle(supabase, searchPattern),
+    const intent = resolveSearchIntent(query);
+    const searchTerms = intent.terms.slice(0, 48);
+    const [matchingProductsResults, titleListingsResults] = await Promise.all([
+      Promise.all(
+        searchTerms.map((term) =>
+          supabase
+            .from("products")
+            .select("id, name")
+            .ilike("name", `%${term.term}%`),
+        ),
+      ),
+      Promise.all(
+        searchTerms.map((term) =>
+          searchPublishedListingsByTitle(supabase, `%${term.term}%`),
+        ),
+      ),
     ]);
+    const productSearchError = matchingProductsResults.find((result) => result.error)
+      ?.error;
+    const titleSearchError = titleListingsResults.find((result) => result.error)
+      ?.error;
 
-    if (matchingProductsResult.error) {
+    if (productSearchError) {
       console.error(
         "Supabase product name search failed:",
-        matchingProductsResult.error,
+        productSearchError,
       );
     }
-    if (titleListingsResult.error) {
+    if (titleSearchError) {
       console.error(
         "Supabase listing title search failed:",
-        titleListingsResult.error,
+        titleSearchError,
       );
     }
 
-    if (matchingProductsResult.error || titleListingsResult.error) {
+    if (productSearchError || titleSearchError) {
       loadError = "İlanlar aranırken bir sorun oluştu. Lütfen tekrar deneyin.";
     } else {
-      const matchingProductIds = (matchingProductsResult.data ?? [])
+      const matchingProductsById = new Map<string, { id: string | number; name: string }>();
+      for (const result of matchingProductsResults) {
+        for (const product of result.data ?? []) {
+          matchingProductsById.set(String(product.id), {
+            id: product.id,
+            name: String(product.name),
+          });
+        }
+      }
+      const matchingProductIds = [...matchingProductsById.values()]
         .filter((product) => !isPublicDemoProductName(String(product.name)))
         .map((product) => product.id);
       const productListingsResult = matchingProductIds.length
@@ -98,7 +121,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       } else {
         const rowsById = new Map<string, ListingRow>();
         for (const row of [
-          ...((titleListingsResult.data ?? []) as ListingRow[]),
+          ...titleListingsResults.flatMap(
+            (result) => (result.data ?? []) as ListingRow[],
+          ),
           ...((productListingsResult.data ?? []) as ListingRow[]),
         ]) {
           rowsById.set(String(row.id), row);
@@ -149,7 +174,19 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               imageUrl: row.image_url ? String(row.image_url) : null,
               createdAt: String(row.created_at),
             }))
-            .sort((a, b) => a.price - b.price);
+            .sort((a, b) => {
+              const scoreDifference =
+                scoreSearchResult(intent, {
+                  title: b.title,
+                  productName: b.productName,
+                }) -
+                scoreSearchResult(intent, {
+                  title: a.title,
+                  productName: a.productName,
+                });
+              if (scoreDifference !== 0) return scoreDifference;
+              return a.price - b.price;
+            });
         }
       }
     }
