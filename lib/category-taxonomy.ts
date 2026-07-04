@@ -1,3 +1,5 @@
+import { normalizeCategoryText as newNormalizeCategoryText } from "./normalization";
+
 export type CategoryNode = {
   id: string;
   label: string;
@@ -175,21 +177,7 @@ export const CATEGORY_TAXONOMY: CategoryNode[] = [
   },
 ];
 
-export function normalizeCategoryText(input: string) {
-  return input
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-}
+export const normalizeCategoryText = newNormalizeCategoryText;
 
 export function findCategoryMatches(query: string): CategoryMatch[] {
   const normalizedQuery = normalizeCategoryText(query);

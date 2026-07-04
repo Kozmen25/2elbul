@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ICategoryResolver } from "./taxonomy/integration";
+import { normalizeProductTitle as newNormalizeProductTitle } from "./normalization";
 
 export type ProductSignals = {
   brand: string | null;
@@ -70,27 +71,7 @@ const colors = [
   "silver",
 ];
 
-export function normalizeProductTitle(title: string) {
-  return title
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
-    .replace(/\b(\d+)\s*(gb|g)\b/g, "$1gb")
-    .replace(/\b(\d+)\s*(tb|t)\b/g, "$1tb")
-    .replace(/\bpro\s*max\b/g, "pro max")
-    .replace(/\bpromax\b/g, "pro max")
-    .replace(/\bapple\s+(?=iphone)\b/g, "")
-    .replace(/\bgalaxy\s+(?=s\d|a\d|z\s*fold|z\s*flip)\b/g, "samsung galaxy ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export const normalizeProductTitle = newNormalizeProductTitle;
 
 export function extractProductSignals(title: string, resolver?: ICategoryResolver): ProductSignals {
   const normalized = normalizeProductTitle(title);

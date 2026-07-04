@@ -1,17 +1,6 @@
-export function normalizeSearchText(value: string): string {
-  return value
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
+import { normalizeSearchText as newNormalizeSearchText } from "../normalization";
+
+export const normalizeSearchText = newNormalizeSearchText;
 
 export function createDeterministicExternalId(
   source: string,
