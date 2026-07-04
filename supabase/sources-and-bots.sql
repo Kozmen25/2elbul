@@ -85,7 +85,8 @@ values
   ('Yenilenmiş Market', 'yenilenmis-market', 'https://yenilenmismarket.com', 'refurbished', 'pending'),
   ('Teknosa Yenilenmiş', 'teknosa-yenilenmis', 'https://www.teknosa.com', 'refurbished', 'pending'),
   ('Hepsiburada Yenilenmiş', 'hepsiburada-yenilenmis', 'https://www.hepsiburada.com', 'refurbished', 'pending'),
-  ('MediaMarkt Yenilenmiş', 'mediamarkt-yenilenmis', 'https://www.mediamarkt.com.tr', 'refurbished', 'pending')
+  ('MediaMarkt Yenilenmiş', 'mediamarkt-yenilenmis', 'https://www.mediamarkt.com.tr', 'refurbished', 'pending'),
+  ('Satarız', 'satariz', 'https://satariz.com', 'refurbished', 'pending')
 on conflict (slug) do update
 set
   name = excluded.name,

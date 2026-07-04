@@ -8,7 +8,8 @@ export type ListingSource =
   | "Yenilenmiş Market"
   | "Teknosa Yenilenmiş"
   | "Hepsiburada Yenilenmiş"
-  | "MediaMarkt Yenilenmiş";
+  | "MediaMarkt Yenilenmiş"
+  | "Satarız";
 
 export type ListingCondition =
   | "Sıfır"
@@ -30,6 +31,7 @@ export const LISTING_SOURCES: ListingSource[] = [
   "Teknosa Yenilenmiş",
   "Hepsiburada Yenilenmiş",
   "MediaMarkt Yenilenmiş",
+  "Satarız",
 ];
 
 export const LISTING_CONDITIONS: ListingCondition[] = [
