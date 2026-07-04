@@ -1796,6 +1796,14 @@ alter table public.listings
   add column if not exists raw_payload jsonb null;
 ```
 
+Kaynak senkronizasyonu `imported_at`, `last_seen_at`, `source_id`,
+`external_id` veya benzer `listings` kolon hatalari verirse tek seferde tum
+beklenen kolonlari senkronlamak icin su dosyayi calistirin:
+
+```text
+supabase/migrations/listings-schema-sync.sql
+```
+
 Gosterilen ozetler:
 
 - Overall Data Quality
