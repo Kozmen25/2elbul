@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ICategoryResolver } from "./taxonomy/integration";
 import { normalizeProductTitle as newNormalizeProductTitle } from "./normalization";
+import type { DuplicateMatch, DuplicateGroup } from "./duplicate-engine/types";
+import {
+  createComparisonInput,
+  compareListings,
+  groupDuplicates as groupDuplicatesEngine,
+} from "./duplicate-engine";
 
 export type ProductSignals = {
   brand: string | null;
@@ -30,6 +36,28 @@ export type ProductMatcherDryRunResult = {
   } | null;
   wouldCreate: boolean;
   suggestedName: string;
+};
+
+export type ListingDuplicateDetectionResult = {
+  listing: ComparisonListing;
+  duplicates: DuplicateMatch[];
+  isDuplicate: boolean;
+  confidenceScore: number;
+  suggestion: "match" | "review" | "none";
+};
+
+export type GroupedListingDuplicates = {
+  groups: DuplicateGroup[];
+  count: number;
+  matchedCount: number;
+};
+
+type ComparisonListing = {
+  id: string | number;
+  title: string;
+  price: number;
+  source: string;
+  condition?: string;
 };
 
 type ProductRow = {
@@ -244,6 +272,71 @@ async function findExistingMatchedProduct(
     id: matched.id,
     name: matched.name,
     category: matched.category ?? null,
+  };
+}
+
+export function detectListingDuplicates(
+  reference: ComparisonListing,
+  candidates: ComparisonListing[],
+  threshold: number = 70
+): ListingDuplicateDetectionResult {
+  const refInput = createComparisonInput(reference.title, {
+    price: reference.price,
+    sourceId: 1,
+    condition: reference.condition,
+  });
+
+  const matches: DuplicateMatch[] = [];
+  
+  for (const candidate of candidates) {
+    const candInput = createComparisonInput(candidate.title, {
+      price: candidate.price,
+      sourceId: 2,
+      condition: candidate.condition,
+    });
+    
+    const result = compareListings(refInput, candInput);
+    if (result.score >= threshold) {
+      matches.push({
+        listing1Id: reference.id,
+        listing2Id: candidate.id,
+        score: result.score,
+        confidence: result.confidence,
+      });
+    }
+  }
+
+  const maxScore = matches.length > 0 ? matches[0].score : 0;
+
+  return {
+    listing: reference,
+    duplicates: matches,
+    isDuplicate: maxScore >= threshold,
+    confidenceScore: maxScore,
+    suggestion:
+      maxScore >= threshold ? "match" : maxScore >= 50 ? "review" : "none",
+  };
+}
+
+export function groupListingDuplicates(
+  listings: ComparisonListing[],
+  threshold: number = 70
+): GroupedListingDuplicates {
+  const inputs = listings.map((l) => ({
+    ...createComparisonInput(l.title, {
+      price: l.price,
+      sourceId: 1,
+      condition: l.condition,
+    }),
+    id: l.id,
+  }));
+
+  const groups = groupDuplicatesEngine(inputs, threshold);
+
+  return {
+    groups,
+    count: groups.length,
+    matchedCount: groups.filter((g) => g.duplicates.length > 0).length,
   };
 }
 
