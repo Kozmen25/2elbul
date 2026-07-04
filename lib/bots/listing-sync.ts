@@ -41,6 +41,7 @@ export async function syncListingsForSource(
   supabase: SupabaseClient,
   sourceId: number,
   listings: BotAdapterListing[],
+  options: { skipInactiveMarking?: boolean } = {},
 ): Promise<ListingSyncResult> {
   let imported = 0;
   let updated = 0;
@@ -140,14 +141,37 @@ export async function syncListingsForSource(
     };
   }
 
-  const { data, error } = await supabase.rpc("sync_source_listings", {
+  let rpcResult = await supabase.rpc("sync_source_listings", {
     p_source_id: sourceId,
     p_items: payload,
+    p_skip_inactive_marking: Boolean(options.skipInactiveMarking),
   });
 
-  if (error) throw error;
+  if (rpcResult.error && isRpcSignatureError(rpcResult.error)) {
+    rpcResult = await supabase.rpc("sync_source_listings", {
+      p_source_id: sourceId,
+      p_items: payload,
+    });
+  }
 
-  const result = (data ?? {}) as SyncRpcResult;
+  if (rpcResult.error) {
+    const legacy = await insertListingsLegacy(supabase, listings);
+    return {
+      imported: legacy.imported,
+      updated: legacy.updated,
+      inactive: legacy.inactive,
+      reactivated: legacy.reactivated,
+      skipped: legacy.skipped,
+      matchedProducts,
+      errorCount: legacy.errorCount,
+      errors: [
+        `RPC başarısız oldu, direct fallback kullanıldı: ${rpcResult.error.message}`,
+        ...legacy.errors,
+      ],
+    };
+  }
+
+  const result = (rpcResult.data ?? {}) as SyncRpcResult;
   imported = Number(result.inserted ?? 0);
   updated = Number(result.updated ?? 0);
   inactive = Number(result.inactive ?? 0);
@@ -286,6 +310,18 @@ export async function insertListingsLegacy(
     errorCount,
     errors,
   };
+}
+
+function isRpcSignatureError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "PGRST202" ||
+    text.includes("p_skip_inactive_marking") ||
+    text.includes("could not find the function") ||
+    text.includes("function public.sync_source_listings")
+  );
 }
 
 async function applyMatchedProductIds(

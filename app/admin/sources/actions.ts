@@ -438,6 +438,7 @@ export async function runRealBot(
     runType: "real_test",
     maxLimit: 10,
     forceStatus: "pending",
+    skipInactiveMarking: true,
   });
 
   revalidateSources();

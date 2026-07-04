@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
   let response: Response;
   let data: unknown;
   try {
-    response = await fetch(`${request.nextUrl.origin}${TASK_PATHS[task]}`, {
+    const taskPath = task === "sources" ? `${TASK_PATHS[task]}?force=1` : TASK_PATHS[task];
+    response = await fetch(`${request.nextUrl.origin}${taskPath}`, {
       headers: {
         "x-cron-secret": secret,
       },
