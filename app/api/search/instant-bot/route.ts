@@ -3,11 +3,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getInstantSearchAdapters,
   type NormalizedListing,
-  type SourceAdapter,
 } from "@/lib/source-adapters";
 import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { normalizeSearchText } from "@/lib/unified-source-engine/helpers";
+import type { UnifiedSourceAdapter } from "@/lib/unified-source-engine";
+import { getGlobalContext } from "@/lib/taxonomy/context";
+import type { createCategoryResolver } from "@/lib/taxonomy/integration";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,6 +65,8 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  const resolver = getGlobalContext().getResolver();
 
   const { data, error } = await supabase
     .from("bot_queue")
@@ -164,7 +169,7 @@ export async function POST(request: NextRequest) {
         });
         continue;
       }
-      const importResult = await importListings(supabase, job, searchResult.listings);
+      const importResult = await importListings(supabase, job, searchResult.listings, resolver);
       const finishedAt = new Date().toISOString();
       const message = `Instant bot tamamlandı. Kaynak: ${searchResult.sourceName} (${searchResult.adapterSlug}). Bulunan: ${searchResult.listings.length}, eklenen: ${importResult.imported}, güncellenen: ${importResult.updated}.`;
 
@@ -272,10 +277,10 @@ async function runInstantSearchAdapters(source: SourceRow, job: QueueJob) {
   const triedAdapters: Array<{ slug: string; found: number }> = [];
   for (const adapter of adapters) {
     const listings = await searchAdapter(adapter, source, job);
-    triedAdapters.push({ slug: adapter.slug, found: listings.length });
+    triedAdapters.push({ slug: adapter.sourceSlug, found: listings.length });
     if (listings.length > 0) {
       return {
-        adapterSlug: adapter.slug,
+        adapterSlug: adapter.sourceSlug,
         sourceName: listings[0]?.sourceName ?? source.name,
         listings,
         triedAdapters,
@@ -283,7 +288,7 @@ async function runInstantSearchAdapters(source: SourceRow, job: QueueJob) {
     }
   }
   return {
-    adapterSlug: adapters[0]?.slug ?? "none",
+    adapterSlug: adapters[0]?.sourceSlug ?? "none",
     sourceName: source.name,
     listings: [] as NormalizedListing[],
     triedAdapters,
@@ -291,21 +296,41 @@ async function runInstantSearchAdapters(source: SourceRow, job: QueueJob) {
 }
 
 async function searchAdapter(
-  adapter: SourceAdapter,
+  adapter: UnifiedSourceAdapter,
   source: SourceRow,
   job: QueueJob,
 ) {
   try {
-    return await adapter.search({
-      query: job.query,
-      normalizedQuery: job.normalized_query,
-      sourceId: source.id,
-      sourceName: source.name,
-      sourceSlug: source.slug,
-      limit: 3,
-    });
+    const normalizedQuery = normalizeSearchText(job.query);
+    if (!normalizedQuery) return [];
+
+    const rawListings = await adapter.fetch({ limit: 10, query: job.query });
+    const listings: NormalizedListing[] = [];
+
+    for (const raw of rawListings) {
+      const normalized = adapter.normalize(raw);
+      if (!normalized) continue;
+
+      const haystackText = normalizeSearchText(
+        `${normalized.title} ${(normalized.rawData?.original as any)?.product_name ?? ""}`,
+      );
+      if (!haystackText.includes(normalizedQuery)) continue;
+
+      const validated = adapter.validate(normalized);
+      if (validated.ok && validated.value) {
+        // TODO: Unify NormalizedListing types between unified-source-engine and source-adapters
+        // adapter.validate() returns UnifiedSourceAdapter's NormalizedListing
+        // but this array expects legacy NormalizedListing from source-adapters
+        // Both have compatible fields but different schema definitions
+        listings.push(validated.value as any);
+      }
+
+      if (listings.length >= 3) break;
+    }
+
+    return listings;
   } catch (error) {
-    console.error(`Instant bot adapter failed: ${adapter.slug}`, error);
+    console.error(`Instant bot adapter failed: ${adapter.sourceSlug}`, error);
     return [];
   }
 }
@@ -314,13 +339,14 @@ async function importListings(
   supabase: SupabaseClient,
   job: QueueJob,
   listings: NormalizedListing[],
+  resolver: ReturnType<typeof createCategoryResolver>,
 ) {
   let imported = 0;
   let updated = 0;
   const matchedProductIds = new Set<string>();
 
   for (const listing of listings) {
-    const productId = await ensureProduct(supabase, listing, job.query);
+    const productId = await ensureProduct(supabase, listing, job.query, resolver);
     matchedProductIds.add(String(productId));
     const externalId = listing.externalId || deterministicExternalId(job, listing);
     const existing = await findExistingListing(supabase, listing.sourceName, externalId);
@@ -348,12 +374,14 @@ async function ensureProduct(
   supabase: SupabaseClient,
   listing: NormalizedListing,
   query: string,
+  resolver: ReturnType<typeof createCategoryResolver>,
 ) {
   const product = await findOrCreateMatchedProduct({
     supabase,
     title: listing.title || query,
     productName: listing.model || query,
     category: listing.category,
+    resolver,
   });
   return Number(product.id);
 }

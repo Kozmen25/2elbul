@@ -6,6 +6,7 @@ import type {
 } from "@/lib/import/types";
 import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getGlobalContext } from "@/lib/taxonomy/context";
 
 export async function importListings(
   source: ImportSource,
@@ -15,6 +16,8 @@ export async function importListings(
   if (!supabase) {
     throw new Error("Supabase admin bağlantısı yapılandırılmamış.");
   }
+
+  const resolver = getGlobalContext().getResolver();
 
   const adapter = importAdapters[source];
   const result: ImportResult = { imported: 0, failed: 0, errors: [] };
@@ -43,6 +46,7 @@ export async function importListings(
         title: listing.title,
         productName: listing.productName,
         category: listing.category,
+        resolver,
       });
 
       const { error: listingError } = await supabase.from("listings").upsert(

@@ -1,3 +1,18 @@
+/**
+ * @deprecated This module defines the legacy StandardSourceAdapter system.
+ * Use lib/unified-source-engine/types.ts instead.
+ * 
+ * The StandardSourceAdapter and related types are being phased out in favor of the
+ * UnifiedSourceAdapter pattern from the new Unified Source Engine.
+ * 
+ * Components in this file:
+ * - StandardSourceAdapter: Old adapter interface (deprecated, use UnifiedSourceAdapter)
+ * - StandardNormalizedListing: Legacy normalized type (use Unified NormalizedListing)
+ * - Helper functions: createStandardSourceAdapter, normalizeBotListingToStandard, etc.
+ * 
+ * These are kept for backward compatibility during migration. Will be removed in Sprint 0.5+
+ */
+
 import type { BotAdapterListing, SourceIntegrationConfig } from "@/lib/bots/types";
 
 export type StandardAdapterHealth = {
@@ -40,6 +55,18 @@ export type StandardAdapterResult<TListing = StandardNormalizedListing> =
     listings: TListing[];
   };
 
+/**
+ * @deprecated Use UnifiedSourceAdapter from lib/unified-source-engine/types.ts
+ * 
+ * Legacy adapter interface. The new system uses UnifiedSourceAdapter which provides:
+ * - fetch() for raw data acquisition
+ * - normalize() for data transformation
+ * - validate() for validation with confidence scoring
+ * - match() for product matching
+ * - persist() for database persistence
+ * 
+ * This interface will be removed after full migration to Unified Source Engine.
+ */
 export interface StandardSourceAdapter {
   sourceId: number;
   sourceName: string;

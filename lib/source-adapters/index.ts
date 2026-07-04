@@ -2,6 +2,8 @@ import type { SourceAdapter } from "@/lib/source-adapters/types";
 import { easyCepSourceAdapter } from "@/lib/source-adapters/easycep-adapter";
 import { getmobilSourceAdapter } from "@/lib/source-adapters/getmobil-adapter";
 import { mockSourceAdapter } from "@/lib/source-adapters/mock-adapter";
+import { getUnifiedSourceRegistry } from "@/lib/unified-source-engine/adapters";
+import type { UnifiedSourceAdapter } from "@/lib/unified-source-engine";
 
 const adapters = new Map<string, SourceAdapter>([
   [easyCepSourceAdapter.slug, easyCepSourceAdapter],
@@ -14,13 +16,18 @@ export function getSourceAdapter(sourceSlug?: string | null) {
   return adapters.get(sourceSlug) ?? mockSourceAdapter;
 }
 
-export function getInstantSearchAdapters() {
-  const adaptersToRun: SourceAdapter[] = [
-    easyCepSourceAdapter,
-    getmobilSourceAdapter,
-  ];
-  if (isMockFallbackEnabled()) adaptersToRun.push(mockSourceAdapter);
-  return adaptersToRun;
+export function getInstantSearchAdapters(): UnifiedSourceAdapter[] {
+  const registry = getUnifiedSourceRegistry();
+  const unifiedAdapters = registry.getAll();
+
+  if (unifiedAdapters.length > 0) {
+    const adaptersToRun = unifiedAdapters.filter((adapter) =>
+      ["easycep", "getmobil"].includes(adapter.sourceSlug),
+    );
+    if (adaptersToRun.length > 0) return adaptersToRun;
+  }
+
+  return [];
 }
 
 export function isMockFallbackEnabled() {

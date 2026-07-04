@@ -1,3 +1,13 @@
+/**
+ * @deprecated This module is part of the legacy SourceAdapter system.
+ * Use lib/unified-source-engine/adapters/easycep-unified.ts instead.
+ * 
+ * This file is kept for backward compatibility. It implements the old SourceAdapter interface
+ * which is being replaced by UnifiedSourceAdapter pattern in the new Unified Source Engine.
+ * 
+ * Timeline: Deprecated in Sprint 0.4, will be removed after migration completes
+ */
+
 import {
   EASYCEP_PHONE_CATEGORY_URL,
   fetchEasyCepListings,

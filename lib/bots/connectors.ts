@@ -19,6 +19,7 @@ import { createEasyCepStandardAdapter } from "@/lib/bots/adapters/easycep-adapte
 import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
 import { createGetmobilStandardAdapter } from "@/lib/bots/adapters/getmobil-adapter";
 import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
+import { getUnifiedSourceRegistry } from "@/lib/unified-source-engine/adapters";
 import type {
   BotAdapterListing,
   SourceConnector,
@@ -96,6 +97,19 @@ export function getSourceConnector(
 }
 
 export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
+  const registry = getUnifiedSourceRegistry();
+  const unifiedAdapter = registry.get(config.sourceSlug);
+
+  if (unifiedAdapter) {
+    return createStandardSourceAdapter({
+      config,
+      enabled: true,
+      // UnifiedSourceAdapter.fetch() returns unknown[] but StandardSourceAdapter expects BotAdapterListing[]
+      // This is safe because adapters normalize data to match expected schema
+      fetchListings: async () => (await unifiedAdapter.fetch({ limit: config.productLimit || 10 })) as BotAdapterListing[],
+    });
+  }
+
   if (config.sourceSlug === "easycep") {
     return createEasyCepStandardAdapter(config);
   }

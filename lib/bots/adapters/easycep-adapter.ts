@@ -1,3 +1,14 @@
+/**
+ * @deprecated Use lib/unified-source-engine/adapters/easycep-unified.ts instead.
+ * 
+ * This module provides a legacy StandardSourceAdapter implementation for EasyCep.
+ * It exists for backward compatibility during the migration to Unified Source Engine.
+ * 
+ * New code should use the Unified Source Engine pattern directly.
+ * 
+ * Timeline: Deprecate in Sprint 0.4, remove in Sprint 0.5+
+ */
+
 import {
   createStandardAdapterResult,
   normalizeBotListingToStandard,

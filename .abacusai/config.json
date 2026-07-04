@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul && npm install 2>&1)",
+      "Bash(cd C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul && npm run lint 2>&1)",
+      "Bash(cd C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul && npm run test 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm install 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run lint 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run test 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run build 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run lint 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run test 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run build 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm install 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run lint 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm install 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run lint 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run lint 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run test 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run build 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm install 2>&1 | tail -20)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm install 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run lint 2>&1)",
+      "Bash(cd \"C:\\Users\\LÜFER\\Downloads\\RestoreLens\\RestoreLens\\2elbul\" && npm run test 2>&1)"
+    ]
+  },
+  "additionalDirectories": [
+    "C:\\home\\user\\.abacusai\\plans"
+  ]
+}

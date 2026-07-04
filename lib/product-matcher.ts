@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ICategoryResolver } from "./taxonomy/integration";
 
 export type ProductSignals = {
   brand: string | null;
@@ -41,6 +42,7 @@ type FindOrCreateMatchedProductInput = {
   title: string;
   productName?: string | null;
   category?: string | null;
+  resolver?: ICategoryResolver;
 };
 
 const storageValues = ["64", "128", "256", "512", "1024", "1"];
@@ -90,7 +92,7 @@ export function normalizeProductTitle(title: string) {
     .trim();
 }
 
-export function extractProductSignals(title: string): ProductSignals {
+export function extractProductSignals(title: string, resolver?: ICategoryResolver): ProductSignals {
   const normalized = normalizeProductTitle(title);
   const tokens = normalized.split(" ").filter(Boolean);
   const brand = detectBrand(normalized);
@@ -98,7 +100,9 @@ export function extractProductSignals(title: string): ProductSignals {
   const storage = detectStorage(normalized, tokens);
   const ram = detectRam(normalized);
   const color = detectColor(tokens);
-  const category = detectCategory(normalized, brand);
+  const category = resolver
+    ? resolver.resolveSync(title).categoryLabel
+    : detectCategory(normalized, brand);
   const keyParts = [
     brand,
     model,
@@ -129,9 +133,10 @@ export async function dryRunProductMatch({
   title,
   productName,
   category,
+  resolver,
 }: FindOrCreateMatchedProductInput): Promise<ProductMatcherDryRunResult> {
   const combinedTitle = `${productName ?? ""} ${title}`.trim();
-  const signals = extractProductSignals(combinedTitle);
+  const signals = extractProductSignals(combinedTitle, resolver);
   const normalizedTitle = normalizeProductTitle(combinedTitle);
   const productKey = signals.normalizedKey;
   const suggestedName = createCanonicalProductName(signals, productName || title);
@@ -165,8 +170,9 @@ export async function findOrCreateMatchedProduct({
   title,
   productName,
   category,
+  resolver,
 }: FindOrCreateMatchedProductInput): Promise<MatchedProduct> {
-  const signals = extractProductSignals(`${productName ?? ""} ${title}`);
+  const signals = extractProductSignals(`${productName ?? ""} ${title}`, resolver);
   const canonicalName = createCanonicalProductName(signals, productName || title);
   const canonicalKey = signals.normalizedKey;
 

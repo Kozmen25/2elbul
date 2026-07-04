@@ -3,6 +3,7 @@ import {
   expandQueryByTaxonomy,
   normalizeCategoryText,
 } from "./category-taxonomy";
+import type { ICategoryResolver } from "./taxonomy/integration";
 
 export type SearchIntentTerm = {
   term: string;
@@ -36,7 +37,7 @@ export const SEARCH_CATEGORY_TREE = CATEGORY_TAXONOMY.map((category) => ({
   })),
 }));
 
-export function resolveSearchIntent(query: string): SearchIntent {
+export function resolveSearchIntent(query: string, resolver?: ICategoryResolver): SearchIntent {
   const expanded = expandQueryByTaxonomy(query);
   const termMap = new Map<string, SearchIntentTerm>();
 

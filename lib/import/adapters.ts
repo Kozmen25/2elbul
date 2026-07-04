@@ -6,6 +6,7 @@ import type {
 } from "@/lib/import/types";
 import type { ListingCondition } from "@/lib/listings";
 import { normalizeImageUrls } from "@/lib/bots/image-urls";
+import type { ICategoryResolver } from "@/lib/taxonomy/integration";
 
 const conditionAliases: Record<string, ListingCondition> = {
   sıfır: "Sıfır",
