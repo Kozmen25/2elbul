@@ -8,7 +8,7 @@ import {
   LogIn,
   LogOut,
   Menu,
-  Plus,
+  Search,
   UserRound,
   UserPlus,
   X,
@@ -47,9 +47,9 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
           <Link href="/market" className="transition-colors hover:text-[#ff6b00]">
             Piyasa Merkezi
           </Link>
-          <Link href="/listing-ekle" className="orange-button px-4 py-2.5">
-            <Plus size={17} strokeWidth={2.5} />
-            İlan Ekle
+          <Link href="/search" className="orange-button px-4 py-2.5">
+            <Search size={17} strokeWidth={2.5} />
+            Piyasayı Keşfet
           </Link>
           {userEmail ? (
             <div className="flex items-center gap-2">
@@ -167,10 +167,10 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
               <BarChart3 size={18} className="text-[#ff6b00]" /> Piyasa Merkezi
             </Link>
             <Link
-              href="/listing-ekle"
+              href="/search"
               className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-black/4"
             >
-              <Plus size={18} className="text-[#ff6b00]" /> İlan Ekle
+              <Search size={18} className="text-[#ff6b00]" /> Piyasayı Keşfet
             </Link>
 
             <div className="my-2 h-px bg-black/8" />

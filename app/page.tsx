@@ -20,7 +20,6 @@ import {
   TriangleAlert,
   Tv,
 } from "lucide-react";
-import { BrandLogo } from "@/components/brand-logo";
 import { ListingImage } from "@/components/listing-image";
 import { SearchBar } from "@/components/search-bar";
 import { createProductSlug } from "@/lib/product-slug";
@@ -70,9 +69,16 @@ const quickCategories = [
   { label: "Tüm ilanlar", query: "", icon: PackageSearch },
 ];
 
+const quickDiscoveryCards = [
+  { label: "Fırsatlar", href: "/search?q=fırsat", icon: BadgePercent },
+  { label: "Fiyatı Düşenler", href: "/market?filter=falling", icon: TrendingDown },
+  { label: "Yakınımdaki", href: "/search?q=yakınımdaki", icon: MapPin },
+  { label: "Tüm İlanlar", href: "/search", icon: PackageSearch },
+];
+
 const quickAnchors = [
-  { label: "Kategori Rehberi", href: "#kategori-rehberi" },
-  { label: "Fırsatlar", href: "#firsatlar" },
+  { label: "Kategoriler", href: "#kategoriler" },
+  { label: "Hızlı Keşif", href: "#hizli-kesif" },
   { label: "Piyasa Nabzı", href: "#piyasa" },
   { label: "Yeni İlanlar", href: "#yeni-ilanlar" },
   { label: "Kaynaklar", href: "#kaynaklar" },
@@ -201,9 +207,6 @@ export default async function Home() {
         <div className="container-shell relative">
           <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
             <div>
-              <div className="mb-5">
-                <BrandLogo size="lg" linked={false} />
-              </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-[#ff6b00]/15 bg-[#fff7f1] px-3 py-2 text-xs font-black text-[#d95700]">
                 <span className="size-2 rounded-full bg-[#ff6b00] shadow-[0_0_0_4px_rgba(255,107,0,0.12)]" />
                 Güncel ikinci el piyasa verisi
@@ -264,25 +267,6 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="mt-8 rounded-3xl border border-black/8 bg-[#fafaf8] p-3 shadow-[0_14px_45px_rgba(0,0,0,0.04)]">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-              {quickCategories.map(({ label, query, icon: Icon }) => (
-                <Link
-                  key={label}
-                  href={`/search?q=${encodeURIComponent(query)}`}
-                  className="group rounded-2xl border border-transparent bg-white p-4 text-center transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:shadow-[0_12px_30px_rgba(0,0,0,0.05)]"
-                >
-                  <span className="mx-auto grid size-11 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00] transition group-hover:bg-[#ff6b00] group-hover:text-white">
-                    <Icon size={21} />
-                  </span>
-                  <span className="mt-3 block text-xs font-black sm:text-sm">
-                    {label}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
           <nav className="mt-5 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {quickAnchors.map((item) => (
               <a
@@ -305,7 +289,64 @@ export default async function Home() {
         </div>
       )}
 
-      <section id="kategori-rehberi" className="border-b border-black/7 bg-white py-8 sm:py-10">
+      <section id="kategoriler" className="border-b border-black/7 bg-white py-10 sm:py-12">
+        <div className="container-shell">
+          <SectionHeader
+            eyebrow="Piyasa keşfi"
+            title="Kategoriler"
+            description="Piyasa verisini kategoriye göre keşfet."
+            icon={FolderSearch2}
+            compact
+          />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+            {quickCategories.slice(0, 8).map(({ label, query, icon: Icon }) => (
+              <Link
+                key={label}
+                href={`/search?q=${encodeURIComponent(query)}`}
+                className="group rounded-3xl border border-black/8 bg-[#fafaf8] p-4 text-center transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:bg-white hover:shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
+              >
+                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-[#ff6b00] shadow-sm transition group-hover:bg-[#ff6b00] group-hover:text-white">
+                  <Icon size={22} />
+                </span>
+                <span className="mt-3 block text-sm font-black leading-tight">
+                  {label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="hizli-kesif" className="border-b border-black/7 bg-[#fafaf8] py-10 sm:py-12">
+        <div className="container-shell">
+          <SectionHeader
+            eyebrow="Kısa yollar"
+            title="Hızlı Keşif"
+            description="En çok kullanılan piyasa sinyallerine tek dokunuşla ulaş."
+            icon={Search}
+            compact
+          />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {quickDiscoveryCards.map(({ label, href, icon: Icon }) => (
+              <Link
+                key={label}
+                href={href}
+                className="group rounded-3xl border border-black/8 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
+              >
+                <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00] transition group-hover:bg-[#ff6b00] group-hover:text-white">
+                  <Icon size={22} />
+                </span>
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black tracking-[-0.03em]">{label}</h3>
+                  <ArrowUpRight size={18} className="text-black/35 transition group-hover:text-[#ff6b00]" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="kategori-rehberi" className="hidden">
         <div className="container-shell">
           <SectionHeader
             eyebrow="Hızlı erişim"
@@ -499,9 +540,9 @@ export default async function Home() {
         </div>
       </section>
 
-      <section id="kategoriler" className="border-b border-black/7 bg-white py-10 sm:py-12">
+      <section id="populer-urunler" className="border-b border-black/7 bg-white py-10 sm:py-12">
         <div className="container-shell">
-          <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+          <div className="grid gap-8">
             <div>
               <SectionHeader
                 eyebrow="Piyasa özeti"
@@ -510,7 +551,7 @@ export default async function Home() {
                 compact
               />
               {popularListedProducts.length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {popularListedProducts.slice(0, 8).map((product) => (
                     <ProductStatCard key={product.productName} product={product} />
                   ))}
@@ -527,9 +568,9 @@ export default async function Home() {
                 icon={FolderSearch2}
                 compact
               />
-              {popularCategories.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {popularCategories.slice(0, 6).map((category) => (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {popularCategories.length > 0 ? (
+                  popularCategories.slice(0, 6).map((category) => (
                     <Link
                       key={category.name}
                       href={`/search?q=${encodeURIComponent(category.name)}`}
@@ -543,11 +584,23 @@ export default async function Home() {
                         {category.listingCount} ilan
                       </p>
                     </Link>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState text="Ürünlere kategori atandığında popüler kategoriler burada görünecek." />
-              )}
+                  ))
+                ) : (
+                  quickCategories.slice(0, 6).map(({ label, query, icon: Icon }) => (
+                    <Link
+                      key={label}
+                      href={`/search?q=${encodeURIComponent(query)}`}
+                      className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4 transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1]"
+                    >
+                      <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+                        <Icon size={19} />
+                      </span>
+                      <h3 className="mt-5 text-sm font-black">{label}</h3>
+                      <p className="mt-1 text-xs text-black/45">Piyasayı keşfet</p>
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -617,7 +670,7 @@ function MobileBottomNav() {
     { label: "Ana", href: "/", icon: HomeIcon },
     { label: "Ara", href: "#home-search", icon: Search },
     { label: "Piyasa", href: "/market", icon: BarChart3 },
-    { label: "Kategori", href: "#kategori-rehberi", icon: FolderSearch2 },
+    { label: "Kategori", href: "#kategoriler", icon: FolderSearch2 },
     { label: "Giriş", href: "/giris", icon: Store },
   ];
 
@@ -674,12 +727,14 @@ function HeroMetric({
 function SectionHeader({
   eyebrow,
   title,
+  description,
   icon: Icon,
   href,
   compact = false,
 }: {
   eyebrow: string;
   title: string;
+  description?: string;
   icon: typeof Clock3;
   href?: string;
   compact?: boolean;
@@ -697,6 +752,11 @@ function SectionHeader({
           <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] sm:text-3xl">
             {title}
           </h2>
+          {description && (
+            <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-black/45">
+              {description}
+            </p>
+          )}
         </div>
       </div>
       {href && (
@@ -734,7 +794,7 @@ function ProductStatCard({
       className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.05)] sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="min-w-0 break-words font-black">
+        <h3 className="min-w-0 overflow-hidden text-base font-black leading-tight [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
           {product.productName}
         </h3>
         <span className="shrink-0 rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
@@ -746,7 +806,7 @@ function ProductStatCard({
           <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
             En düşük
           </p>
-          <p className="mt-1 text-sm font-black text-[#ff6b00] sm:text-base">
+          <p className="mt-1 truncate text-sm font-black text-[#ff6b00] sm:text-base" title={formatPrice(product.lowestPrice)}>
             {formatPrice(product.lowestPrice)}
           </p>
         </div>
@@ -754,7 +814,7 @@ function ProductStatCard({
           <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
             Ortalama
           </p>
-          <p className="mt-1 text-sm font-black sm:text-base">
+          <p className="mt-1 truncate text-sm font-black sm:text-base" title={formatPrice(product.averagePrice)}>
             {formatPrice(product.averagePrice)}
           </p>
         </div>
