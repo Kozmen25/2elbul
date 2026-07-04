@@ -1787,6 +1787,15 @@ olcmek ve sorunlu kayitlari admin panelden gormek icin eklendi. Yeni SQL
 gerekmez; mevcut `listings`, `products`, `sources` ve `bot_runs` verileri
 kullanilir.
 
+Production source sync sirasinda `column listings.raw_payload does not exist`
+hatasi alinirsa once su migration calistirilmalidir:
+
+```sql
+-- supabase/migrations/listings-raw-payload.sql
+alter table public.listings
+  add column if not exists raw_payload jsonb null;
+```
+
 Gosterilen ozetler:
 
 - Overall Data Quality
