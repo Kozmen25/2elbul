@@ -44,6 +44,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   let listings: Listing[] = [];
   let loadError = "";
   let favoriteListingIds: string[] = [];
+  let searchIntentLabel: string | null = null;
 
   const serverSupabase = await createSupabaseServerClient();
   const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
@@ -56,6 +57,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       "Supabase bağlantısı yapılandırılmamış. Ortam değişkenlerini kontrol edin.";
   } else if (query) {
     const intent = resolveSearchIntent(query);
+    searchIntentLabel = intent.label;
     const searchTerms = intent.terms.slice(0, 48);
     const [matchingProductsResults, titleListingsResults] = await Promise.all([
       Promise.all(
@@ -237,6 +239,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         favoriteListingIds={favoriteListingIds}
         isAuthenticated={isAuthenticated}
         shouldQueueSearchDemand={Boolean(query && listings.length < 3 && !loadError)}
+        searchIntentLabel={searchIntentLabel}
       />
     </>
   );

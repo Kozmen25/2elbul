@@ -64,6 +64,7 @@ type SearchResultsClientProps = {
   favoriteListingIds: string[];
   isAuthenticated: boolean;
   shouldQueueSearchDemand: boolean;
+  searchIntentLabel?: string | null;
 };
 
 const searchDemandMessage =
@@ -96,6 +97,7 @@ export function SearchResultsClient({
   favoriteListingIds,
   isAuthenticated,
   shouldQueueSearchDemand,
+  searchIntentLabel = null,
 }: SearchResultsClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -382,6 +384,11 @@ export function SearchResultsClient({
             ? `${results.length} ilan bulundu`
             : "Fiyatları karşılaştırmak için yukarıdaki kutudan arama yap."}
         </p>
+        {searchIntentLabel ? (
+          <p className="mt-3 inline-flex rounded-full border border-[#ff6b00]/20 bg-[#fff7f1] px-4 py-2 text-sm font-black text-[#d95700]">
+            {searchIntentLabel}
+          </p>
+        ) : null}
       </div>
 
       {loadError ? (
