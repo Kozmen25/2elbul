@@ -1,0 +1,44 @@
+
+> 2elbul@0.1.0 test
+> vitest run lib/duplicate-engine/engine.test.ts
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90mC:/Users/LÜFER/Downloads/RestoreLens/RestoreLens/2elbul[39m
+
+ [31m❯[39m lib/duplicate-engine/engine.test.ts [2m([22m[2m30 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[32m 85[2mms[22m[39m
+[31m       [31m×[31m iPhone 15 Pro Max identical from different sources[39m[32m 24[2mms[22m[39m
+[31m       [31m×[31m iPhone 15 should not match iPhone 14[39m[32m 5[2mms[22m[39m
+       [32m✓[39m iPhone 15 256GB vs iPhone 15 should score moderate due to storage difference[32m 3[2mms[22m[39m
+       [32m✓[39m iPhone 15 Pro vs iPhone 15 Pro Max should score moderate[32m 1[2mms[22m[39m
+       [32m✓[39m Galaxy S24 Ultra identical variants[32m 1[2mms[22m[39m
+       [32m✓[39m Galaxy S24 Ultra vs Galaxy S23 Ultra should score moderate[32m 2[2mms[22m[39m
+[31m       [31m×[31m Galaxy S24 should match GalaxyS24[39m[32m 4[2mms[22m[39m
+[31m       [31m×[31m PlayStation 5 vs PS5 should match well[39m[32m 4[2mms[22m[39m
+       [32m✓[39m PlayStation 5 vs PlayStation 4 should not match[32m 2[2mms[22m[39m
+       [32m✓[39m MacBook Air M2 with brand prefix should match well[32m 1[2mms[22m[39m
+       [32m✓[39m MacBook Air M2 vs MacBook Air M1 should be low[32m 1[2mms[22m[39m
+       [32m✓[39m AirPods Pro 2 vs AirPods Pro Gen2 should match reasonably[32m 5[2mms[22m[39m
+       [32m✓[39m AirPods Pro vs AirPods Max should be low[32m 1[2mms[22m[39m
+       [32m✓[39m 256gb vs 256 GB should match exactly[32m 1[2mms[22m[39m
+       [32m✓[39m 256gb vs 512gb should not match[32m 2[2mms[22m[39m
+       [32m✓[39m Same price should score 100[32m 1[2mms[22m[39m
+       [32m✓[39m 5% price difference should score high[32m 0[2mms[22m[39m
+       [32m✓[39m 50% price difference should score very low[32m 0[2mms[22m[39m
+       [32m✓[39m Same product from different sources should have high score[32m 1[2mms[22m[39m
+       [32m✓[39m Same product from same source should score high[32m 1[2mms[22m[39m
+       [32m✓[39m Same condition should score 100[32m 0[2mms[22m[39m
+       [32m✓[39m Different conditions should score low[32m 0[2mms[22m[39m
+       [32m✓[39m compareListings should work well for identical products[32m 3[2mms[22m[39m
+       [32m✓[39m findDuplicateMatches should find pairs above threshold[32m 3[2mms[22m[39m
+       [32m✓[39m groupDuplicates should group similar items[32m 3[2mms[22m[39m
+       [32m✓[39m getHighestScoringDuplicate should find best match[32m 2[2mms[22m[39m
+       [32m✓[39m Empty brand should not crash[32m 0[2mms[22m[39m
+       [32m✓[39m Missing model should not crash[32m 0[2mms[22m[39m
+       [32m✓[39m isDuplicate function should work[32m 0[2mms[22m[39m
+       [32m✓[39m createDuplicateFingerprint should create valid structure[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m26 passed[39m[22m[90m (30)[39m
+[2m   Start at [22m 18:59:56
+[2m   Duration [22m 1.68s[2m (transform 376ms, setup 0ms, import 505ms, tests 85ms, environment 1ms)[22m
+
