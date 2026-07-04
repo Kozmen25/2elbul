@@ -62,16 +62,83 @@ const quickCategories = [
   { label: "TV / Ses", query: "tv", icon: Tv },
   { label: "Araç", query: "araba", icon: Car },
   { label: "Emlak", query: "emlak", icon: HomeIcon },
+  { label: "Yedek Parça", query: "yedek parça", icon: Store },
+  { label: "Ev / Yaşam", query: "mobilya", icon: FolderSearch2 },
   { label: "Fiyatı düşenler", query: "fiyatı düşen", icon: TrendingDown },
   { label: "Fırsatlar", query: "fırsat", icon: BadgePercent },
+  { label: "Yakınımdaki", query: "yakınımdaki", icon: MapPin },
+  { label: "Tüm ilanlar", query: "", icon: PackageSearch },
 ];
 
 const quickAnchors = [
+  { label: "Kategori Rehberi", href: "#kategori-rehberi" },
   { label: "Fırsatlar", href: "#firsatlar" },
   { label: "Piyasa Nabzı", href: "#piyasa" },
   { label: "Yeni İlanlar", href: "#yeni-ilanlar" },
   { label: "Kaynaklar", href: "#kaynaklar" },
-  { label: "Kategoriler", href: "#kategoriler" },
+];
+
+const categoryGuide = [
+  {
+    title: "Emlak",
+    query: "emlak",
+    emoji: "🏠",
+    items: ["Konut", "Kiralık Ev", "Satılık Ev", "Arsa", "İş Yeri", "Günlük Kiralık", "Devre Mülk", "Turistik Tesis"],
+  },
+  {
+    title: "Vasıta",
+    query: "vasıta",
+    emoji: "🚗",
+    items: ["Otomobil", "SUV", "Motosiklet", "Elektrikli Araç", "Ticari Araç", "Karavan", "Deniz Aracı", "Hasarlı Araç"],
+  },
+  {
+    title: "Yedek Parça",
+    query: "yedek parça",
+    emoji: "🧰",
+    items: ["Oto Parça", "Lastik", "Jant", "Motosiklet Ekipmanı", "Aksesuar", "Donanım", "Far", "Tampon"],
+  },
+  {
+    title: "Elektronik",
+    query: "elektronik",
+    emoji: "📱",
+    items: ["Cep Telefonu", "Bilgisayar", "Tablet", "TV", "Kamera", "Ses Sistemi", "Akıllı Saat", "Kulaklık"],
+  },
+  {
+    title: "Bilgisayar Parçaları",
+    query: "bilgisayar parçaları",
+    emoji: "🖥️",
+    items: ["Ekran Kartı", "İşlemci", "Anakart", "RAM", "SSD", "HDD", "Monitör", "Oyuncu PC"],
+  },
+  {
+    title: "Ev & Yaşam",
+    query: "ev eşyası",
+    emoji: "🛋️",
+    items: ["Mobilya", "Beyaz Eşya", "Ev Elektroniği", "Küçük Ev Aleti", "Bahçe", "Yapı Market", "Dekorasyon", "Klima"],
+  },
+  {
+    title: "Moda & Kişisel",
+    query: "giyim",
+    emoji: "👟",
+    items: ["Giyim", "Ayakkabı", "Çanta", "Saat", "Takı", "Kozmetik", "Aksesuar", "Koleksiyon"],
+  },
+  {
+    title: "Anne / Bebek / Hobi",
+    query: "bebek",
+    emoji: "🧸",
+    items: ["Bebek Arabası", "Oto Koltuğu", "Oyuncak", "Spor", "Bisiklet", "Müzik Aleti", "Kitap", "Oyun"],
+  },
+  {
+    title: "İş & Sanayi",
+    query: "iş makinesi",
+    emoji: "🏗️",
+    items: ["İş Makinesi", "Tarım Makinesi", "Forklift", "Jeneratör", "Kompresör", "Sanayi", "Enerji", "Ofis"],
+  },
+  {
+    title: "Hizmet & Hayvan",
+    query: "hizmet",
+    emoji: "🐾",
+    items: ["Ustalar", "Özel Ders", "İş İlanı", "Yardımcı", "Kedi", "Köpek", "Kuş", "Mama"],
+  },
 ];
 
 const fallbackPopularSearches = [
@@ -237,6 +304,49 @@ export default async function Home() {
           </div>
         </div>
       )}
+
+      <section id="kategori-rehberi" className="border-b border-black/7 bg-white py-8 sm:py-10">
+        <div className="container-shell">
+          <SectionHeader
+            eyebrow="Hızlı erişim"
+            title="Kategori rehberi"
+            icon={FolderSearch2}
+            compact
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {categoryGuide.map((group) => (
+              <div
+                key={group.title}
+                className="rounded-3xl border border-black/8 bg-[#fafaf8] p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:bg-white hover:shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
+              >
+                <Link
+                  href={`/search?q=${encodeURIComponent(group.query)}`}
+                  className="flex items-center gap-3"
+                >
+                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl shadow-sm">
+                    {group.emoji}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-black">{group.title}</h3>
+                    <p className="text-xs text-black/45">{group.items.length} alt başlık</p>
+                  </div>
+                </Link>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {group.items.slice(0, 8).map((item) => (
+                    <Link
+                      key={item}
+                      href={`/search?q=${encodeURIComponent(item)}`}
+                      className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-[11px] font-bold text-black/65 transition hover:border-[#ff6b00]/30 hover:bg-[#fff7f1] hover:text-[#d95700]"
+                    >
+                      {item}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section id="firsatlar" className="border-b border-black/7 bg-white py-10 sm:py-12">
         <div className="container-shell">
@@ -473,7 +583,9 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="bg-[#111] py-10 text-white sm:py-12">
+      <MobileBottomNav />
+
+      <section className="bg-[#111] py-10 pb-24 text-white sm:py-12 md:pb-12">
         <div className="container-shell">
           <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr] lg:items-center">
             <div>
@@ -497,6 +609,33 @@ export default async function Home() {
         </div>
       </section>
     </>
+  );
+}
+
+function MobileBottomNav() {
+  const items = [
+    { label: "Ana", href: "/", icon: HomeIcon },
+    { label: "Ara", href: "#home-search", icon: Search },
+    { label: "Piyasa", href: "/market", icon: BarChart3 },
+    { label: "Kategori", href: "#kategori-rehberi", icon: FolderSearch2 },
+    { label: "Giriş", href: "/giris", icon: Store },
+  ];
+
+  return (
+    <nav className="fixed inset-x-3 bottom-3 z-50 rounded-3xl border border-black/10 bg-white/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur md:hidden">
+      <div className="grid grid-cols-5 gap-1">
+        {items.map(({ label, href, icon: Icon }) => (
+          <Link
+            key={label}
+            href={href}
+            className="flex flex-col items-center justify-center rounded-2xl px-2 py-2 text-[10px] font-black text-black/55 transition hover:bg-[#fff1e7] hover:text-[#d95700]"
+          >
+            <Icon size={18} />
+            <span className="mt-1">{label}</span>
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }
 
