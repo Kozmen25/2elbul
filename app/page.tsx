@@ -4,16 +4,21 @@ import {
   ArrowUpRight,
   BadgePercent,
   BarChart3,
+  Car,
   Clock3,
   Flame,
   FolderSearch2,
-  PackageSearch,
+  Gamepad2,
+  HomeIcon,
+  Laptop,
   MapPin,
+  PackageSearch,
   Search,
   Smartphone,
   Store,
   TrendingDown,
   TriangleAlert,
+  Tv,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { ListingImage } from "@/components/listing-image";
@@ -50,76 +55,34 @@ export const metadata: Metadata = {
   },
 };
 
-const features = [
-  {
-    title: "Piyasa Fiyatı",
-    description: "Gerçek piyasa değerini öğren",
-    icon: BarChart3,
-  },
-  {
-    title: "En Ucuz İlanlar",
-    description: "Farklı platformları karşılaştır",
-    icon: Search,
-  },
-  {
-    title: "Şüpheli Fiyat Uyarısı",
-    description: "Dolandırıcılık risklerini gör",
-    icon: TriangleAlert,
-  },
+const quickCategories = [
+  { label: "Telefon", query: "telefon", icon: Smartphone },
+  { label: "Bilgisayar", query: "bilgisayar", icon: Laptop },
+  { label: "Konsol", query: "oyun konsolu", icon: Gamepad2 },
+  { label: "TV / Ses", query: "tv", icon: Tv },
+  { label: "Araç", query: "araba", icon: Car },
+  { label: "Emlak", query: "emlak", icon: HomeIcon },
+  { label: "Fiyatı düşenler", query: "fiyatı düşen", icon: TrendingDown },
+  { label: "Fırsatlar", query: "fırsat", icon: BadgePercent },
 ];
 
-const landingFeatures = [
-  {
-    title: "Gercek piyasa fiyati",
-    description: "Ayni urundeki ilanlardan ortalama, medyan ve fiyat araligini gor.",
-    icon: BarChart3,
-  },
-  {
-    title: "En ucuz ilanlari bul",
-    description: "Farkli kaynaklardaki uygun fiyatli ilanlari tek ekranda karsilastir.",
-    icon: Search,
-  },
-  {
-    title: "Fiyat gecmisini takip et",
-    description: "Urun fiyatinin zaman icinde nasil degistigini incele.",
-    icon: Clock3,
-  },
-  {
-    title: "Akilli fiyat yorumu",
-    description: "Fiyatin piyasaya gore ucuz, normal veya pahali oldugunu anla.",
-    icon: TriangleAlert,
-  },
-  {
-    title: "Fiyat alarmi kur",
-    description: "Hedef fiyatini belirle, dususleri takip etmeye hazir ol.",
-    icon: BadgePercent,
-  },
+const quickAnchors = [
+  { label: "Fırsatlar", href: "#firsatlar" },
+  { label: "Piyasa Nabzı", href: "#piyasa" },
+  { label: "Yeni İlanlar", href: "#yeni-ilanlar" },
+  { label: "Kaynaklar", href: "#kaynaklar" },
+  { label: "Kategoriler", href: "#kategoriler" },
 ];
 
-const howItWorks = [
-  {
-    title: "Urunu ara",
-    description: "Arama kutusuna marka, model veya urun adini yaz.",
-  },
-  {
-    title: "Ilanlari karsilastir",
-    description: "Kaynak, fiyat, durum ve urun bazli karsilastirmalari incele.",
-  },
-  {
-    title: "Fiyat analizini incele",
-    description: "Ortalama fiyati, medyani, guven skorunu ve gecmis grafigini gor.",
-  },
-  {
-    title: "Uygun firsati yakala",
-    description: "En iyi firsatlari ac, ilan linkinden satici sayfasina gec.",
-  },
-];
-
-const trustSignals = [
-  "Farkli kaynaklardan ilanlar",
-  "Ortalama ve medyan fiyat",
-  "Fiyat gecmisi",
-  "Guven skoru",
+const fallbackPopularSearches = [
+  "iPhone",
+  "Laptop",
+  "PS5",
+  "RTX 4060",
+  "MacBook",
+  "AirPods",
+  "iPad",
+  "Samsung",
 ];
 
 const formatPrice = (price: number) =>
@@ -151,441 +114,525 @@ export default async function Home() {
     error,
   } = await getHomeData();
 
+  const totalListings = sourceSummary.reduce(
+    (total, source) => total + source.listingCount,
+    0,
+  );
+  const totalSources = sourceSummary.filter((source) => source.listingCount > 0).length;
+  const fallingSignals = marketPulse.fallingPriceProducts.length + priceDrops.length;
+  const topOpportunity = priceOpportunities[0];
+  const heroSearches = popularProducts.length > 0
+    ? popularProducts.map((item) => item.productName).slice(0, 8)
+    : fallbackPopularSearches;
+
   return (
     <>
-      <section className="relative flex min-h-[calc(100vh-145px)] items-center overflow-hidden bg-white py-9 sm:py-24">
-        <div className="absolute -right-24 top-8 size-80 rounded-full bg-[#ff6b00]/6 blur-3xl" />
+      <section className="relative overflow-hidden border-b border-black/7 bg-white pb-8 pt-8 sm:pb-12 sm:pt-12">
+        <div className="absolute -right-24 top-6 size-72 rounded-full bg-[#ff6b00]/8 blur-3xl" />
         <div className="absolute -left-24 bottom-0 size-72 rounded-full bg-black/4 blur-3xl" />
 
-        <div className="container-shell relative text-center">
-          <div className="mb-5 flex justify-center sm:mb-7">
-            <BrandLogo size="lg" linked={false} centered />
-          </div>
-
-          <h1 className="mx-auto max-w-5xl text-[28px] font-black leading-[1.04] tracking-[-0.04em] min-[420px]:text-3xl sm:text-6xl sm:leading-[1.08] sm:tracking-[-0.055em] lg:text-7xl">
-            Ikinci el urunlerin{" "}
-            <span className="text-[#ff6b00]">gercek piyasa fiyatini</span>{" "}
-            karsilastir.
-          </h1>
-          <p className="hidden">
-            En uygun ikinci el ilanları{" "}
-            <span className="text-[#ff6b00]">tek yerde bul.</span>
-          </p>
-
-          <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#ff6b00]/15 bg-[#fff7f1] px-3 py-2 text-xs font-bold text-[#d95700] sm:px-4 sm:text-sm">
-            <span className="size-2 rounded-full bg-[#ff6b00] shadow-[0_0_0_4px_rgba(255,107,0,0.12)]" />
-            Güncel ikinci el ilanları taranıyor
-          </div>
-
-          <p className="mx-auto mt-6 max-w-3xl text-base leading-7 text-black/55 sm:text-lg">
-            Telefon, bilgisayar, konsol ve daha fazlasi icin ikinci el ilanlari tek yerde karsilastir; ortalama fiyati, en ucuz ilani ve fiyat gecmisini gor.
-          </p>
-          <p className="hidden">
-            İkinci el piyasasını tara, en doğru fiyatı bul.
-          </p>
-
-          <div id="home-search" className="mx-auto mt-8 w-full max-w-4xl scroll-mt-28 sm:mt-10">
-            <SearchBar actionPath="/search" showLocation={false} />
-          </div>
-
-          <div className="mx-auto mt-8 grid w-full max-w-5xl grid-cols-1 gap-3 text-left sm:grid-cols-2 lg:grid-cols-5">
-            {landingFeatures.map(({ title, description, icon: Icon }) => (
-              <div
-                key={title}
-                className="flex min-w-0 items-center gap-4 rounded-2xl border border-black/8 bg-white p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]"
-              >
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
-                  <Icon size={21} strokeWidth={2.2} />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-sm font-black">{title}</h2>
-                  <p className="mt-1 text-xs leading-5 text-black/45">
-                    {description}
-                  </p>
-                </div>
+        <div className="container-shell relative">
+          <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+            <div>
+              <div className="mb-5">
+                <BrandLogo size="lg" linked={false} />
               </div>
-            ))}
-          </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#ff6b00]/15 bg-[#fff7f1] px-3 py-2 text-xs font-black text-[#d95700]">
+                <span className="size-2 rounded-full bg-[#ff6b00] shadow-[0_0_0_4px_rgba(255,107,0,0.12)]" />
+                Güncel ikinci el piyasa verisi
+              </div>
+              <h1 className="mt-4 max-w-4xl text-[34px] font-black leading-[1.02] tracking-[-0.055em] sm:text-6xl lg:text-7xl">
+                İkinci el ürünlerin{" "}
+                <span className="text-[#ff6b00]">gerçek piyasa fiyatını</span>{" "}
+                karşılaştır.
+              </h1>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-black/55 sm:text-lg">
+                Aradığın ürünü yaz; 2ElBul ilanları, fiyat aralığını, fırsatları
+                ve piyasa sinyallerini tek ekranda toplasın.
+              </p>
 
-          {popularProducts.length > 0 && (
-            <div className="mx-auto mt-8 flex max-w-3xl flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-              <span className="text-sm font-bold text-black/45">
-                Popüler aramalar:
-              </span>
-              <div className="flex flex-wrap justify-center gap-2">
-                {popularProducts.map((item) => (
+              <div id="home-search" className="mt-7 w-full max-w-3xl scroll-mt-28">
+                <SearchBar actionPath="/search" showLocation={false} />
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {heroSearches.map((query) => (
                   <Link
-                    key={item.productName}
-                    href={`/search?q=${encodeURIComponent(item.productName)}`}
-                    className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold transition hover:border-[#ff6b00]/40 hover:bg-[#fff7f1] hover:text-[#e75f00]"
+                    key={query}
+                    href={`/search?q=${encodeURIComponent(query)}`}
+                    className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-bold transition hover:border-[#ff6b00]/40 hover:bg-[#fff7f1] hover:text-[#d95700]"
                   >
-                    {item.productName}
+                    {query}
                   </Link>
                 ))}
               </div>
             </div>
-          )}
-        </div>
-      </section>
 
-      <section className="border-t border-black/7 bg-[#fafaf8] py-12 sm:py-16">
-        <div className="container-shell">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
-              Nasil calisir?
-            </p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
-              Aradigin urunun ikinci el piyasa degerini dakikalar icinde gor.
-            </h2>
-          </div>
-
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {howItWorks.map((step, index) => (
-              <div
-                key={step.title}
-                className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_10px_35px_rgba(0,0,0,0.04)]"
-              >
-                <span className="grid size-10 place-items-center rounded-xl bg-[#111] text-sm font-black text-white">
-                  {index + 1}
-                </span>
-                <h3 className="mt-5 text-lg font-black">{step.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-black/50">
-                  {step.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-black/7 bg-white py-12 sm:py-16">
-        <div className="container-shell">
-          <div className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-6 shadow-[0_18px_60px_rgba(255,107,0,0.08)] sm:p-8 lg:p-10">
-            <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
-                  Piyasa zekasi
-                </p>
-                <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
-                  2ElBul sadece fiyat gostermez, piyasa sinyali uretir.
-                </h2>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-black/60 sm:text-base">
-                  Intelligence Engine; ilan sayisi, fiyat araligi, gecmis fiyat
-                  hareketi ve arama talebini birlestirerek al-sat kararini daha
-                  net yorumlamana yardimci olur.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <IntelligenceSignal title="Firsat skoru" description="En ucuz ilan piyasa ortalamasina gore yorumlanir." />
-                <IntelligenceSignal title="Trend sinyali" description="Fiyatlar yukseliyor mu, dusuyor mu takip edilir." />
-                <IntelligenceSignal title="Talep seviyesi" description="Arama ilgisi artarsa karar destegi buna gore guclenir." />
-              </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <HeroMetric
+                title="Yayındaki ilan"
+                value={totalListings || last24HourListings.length}
+                suffix="+"
+                description="Aktif kaynaklardan toplanan güncel ilanlar"
+                icon={PackageSearch}
+              />
+              <HeroMetric
+                title="Aktif kaynak"
+                value={totalSources || sourceSummary.length}
+                description="Piyasa verisi gelen platformlar"
+                icon={Store}
+              />
+              <HeroMetric
+                title="Fırsat sinyali"
+                value={priceOpportunities.length}
+                description="Piyasa ortalamasına göre öne çıkan ilan"
+                icon={BadgePercent}
+              />
+              <HeroMetric
+                title="Fiyat hareketi"
+                value={fallingSignals}
+                description="Düşüş trendi ve fiyat değişimi sinyali"
+                icon={TrendingDown}
+              />
             </div>
           </div>
-        </div>
-      </section>
 
-      <section className="border-t border-black/7 bg-white py-12 sm:py-16">
-        <div className="container-shell">
-          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
-                Guven veren analiz
-              </p>
-              <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] sm:text-4xl">
-                Sadece ilan listesi degil, karar vermeni kolaylastiran fiyat rehberi.
-              </h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-black/55 sm:text-base">
-                2ElBul farkli kaynaklardan gelen ilanlari urun bazinda toparlar,
-                fiyat araligini yorumlar ve piyasanin altindaki firsatlari daha
-                kolay fark etmeni saglar.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {trustSignals.map((signal) => (
-                <div
-                  key={signal}
-                  className="rounded-2xl border border-black/8 bg-[#fafaf8] p-5"
+          <div className="mt-8 rounded-3xl border border-black/8 bg-[#fafaf8] p-3 shadow-[0_14px_45px_rgba(0,0,0,0.04)]">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+              {quickCategories.map(({ label, query, icon: Icon }) => (
+                <Link
+                  key={label}
+                  href={`/search?q=${encodeURIComponent(query)}`}
+                  className="group rounded-2xl border border-transparent bg-white p-4 text-center transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:shadow-[0_12px_30px_rgba(0,0,0,0.05)]"
                 >
-                  <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
-                    <BarChart3 size={19} />
+                  <span className="mx-auto grid size-11 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00] transition group-hover:bg-[#ff6b00] group-hover:text-white">
+                    <Icon size={21} />
                   </span>
-                  <h3 className="mt-4 font-black">{signal}</h3>
-                </div>
+                  <span className="mt-3 block text-xs font-black sm:text-sm">
+                    {label}
+                  </span>
+                </Link>
               ))}
             </div>
           </div>
-        </div>
-      </section>
 
-      <section className="border-t border-black/7 bg-[#111] py-12 text-white sm:py-16">
-        <div className="container-shell text-center">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8a2a]">
-            Hazir misin?
-          </p>
-          <h2 className="mx-auto mt-2 max-w-3xl text-2xl font-black tracking-[-0.04em] sm:text-4xl">
-            Bir urun ara, piyasa fiyatini ve en iyi firsatlari hemen karsilastir.
-          </h2>
-          <Link
-            href="#home-search"
-            className="mt-7 inline-flex items-center justify-center rounded-full bg-[#ff6b00] px-6 py-3 text-sm font-black text-white transition hover:bg-[#e85f00]"
-          >
-            Hemen urun ara
-            <ArrowUpRight size={17} className="ml-2" />
-          </Link>
+          <nav className="mt-5 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0">
+            {quickAnchors.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
         </div>
       </section>
 
       {error && (
-        <div className="container-shell pt-10">
+        <div className="container-shell pt-8">
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center text-sm font-semibold text-amber-800">
             {error}
           </div>
         </div>
       )}
 
-      <HomeSection
-        eyebrow="Güncel piyasa"
-        title="Son 24 saatte eklenenler"
-        icon={Clock3}
-      >
-        {last24HourListings.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {last24HourListings.map((listing) => (
-              <CompactListingCard key={listing.id} listing={listing} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState text="Henüz Supabase'de gösterilecek ilan bulunmuyor." />
-        )}
-      </HomeSection>
-
-      <HomeSection
-        eyebrow="Kontrollü alternatifler"
-        title="Yenilenmiş cihaz fırsatları"
-        icon={Smartphone}
-        muted
-      >
-        {refurbishedListings.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {refurbishedListings.map((listing) => (
-              <CompactListingCard
-                key={listing.id}
-                listing={listing}
-                badge="Yenilenmiş"
+      <section id="firsatlar" className="border-b border-black/7 bg-white py-10 sm:py-12">
+        <div className="container-shell">
+          <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <div>
+              <SectionHeader
+                eyebrow="Bugün öne çıkan"
+                title="En iyi fırsatlar"
+                icon={BadgePercent}
+                href="/search?q=fırsat"
               />
-            ))}
-          </div>
-        ) : (
-          <EmptyState text="Yayınlanmış yenilenmiş cihaz ilanı henüz bulunmuyor." />
-        )}
-      </HomeSection>
-
-      <HomeSection
-        eyebrow="Piyasanın altında"
-        title="En ucuz ilanlar"
-        icon={BadgePercent}
-      >
-        {priceOpportunities.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {priceOpportunities.map((listing) => (
-              <OpportunityCard key={listing.id} listing={listing} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState text="Fiyat karşılaştırması için henüz yeterli ilan bulunmuyor." />
-        )}
-      </HomeSection>
-
-      <HomeSection
-        eyebrow="Piyasa sinyalleri"
-        title="Piyasa Nabzı"
-        icon={BarChart3}
-        muted
-      >
-        <div className="mb-6 max-w-3xl text-sm leading-7 text-black/55">
-          2ElBul, ikinci el piyasasındaki arama, ilan ve fiyat sinyallerini
-          analiz ederek öne çıkan ürünleri gösterir.
-        </div>
-        <Link
-          href="/market"
-          className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#ff6b00]/25 bg-white px-4 py-2 text-sm font-black text-[#d95700] transition hover:border-[#ff6b00]/45 hover:bg-[#fff7f1]"
-        >
-          Piyasa Merkezini Gör
-          <ArrowUpRight size={16} />
-        </Link>
-        <div className="grid gap-5 xl:grid-cols-2">
-          <MarketPulseGroup
-            title="En çok arananlar"
-            items={marketPulse.mostSearchedProducts}
-            emptyText="Yeterli piyasa verisi oluşunca burada sinyaller görünecek."
-          />
-          <MarketPulseGroup
-            title="En çok ilanı olanlar"
-            items={marketPulse.mostListedProducts}
-            emptyText="Yeterli ilan verisi oluşunca burada ürün yoğunluğu görünecek."
-          />
-          <MarketPulseGroup
-            title="Öne çıkan fırsatlar"
-            items={marketPulse.topOpportunities}
-            emptyText="Fırsat skoru için yeterli piyasa verisi oluşunca burada görünecek."
-          />
-          <MarketPulseGroup
-            title="Fiyatı düşenler"
-            items={marketPulse.fallingPriceProducts}
-            emptyText="Düşüş trendi yakalanınca burada ürünler listelenecek."
-          />
-        </div>
-      </HomeSection>
-
-      <HomeSection
-        eyebrow="Platform dağılımı"
-        title="Kaynaklara göre ilanlar"
-        icon={Store}
-        muted
-      >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {sourceSummary.map((item) => (
-            <div
-              key={item.source}
-              className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 sm:p-5"
-            >
-              <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
-                <Store size={19} />
-              </span>
-              <h3 className="mt-4 break-words text-sm font-black">
-                {item.source}
-              </h3>
-              <p className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#ff6b00]">
-                {item.listingCount}
-              </p>
-              <p className="text-xs text-black/40">yayındaki ilan</p>
+              {priceOpportunities.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {priceOpportunities.slice(0, 6).map((listing) => (
+                    <OpportunityCard key={listing.id} listing={listing} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="Fiyat karşılaştırması için henüz yeterli ilan bulunmuyor." />
+              )}
             </div>
-          ))}
-        </div>
-      </HomeSection>
 
-      <HomeSection
-        eyebrow="Piyasa özeti"
-        title="Popüler ürünler"
-        icon={PackageSearch}
-      >
-        {popularListedProducts.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
-            {popularListedProducts.map((product) => (
-              <Link
-                key={product.productName}
-                href={`/product/${createProductSlug(product.productName)}`}
-                className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.05)] sm:p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="min-w-0 break-words font-black">
-                    {product.productName}
-                  </h3>
-                  <span className="shrink-0 rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
-                    {product.listingCount} ilan
-                  </span>
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-black/7 pt-4">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
-                      En düşük
-                    </p>
-                    <p className="mt-1 text-sm font-black text-[#ff6b00] sm:text-base">
-                      {formatPrice(product.lowestPrice)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
-                      Ortalama
-                    </p>
-                    <p className="mt-1 text-sm font-black sm:text-base">
-                      {formatPrice(product.averagePrice)}
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <EmptyState text="Ürün istatistikleri ilanlar eklendikçe burada görünecek." />
-        )}
-      </HomeSection>
-
-      <HomeSection
-        eyebrow="Arama trendleri"
-        title="En çok aranan ürünler"
-        icon={Flame}
-      >
-        {popularProducts.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {popularProducts.map((product, index) => (
-              <Link
-                key={product.productName}
-                href={`/product/${createProductSlug(product.productName)}`}
-                className="rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 sm:p-5"
-              >
-                <span className="text-xs font-black text-[#ff6b00]">
-                  #{index + 1}
+            <aside className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 sm:p-6">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-xl bg-[#ff6b00] text-white">
+                  <Flame size={21} />
                 </span>
-                <h3 className="mt-2 text-sm font-black sm:text-base">
-                  {product.productName}
-                </h3>
-                <p className="mt-3 text-xs text-black/45">
-                  {product.searchCount} arama
-                </p>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-[#d95700]">
+                    Hızlı karar
+                  </p>
+                  <h2 className="text-xl font-black tracking-[-0.035em]">
+                    Piyasa özeti
+                  </h2>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3">
+                <SummaryRow label="Aktif ilan" value={String(totalListings || last24HourListings.length)} />
+                <SummaryRow label="Popüler ürün" value={popularListedProducts[0]?.productName ?? "Veri oluşuyor"} />
+                <SummaryRow label="En çok aranan" value={popularProducts[0]?.productName ?? "Aramalar izleniyor"} />
+                <SummaryRow label="En iyi fırsat" value={topOpportunity ? formatPrice(topOpportunity.price) : "Yakında"} />
+              </div>
+              <Link
+                href="/market"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#111] px-5 py-3 text-sm font-black text-white transition hover:bg-black"
+              >
+                Piyasa Merkezine Git
+                <ArrowUpRight size={16} />
               </Link>
-            ))}
+            </aside>
           </div>
-        ) : (
-          <EmptyState text="Arama trendleri, kullanıcı aramaları arttıkça burada görünecek." />
-        )}
-      </HomeSection>
+        </div>
+      </section>
 
-      <HomeSection
-        eyebrow="Fiyat hareketleri"
-        title="Son 24 saatte düşen fiyatlar"
-        icon={TrendingDown}
-      >
-        {priceDrops.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {priceDrops.map((listing) => (
-              <PriceDropCard key={listing.id} listing={listing} />
-            ))}
+      <section id="piyasa" className="border-b border-black/7 bg-[#fafaf8] py-10 sm:py-12">
+        <div className="container-shell">
+          <SectionHeader
+            eyebrow="Canlı veri alanı"
+            title="Piyasa Nabzı"
+            icon={BarChart3}
+            href="/market"
+          />
+          <div className="grid gap-5 xl:grid-cols-2">
+            <MarketPulseGroup
+              title="En çok arananlar"
+              items={marketPulse.mostSearchedProducts}
+              emptyText="Yeterli piyasa verisi oluşunca burada sinyaller görünecek."
+            />
+            <MarketPulseGroup
+              title="En çok ilanı olanlar"
+              items={marketPulse.mostListedProducts}
+              emptyText="Yeterli ilan verisi oluşunca burada ürün yoğunluğu görünecek."
+            />
+            <MarketPulseGroup
+              title="Öne çıkan fırsatlar"
+              items={marketPulse.topOpportunities}
+              emptyText="Fırsat skoru için yeterli piyasa verisi oluşunca burada görünecek."
+            />
+            <MarketPulseGroup
+              title="Fiyatı düşenler"
+              items={marketPulse.fallingPriceProducts}
+              emptyText="Düşüş trendi yakalanınca burada ürünler listelenecek."
+            />
           </div>
-        ) : (
-          <EmptyState text="Son 24 saatte kaydedilmiş bir fiyat düşüşü bulunmuyor." />
-        )}
-      </HomeSection>
+        </div>
+      </section>
 
-      <HomeSection
-        eyebrow="Ürün grupları"
-        title="Popüler kategoriler"
-        icon={FolderSearch2}
-        muted
-      >
-        {popularCategories.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {popularCategories.map((category) => (
+      <section id="yeni-ilanlar" className="border-b border-black/7 bg-white py-10 sm:py-12">
+        <div className="container-shell">
+          <SectionHeader
+            eyebrow="Yeni gelenler"
+            title="Son eklenen ilanlar"
+            icon={Clock3}
+            href="/search"
+          />
+          {last24HourListings.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {last24HourListings.slice(0, 8).map((listing) => (
+                <CompactListingCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="Henüz Supabase'de gösterilecek ilan bulunmuyor." />
+          )}
+        </div>
+      </section>
+
+      <section className="border-b border-black/7 bg-[#fafaf8] py-10 sm:py-12">
+        <div className="container-shell">
+          <div className="grid gap-6 xl:grid-cols-2">
+            <div>
+              <SectionHeader
+                eyebrow="Kontrollü alternatifler"
+                title="Yenilenmiş cihazlar"
+                icon={Smartphone}
+                compact
+              />
+              {refurbishedListings.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {refurbishedListings.slice(0, 4).map((listing) => (
+                    <CompactListingCard
+                      key={listing.id}
+                      listing={listing}
+                      badge="Yenilenmiş"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="Yayınlanmış yenilenmiş cihaz ilanı henüz bulunmuyor." />
+              )}
+            </div>
+            <div>
+              <SectionHeader
+                eyebrow="Fiyat hareketleri"
+                title="Fiyatı düşenler"
+                icon={TrendingDown}
+                compact
+              />
+              {priceDrops.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {priceDrops.slice(0, 4).map((listing) => (
+                    <PriceDropCard key={listing.id} listing={listing} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="Son 24 saatte kaydedilmiş bir fiyat düşüşü bulunmuyor." />
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="kategoriler" className="border-b border-black/7 bg-white py-10 sm:py-12">
+        <div className="container-shell">
+          <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+            <div>
+              <SectionHeader
+                eyebrow="Piyasa özeti"
+                title="Popüler ürünler"
+                icon={PackageSearch}
+                compact
+              />
+              {popularListedProducts.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+                  {popularListedProducts.slice(0, 8).map((product) => (
+                    <ProductStatCard key={product.productName} product={product} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="Ürün istatistikleri ilanlar eklendikçe burada görünecek." />
+              )}
+            </div>
+
+            <div>
+              <SectionHeader
+                eyebrow="Ürün grupları"
+                title="Popüler kategoriler"
+                icon={FolderSearch2}
+                compact
+              />
+              {popularCategories.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {popularCategories.slice(0, 6).map((category) => (
+                    <Link
+                      key={category.name}
+                      href={`/search?q=${encodeURIComponent(category.name)}`}
+                      className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4 transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1]"
+                    >
+                      <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+                        <FolderSearch2 size={19} />
+                      </span>
+                      <h3 className="mt-5 text-sm font-black">{category.name}</h3>
+                      <p className="mt-1 text-xs text-black/45">
+                        {category.listingCount} ilan
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="Ürünlere kategori atandığında popüler kategoriler burada görünecek." />
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="kaynaklar" className="border-b border-black/7 bg-[#fafaf8] py-10 sm:py-12">
+        <div className="container-shell">
+          <SectionHeader
+            eyebrow="Platform dağılımı"
+            title="Kaynaklara göre ilanlar"
+            icon={Store}
+            compact
+          />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {sourceSummary.map((item) => (
               <div
-                key={category.name}
-                className="rounded-2xl border border-black/8 bg-white p-4 sm:p-5"
+                key={item.source}
+                className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 sm:p-5"
               >
                 <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
-                  <FolderSearch2 size={19} />
+                  <Store size={19} />
                 </span>
-                <h3 className="mt-5 text-sm font-black">{category.name}</h3>
-                <p className="mt-1 text-xs text-black/45">
-                  {category.listingCount} ilan
+                <h3 className="mt-4 break-words text-sm font-black">
+                  {item.source}
+                </h3>
+                <p className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#ff6b00]">
+                  {item.listingCount}
                 </p>
+                <p className="text-xs text-black/40">yayındaki ilan</p>
               </div>
             ))}
           </div>
-        ) : (
-          <EmptyState text="Ürünlere kategori atandığında popüler kategoriler burada görünecek." />
-        )}
-      </HomeSection>
+        </div>
+      </section>
+
+      <section className="bg-[#111] py-10 text-white sm:py-12">
+        <div className="container-shell">
+          <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff8a2a]">
+                Neden 2ElBul?
+              </p>
+              <h2 className="mt-2 max-w-3xl text-2xl font-black tracking-[-0.04em] sm:text-4xl">
+                İlan listesi değil, ikinci el karar destek ekranı.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/60 sm:text-base">
+                Aynı üründeki ilanları toplar, piyasa ortalamasını çıkarır,
+                fırsatları ve fiyat hareketlerini görünür hale getirir.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <DarkFeature title="Piyasa fiyatı" description="Ortalama, medyan ve fiyat aralığı" />
+              <DarkFeature title="Fırsat sinyali" description="Piyasanın altındaki ilanları öne çıkarır" />
+              <DarkFeature title="Fiyat geçmişi" description="Değişimleri ve düşüşleri takip eder" />
+            </div>
+          </div>
+        </div>
+      </section>
     </>
+  );
+}
+
+function HeroMetric({
+  title,
+  value,
+  description,
+  icon: Icon,
+  suffix = "",
+}: {
+  title: string;
+  value: number;
+  description: string;
+  icon: typeof Clock3;
+  suffix?: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_14px_45px_rgba(0,0,0,0.05)]">
+      <div className="flex items-start justify-between gap-4">
+        <span className="grid size-11 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+          <Icon size={21} />
+        </span>
+        <span className="rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-green-700">
+          canlı
+        </span>
+      </div>
+      <p className="mt-6 text-sm font-bold text-black/45">{title}</p>
+      <p className="mt-1 text-3xl font-black tracking-[-0.045em]">
+        {value.toLocaleString("tr-TR")}{suffix}
+      </p>
+      <p className="mt-2 text-xs leading-5 text-black/45">{description}</p>
+    </div>
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  title,
+  icon: Icon,
+  href,
+  compact = false,
+}: {
+  eyebrow: string;
+  title: string;
+  icon: typeof Clock3;
+  href?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`${compact ? "mb-5" : "mb-7"} flex items-end justify-between gap-4`}>
+      <div className="flex min-w-0 items-end gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+          <Icon size={21} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+            {eyebrow}
+          </p>
+          <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] sm:text-3xl">
+            {title}
+          </h2>
+        </div>
+      </div>
+      {href && (
+        <Link
+          href={href}
+          className="hidden shrink-0 items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700] sm:inline-flex"
+        >
+          Tümünü gör
+          <ArrowUpRight size={15} />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-[#ff6b00]/12 bg-white px-4 py-3">
+      <span className="text-sm font-bold text-black/45">{label}</span>
+      <span className="max-w-[58%] truncate text-right text-sm font-black" title={value}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ProductStatCard({
+  product,
+}: {
+  product: { productName: string; listingCount: number; lowestPrice: number; averagePrice: number };
+}) {
+  return (
+    <Link
+      href={`/product/${createProductSlug(product.productName)}`}
+      className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.05)] sm:p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="min-w-0 break-words font-black">
+          {product.productName}
+        </h3>
+        <span className="shrink-0 rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
+          {product.listingCount} ilan
+        </span>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-black/7 pt-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
+            En düşük
+          </p>
+          <p className="mt-1 text-sm font-black text-[#ff6b00] sm:text-base">
+            {formatPrice(product.lowestPrice)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-black/40">
+            Ortalama
+          </p>
+          <p className="mt-1 text-sm font-black sm:text-base">
+            {formatPrice(product.averagePrice)}
+          </p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function DarkFeature({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <span className="grid size-10 place-items-center rounded-xl bg-[#ff6b00] text-white">
+        <BarChart3 size={18} />
+      </span>
+      <h3 className="mt-4 font-black">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-white/50">{description}</p>
+    </div>
   );
 }
 

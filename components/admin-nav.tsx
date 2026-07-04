@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   BarChart3,
   BellRing,
   Bot,
@@ -42,7 +41,6 @@ const groups = [
     title: "Kaynaklar",
     links: [
       { href: "/admin/sources", label: "Kaynaklar", icon: Globe2 },
-      { href: "/admin/source-debug", label: "Kaynak Debug", icon: Activity },
       { href: "/admin/bot-center#source-health", label: "Kaynak Sağlığı", icon: ShieldCheck },
     ],
   },

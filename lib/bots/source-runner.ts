@@ -44,7 +44,6 @@ type RunSourceOptions = {
   runType: "real_test" | "scheduled";
   maxLimit?: number;
   forceStatus?: "pending" | "published" | "active";
-  skipInactiveMarking?: boolean;
 };
 
 export function isSupportedScrapeSource(slug: string) {
@@ -132,9 +131,7 @@ export async function runSourceScrapeBot(
     if (!listings.length) {
       errors.push("Ürün bulunamadı veya HTML yapısı değişmiş olabilir");
     } else {
-      const result = await syncListingsForSource(supabase, source.id, listings, {
-        skipInactiveMarking: options.skipInactiveMarking,
-      });
+      const result = await syncListingsForSource(supabase, source.id, listings);
       imported = result.imported;
       updated = result.updated;
       inactive = result.inactive;

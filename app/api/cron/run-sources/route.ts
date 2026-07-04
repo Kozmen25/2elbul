@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runSourceEngine } from "@/lib/source-engine";
+import { isSourceDueForRun } from "@/lib/bots/cron-schedule";
+import {
+  isSupportedScrapeSource,
+  runSourceScrapeBot,
+  type SourceRunRecord,
+} from "@/lib/bots/source-runner";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+type SourceRow = SourceRunRecord & {
+  is_active: boolean;
+  cron_enabled: boolean;
+  integration_type?: string | null;
+  cron_schedule?: string | null;
+  last_run_at?: string | null;
+};
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -29,32 +42,89 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const params = request.nextUrl.searchParams;
-  const force = isTruthy(params.get("force")) || isTruthy(params.get("manual"));
-  const sourceId = parsePositiveInt(params.get("sourceId"));
-  const sourceSlug = params.get("source") || params.get("sourceSlug") || undefined;
-  const limit = parsePositiveInt(params.get("limit"));
+  const force = isForceRun(request);
 
-  try {
-    const summary = await runSourceEngine(supabase, {
-      mode: force ? "manual" : "scheduled",
-      force,
-      sourceId,
-      sourceSlug,
-      limit,
-    });
+  const query = supabase
+    .from("sources")
+    .select(
+      "id, name, slug, is_active, cron_enabled, cron_schedule, last_run_at, integration_type, fetch_limit, bot_import_mode, bot_listing_status, scrape_url, total_imported",
+    )
+    .eq("is_active", true);
 
-    return NextResponse.json(summary, { status: summary.ok ? 200 : 207 });
-  } catch (error) {
-    console.error("Source engine run failed:", error);
+  if (!force) {
+    query.eq("cron_enabled", true);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Cron source query failed:", error);
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Kaynak senkronizasyonu başarısız oldu.",
+        error: `Kaynaklar okunamadı: ${error.message}`,
+        migration: "supabase/bot-scheduler.sql",
       },
       { status: 500 },
     );
   }
+
+  const allSources = (data ?? []) as SourceRow[];
+  const runnableSources = allSources.filter(
+    (source) =>
+      source.integration_type === "scrape" &&
+      isSupportedScrapeSource(source.slug) &&
+      (force ||
+        isSourceDueForRun(
+          source.cron_schedule ?? "0 */6 * * *",
+          source.last_run_at,
+        )),
+  );
+  const skippedSources = allSources
+    .filter((source) => !runnableSources.includes(source))
+    .map((source) => ({
+      id: source.id,
+      name: source.name,
+      slug: source.slug,
+      reason: getSkipReason(source, force),
+    }));
+  const results = [];
+
+  for (const source of runnableSources) {
+    const result = await runSourceScrapeBot(supabase, source, {
+      runType: "scheduled",
+    });
+    results.push(result);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    mode: force ? "manual" : "scheduled",
+    scanned: allSources.length,
+    ran: results.length,
+    skipped: skippedSources.length,
+    skippedSources,
+    results,
+  });
+}
+
+function getSkipReason(source: SourceRow, force = false) {
+  if (source.integration_type !== "scrape") {
+    return "integration_type scrape değil";
+  }
+  if (!isSupportedScrapeSource(source.slug)) {
+    return "gerçek adaptör hazır değil";
+  }
+  if (
+    !force &&
+    !isSourceDueForRun(
+      source.cron_schedule ?? "0 */6 * * *",
+      source.last_run_at,
+    )
+  ) {
+    return "cron_schedule aralığı dolmadı";
+  }
+  return "bilinmeyen neden";
 }
 
 function hasValidSecret(request: NextRequest, secret: string) {
@@ -72,11 +142,6 @@ function hasValidSecret(request: NextRequest, secret: string) {
   );
 }
 
-function parsePositiveInt(value: string | null) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : undefined;
-}
-
-function isTruthy(value: string | null) {
-  return value === "1" || value === "true" || value === "yes";
+function isForceRun(request: NextRequest) {
+  return request.nextUrl.searchParams.get("force") === "1";
 }
