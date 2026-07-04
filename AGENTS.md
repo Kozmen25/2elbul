@@ -468,7 +468,34 @@ Never duplicate the report.
 
 Report once.
 
-Use Markdown.
+Report Format:
+
+1. First: Comprehensive report in Markdown (with sections, lists, tables, formatting)
+2. Then: Plain-text copyable version (no markdown, no special formatting, plain ASCII)
+
+Plain-text version must be:
+
+- Copy-paste ready
+- No markdown formatting
+- No special characters beyond ASCII
+- Structured with simple headers (LINE BREAKS + TEXT)
+- Line breaks between sections
+- Easy to paste into documents
+
+Example structure for plain text:
+
+SPRINT X.Y REPORT TITLE
+============================================================
+
+SECTION NAME
+- Item 1
+- Item 2
+
+ANOTHER SECTION
+Result 1
+Result 2
+
+Use this format at end of EVERY sprint report.
 
 ---
 
