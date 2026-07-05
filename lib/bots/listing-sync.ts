@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotAdapterListing } from "@/lib/bots/types";
+import { isRecord } from "@/lib/records";
 import {
   findOrCreateMatchedProduct,
   groupListingDuplicates,
@@ -71,7 +72,7 @@ export async function syncListingsForSource(
   const productIds = new Map(
     (existingProducts ?? []).map((product) => [
       String(product.name),
-      product.id as string | number,
+      product.id,
     ]),
   );
 
@@ -178,7 +179,7 @@ export async function syncListingsForSource(
     };
   }
 
-  const result = (rpcResult.data ?? {}) as SyncRpcResult;
+  const result: SyncRpcResult = rpcResult.data ?? {};
   imported = Number(result.inserted ?? 0);
   updated = Number(result.updated ?? 0);
   inactive = Number(result.inactive ?? 0);
@@ -221,7 +222,7 @@ export async function insertListingsLegacy(
   const productIds = new Map(
     (existingProducts ?? []).map((product) => [
       String(product.name),
-      product.id as string | number,
+      product.id,
     ]),
   );
 
@@ -322,11 +323,13 @@ export async function insertListingsLegacy(
 }
 
 function isRpcSignatureError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  if (!isRecord(error)) return false;
+  const code = typeof error.code === "string" ? error.code : undefined;
+  const message = typeof error.message === "string" ? error.message : "";
+  const details = typeof error.details === "string" ? error.details : "";
+  const text = `${message} ${details}`.toLowerCase();
   return (
-    record.code === "PGRST202" ||
+    code === "PGRST202" ||
     text.includes("p_skip_inactive_marking") ||
     text.includes("could not find the function") ||
     text.includes("function public.sync_source_listings")

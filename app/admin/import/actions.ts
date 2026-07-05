@@ -6,6 +6,7 @@ import { normalizeImageUrls } from "@/lib/bots/image-urls";
 import { createListingExternalId } from "@/lib/bots/listing-sync";
 import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import { getRecordString, isRecord } from "@/lib/records";
 
 export type ImportError = {
   index: number;
@@ -159,11 +160,11 @@ export async function importAdminListings(
 }
 
 function normalizeListing(value: unknown): ImportListing {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Kayıt bir JSON nesnesi olmalıdır.");
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   const productName = readRequiredString(record, "product_name");
   const title = readRequiredString(record, "title");
   const city = readRequiredString(record, "city");
@@ -280,14 +281,11 @@ function addError(
 }
 
 function getRecordTitle(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return "Geçersiz kayıt";
   }
 
-  const title = (value as Record<string, unknown>).title;
-  return typeof title === "string" && title.trim()
-    ? title.trim()
-    : "Başlıksız kayıt";
+  return getRecordString(value, "title") ?? "Başlıksız kayıt";
 }
 
 function emptyResult(

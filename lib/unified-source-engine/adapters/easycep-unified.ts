@@ -3,6 +3,7 @@ import {
   fetchEasyCepListings,
   EASYCEP_PHONE_CATEGORY_URL,
 } from "@/lib/bots/adapters/easycep";
+import { isBotAdapterListing } from "@/lib/bots/types";
 import type {
   NormalizedListing,
   UnifiedSourceAdapter,
@@ -51,10 +52,11 @@ export function createEasyCepUnifiedAdapter(
     },
 
     normalize(raw): NormalizedListing | null {
-      const listing = raw as any;
-      if (!listing?.title || !listing?.url || !listing?.price) {
+      if (!isBotAdapterListing(raw)) {
         return null;
       }
+
+      const listing = raw;
 
       return createNormalizedListing({
         externalId:
@@ -71,7 +73,7 @@ export function createEasyCepUnifiedAdapter(
         listedAt: listing.listed_at || null,
         rawData: {
           adapter: "easycep",
-          original: listing,
+          original: raw,
         },
       });
     },

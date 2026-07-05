@@ -5,6 +5,7 @@ import {
   SCRAPE_READY_SLUGS,
   getStandardSourceAdapter,
 } from "@/lib/bots/connectors";
+import { isRecord } from "@/lib/records";
 import {
   normalizeSyncStatus,
   syncListingsForSource,
@@ -253,7 +254,7 @@ function adapterResultToBotListings(
     category: getRawString(listing.raw_payload, "category"),
     status: "published",
     raw_payload: listing.raw_payload,
-  }) as BotAdapterListing);
+  }));
 }
 
 function getRawString(payload: Record<string, unknown> | null, key: string) {
@@ -335,12 +336,15 @@ function getErrorMessage(error: unknown) {
 }
 
 function isMissingColumn(error: unknown, columns: string[]) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  if (!isRecord(error)) return false;
+  const record = error;
+  const code = typeof record.code === "string" ? record.code : undefined;
+  const message = typeof record.message === "string" ? record.message : "";
+  const details = typeof record.details === "string" ? record.details : "";
+  const text = `${message} ${details}`.toLowerCase();
   return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
+    code === "42703" ||
+    code === "PGRST204" ||
     columns.some((column) => text.includes(column))
   );
 }

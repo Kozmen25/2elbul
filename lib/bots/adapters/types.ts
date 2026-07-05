@@ -13,7 +13,7 @@
  * These are kept for backward compatibility during migration. Will be removed in Sprint 0.5+
  */
 
-import type { BotAdapterListing, SourceIntegrationConfig } from "@/lib/bots/types";
+import { isBotAdapterListing, type BotAdapterListing, type SourceIntegrationConfig } from "@/lib/bots/types";
 
 export type StandardAdapterHealth = {
   ok: boolean;
@@ -78,13 +78,15 @@ export interface StandardSourceAdapter {
 }
 
 export function normalizeBotListingToStandard(
-  listing: BotAdapterListing,
+  listing: unknown,
   context: {
     sourceId: number;
     sourceName: string;
     listedAt?: string | null;
   },
 ): StandardNormalizedListing | null {
+  if (!isBotAdapterListing(listing)) return null;
+
   const price = Number(listing.price);
   if (!Number.isFinite(price) || price <= 0) return null;
   if (!listing.title?.trim() || !listing.url?.trim()) return null;
@@ -168,7 +170,7 @@ export function createStandardSourceAdapter(options: {
       });
     },
     normalizeListing(raw) {
-      return normalizeBotListingToStandard(raw as BotAdapterListing, {
+      return normalizeBotListingToStandard(raw, {
         sourceId: config.sourceId,
         sourceName: config.sourceName,
       });

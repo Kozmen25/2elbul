@@ -32,9 +32,12 @@ export function calculateConfidenceScore(
   let weightedScore = 0;
   let appliedWeight = 0;
 
-  for (const [key, weight] of Object.entries(CONFIDENCE_SIGNAL_WEIGHTS) as Array<
-    [ConfidenceSignalName, number]
-  >) {
+  const confidenceSignalNames = Object.keys(CONFIDENCE_SIGNAL_WEIGHTS).filter(
+    (key): key is ConfidenceSignalName => key in CONFIDENCE_SIGNAL_WEIGHTS,
+  );
+
+  for (const key of confidenceSignalNames) {
+    const weight = CONFIDENCE_SIGNAL_WEIGHTS[key];
     const value = signals[key];
     if (typeof value !== "number" || !Number.isFinite(value)) continue;
     weightedScore += clampScore(value) * weight;
@@ -57,4 +60,3 @@ export function clampScore(value: number, min = 0, max = 100): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, Math.round(value)));
 }
-

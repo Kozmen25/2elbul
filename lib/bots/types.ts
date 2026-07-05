@@ -1,4 +1,5 @@
 import type { HtmlRootLike } from "@/lib/bots/html-utils";
+import { isRecord } from "@/lib/records";
 
 export type SourceIntegrationMode = "api" | "scrape";
 
@@ -35,8 +36,35 @@ export type BotAdapterListing = {
   seller_name?: string | null;
   source_type?: string | null;
   category?: string | null;
+  listed_at?: string | null;
   status: "pending" | "published" | "active" | "inactive";
+  raw_payload?: Record<string, unknown> | null;
 };
+
+export function isBotAdapterListing(value: unknown): value is BotAdapterListing {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.product_name === "string" &&
+    typeof value.title === "string" &&
+    typeof value.price === "number" &&
+    Number.isFinite(value.price) &&
+    typeof value.city === "string" &&
+    typeof value.source === "string" &&
+    typeof value.url === "string" &&
+    typeof value.condition === "string" &&
+    (value.image_url === null || typeof value.image_url === "string") &&
+    (value.listed_at === undefined ||
+      value.listed_at === null ||
+      typeof value.listed_at === "string") &&
+    Array.isArray(value.image_urls) &&
+    value.image_urls.every((item) => typeof item === "string") &&
+    (value.status === "pending" ||
+      value.status === "published" ||
+      value.status === "active" ||
+      value.status === "inactive")
+  );
+}
 
 export type SourceConnector = {
   slug: string;

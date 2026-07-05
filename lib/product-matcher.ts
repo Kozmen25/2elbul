@@ -6,6 +6,7 @@ import {
   isBareSamsungModel,
   normalizeProductTitle as newNormalizeProductTitle,
 } from "./normalization";
+import { isRecord } from "./records";
 import type { DuplicateMatch, DuplicateGroup } from "./duplicate-engine/types";
 import type { ConfidenceMetadata } from "./confidence-engine";
 import {
@@ -334,8 +335,8 @@ async function findExistingMatchedProduct(
     .limit(2000);
   if (lookupError) throw lookupError;
 
-  const matched = ((products ?? []) as ProductRow[]).find(
-    (product) => generateProductKey(product.name) === canonicalKey,
+  const matched = (products ?? []).find(
+    (product: ProductRow) => generateProductKey(product.name) === canonicalKey,
   );
   if (!matched) return null;
 
@@ -604,6 +605,6 @@ function titleCase(value: string) {
 }
 
 function isDuplicateError(error: unknown) {
-  if (!error || typeof error !== "object" || !("code" in error)) return false;
-  return (error as { code?: string }).code === "23505";
+  if (!isRecord(error)) return false;
+  return typeof error.code === "string" && error.code === "23505";
 }

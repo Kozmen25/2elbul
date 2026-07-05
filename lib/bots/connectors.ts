@@ -20,6 +20,7 @@ import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
 import { createGetmobilStandardAdapter } from "@/lib/bots/adapters/getmobil-adapter";
 import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
 import { getUnifiedSourceRegistry } from "@/lib/unified-source-engine/adapters";
+import { isBotAdapterListing } from "@/lib/bots/types";
 import type {
   BotAdapterListing,
   SourceConnector,
@@ -104,9 +105,10 @@ export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
     return createStandardSourceAdapter({
       config,
       enabled: true,
-      // UnifiedSourceAdapter.fetch() returns unknown[] but StandardSourceAdapter expects BotAdapterListing[]
-      // This is safe because adapters normalize data to match expected schema
-      fetchListings: async () => (await unifiedAdapter.fetch({ limit: config.productLimit || 10 })) as BotAdapterListing[],
+      fetchListings: async () =>
+        (await unifiedAdapter.fetch({ limit: config.productLimit || 10 })).filter(
+          isBotAdapterListing,
+        ),
     });
   }
 

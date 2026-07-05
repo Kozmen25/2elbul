@@ -4,7 +4,11 @@ import {
   createStandardSourceAdapter,
   normalizeBotListingToStandard,
 } from "./types";
-import type { BotAdapterListing, SourceIntegrationConfig } from "@/lib/bots/types";
+import {
+  isBotAdapterListing,
+  type BotAdapterListing,
+  type SourceIntegrationConfig,
+} from "@/lib/bots/types";
 
 const config: SourceIntegrationConfig = {
   sourceId: 7,
@@ -52,6 +56,33 @@ describe("source adapter standard", () => {
       location: "Türkiye",
       condition: "Yenilenmiş",
     });
+  });
+
+  it("recognizes valid bot adapter listings", () => {
+    expect(isBotAdapterListing(listing())).toBe(true);
+  });
+
+  it("rejects invalid bot adapter listings", () => {
+    const invalidListing: unknown = {
+      title: "Eksik alanlar",
+      price: 1200,
+    };
+
+    expect(isBotAdapterListing(invalidListing)).toBe(false);
+  });
+
+  it("returns null for invalid raw listing data", () => {
+    const invalidListing: unknown = {
+      title: "Eksik alanlar",
+      price: 1200,
+    };
+
+    expect(
+      normalizeBotListingToStandard(invalidListing, {
+        sourceId: config.sourceId,
+        sourceName: config.sourceName,
+      }),
+    ).toBeNull();
   });
 
   it("skips listings without a valid price", async () => {

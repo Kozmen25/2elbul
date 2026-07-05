@@ -124,7 +124,8 @@ describe("confidence engine", () => {
     ] as const)(
       "scores reliability from explicit value or source name",
       (reliability, sourceName, sourceNames, expected) => {
-        expect(scoreSourceReliability(reliability, sourceName, sourceNames as string[] | undefined)).toBe(expected);
+        const resolvedSourceNames = sourceNames ? [...sourceNames] : undefined;
+        expect(scoreSourceReliability(reliability, sourceName, resolvedSourceNames)).toBe(expected);
       },
     );
 

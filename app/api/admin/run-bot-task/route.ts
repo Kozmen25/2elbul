@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdminEmail } from "@/lib/admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { isRecord } from "@/lib/records";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -299,7 +300,7 @@ function extractErrorMessage(data: unknown) {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return isRecord(value) ? value : {};
 }
 
 function numberValue(value: unknown) {
@@ -308,12 +309,14 @@ function numberValue(value: unknown) {
 }
 
 function isMissingColumn(error: unknown, columns: string[]) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  if (!isRecord(error)) return false;
+  const code = typeof error.code === "string" ? error.code : undefined;
+  const message = typeof error.message === "string" ? error.message : "";
+  const details = typeof error.details === "string" ? error.details : "";
+  const text = `${message} ${details}`.toLowerCase();
   return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
+    code === "42703" ||
+    code === "PGRST204" ||
     columns.some((column) => text.includes(column))
   );
 }

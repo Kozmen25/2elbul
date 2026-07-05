@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  getInstantSearchAdapters,
-  type NormalizedListing,
-} from "@/lib/source-adapters";
+import { getInstantSearchAdapters } from "@/lib/source-adapters";
 import {
   findOrCreateMatchedProduct,
   groupListingDuplicates,
@@ -13,7 +10,11 @@ import {
 import { recordListingPriceHistory } from "@/lib/price-history";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeSearchText } from "@/lib/unified-source-engine/helpers";
-import type { UnifiedSourceAdapter } from "@/lib/unified-source-engine";
+import { getNestedRecordString } from "@/lib/records";
+import type {
+  NormalizedListing,
+  UnifiedSourceAdapter,
+} from "@/lib/unified-source-engine";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,6 +35,11 @@ type SourceRow = {
   slug: string;
 };
 
+type SearchQueueListing = NormalizedListing & {
+  model?: string | null;
+  category?: string | null;
+};
+
 type ImportedListingResult = {
   imported: number;
   updated: number;
@@ -45,7 +51,7 @@ type ImportedListingResult = {
 type SearchAdapterResult = {
   adapterSlug: string;
   sourceName: string;
-  listings: NormalizedListing[];
+  listings: SearchQueueListing[];
   triedAdapters: Array<{ slug: string; found: number }>;
 };
 
@@ -303,7 +309,7 @@ async function runInstantSearchAdapters(
   return {
     adapterSlug: adapters[0]?.sourceSlug ?? "none",
     sourceName: source.name,
-    listings: [],
+    listings: [] as SearchQueueListing[],
     triedAdapters,
   };
 }
@@ -318,24 +324,20 @@ async function searchAdapter(
     if (!normalizedQuery) return [];
 
     const rawListings = await adapter.fetch({ limit: 3, query: job.query });
-    const listings: NormalizedListing[] = [];
+    const listings: SearchQueueListing[] = [];
 
     for (const raw of rawListings) {
       const normalized = adapter.normalize(raw);
       if (!normalized) continue;
 
       const haystackText = normalizeSearchText(
-        `${normalized.title} ${(normalized.rawData?.original as any)?.product_name ?? ""}`,
+        `${normalized.title} ${getNestedRecordString(normalized.rawData, "original", "product_name") ?? ""}`,
       );
       if (!haystackText.includes(normalizedQuery)) continue;
 
       const validated = adapter.validate(normalized);
       if (validated.ok && validated.value) {
-        // TODO: Unify NormalizedListing types between unified-source-engine and source-adapters
-        // adapter.validate() returns UnifiedSourceAdapter's NormalizedListing
-        // but this array expects legacy NormalizedListing from source-adapters
-        // Both have compatible fields but different schema definitions
-        listings.push(validated.value as any);
+        listings.push(validated.value);
       }
 
       if (listings.length >= 3) break;
@@ -352,7 +354,7 @@ async function importAdapterListings(
   supabase: SupabaseClient,
   job: QueueJob,
   source: SourceRow,
-  listings: NormalizedListing[],
+  listings: SearchQueueListing[],
 ): Promise<ImportedListingResult> {
   let imported = 0;
   let updated = 0;
@@ -395,7 +397,7 @@ async function importAdapterListings(
       external_id: externalId,
       title: listing.title,
       price: listing.price,
-      city: listing.city ?? "Türkiye",
+      city: listing.location ?? "Türkiye",
       source: listing.sourceName,
       url: listing.url,
       condition: "İkinci El",
@@ -437,13 +439,16 @@ async function importAdapterListings(
 
 async function ensureProduct(
   supabase: SupabaseClient,
-  listing: NormalizedListing,
+  listing: SearchQueueListing,
   query: string,
 ) {
   const product = await findOrCreateMatchedProduct({
     supabase,
     title: listing.title || query,
-    productName: listing.model || query,
+    productName:
+      listing.model ??
+      getNestedRecordString(listing.rawData, "original", "product_name") ??
+      query,
     category: listing.category,
     source: listing.sourceName,
   });
@@ -519,7 +524,7 @@ async function saveListingWithSchemaFallback(
 
 async function findExistingListing(
   supabase: SupabaseClient,
-  listing: NormalizedListing,
+  listing: SearchQueueListing,
   externalId: string,
 ) {
   const { data, error } = await supabase
@@ -619,7 +624,7 @@ function normalizeProductName(query: string) {
 function ensureExternalId(
   job: QueueJob,
   source: SourceRow,
-  listing: NormalizedListing,
+  listing: SearchQueueListing,
 ) {
   const existing = listing.externalId?.trim();
   if (existing) return existing;

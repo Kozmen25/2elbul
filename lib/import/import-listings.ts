@@ -47,7 +47,14 @@ export async function importListings(
         return null;
       }
     })
-    .filter((x) => x !== null) as Array<{ index: number; listing: ReturnType<typeof adapter.normalize> }>;
+    .filter(
+      (
+        entry,
+      ): entry is {
+        index: number;
+        listing: ReturnType<typeof adapter.normalize>;
+      } => entry !== null,
+    );
 
   if (normalizedListings.length > 0) {
     const duplicateGroups = groupListingDuplicates(

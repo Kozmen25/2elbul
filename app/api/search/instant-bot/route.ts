@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  getInstantSearchAdapters,
-  type NormalizedListing,
-} from "@/lib/source-adapters";
+import { getInstantSearchAdapters } from "@/lib/source-adapters";
 import {
   findOrCreateMatchedProduct,
   groupListingDuplicates,
@@ -13,7 +10,11 @@ import {
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeSearchText } from "@/lib/unified-source-engine/helpers";
-import type { UnifiedSourceAdapter } from "@/lib/unified-source-engine";
+import { getNestedRecordString } from "@/lib/records";
+import type {
+  NormalizedListing,
+  UnifiedSourceAdapter,
+} from "@/lib/unified-source-engine";
 import { getGlobalContext } from "@/lib/taxonomy/context";
 import type { createCategoryResolver } from "@/lib/taxonomy/integration";
 
@@ -37,6 +38,11 @@ type SourceRow = {
   id: number;
   name: string;
   slug: string;
+};
+
+type SearchQueueListing = NormalizedListing & {
+  model?: string | null;
+  category?: string | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -302,7 +308,7 @@ async function runInstantSearchAdapters(source: SourceRow, job: QueueJob) {
   return {
     adapterSlug: adapters[0]?.sourceSlug ?? "none",
     sourceName: source.name,
-    listings: [] as NormalizedListing[],
+    listings: [] as SearchQueueListing[],
     triedAdapters,
   };
 }
@@ -317,24 +323,20 @@ async function searchAdapter(
     if (!normalizedQuery) return [];
 
     const rawListings = await adapter.fetch({ limit: 10, query: job.query });
-    const listings: NormalizedListing[] = [];
+    const listings: SearchQueueListing[] = [];
 
     for (const raw of rawListings) {
       const normalized = adapter.normalize(raw);
       if (!normalized) continue;
 
       const haystackText = normalizeSearchText(
-        `${normalized.title} ${(normalized.rawData?.original as any)?.product_name ?? ""}`,
+        `${normalized.title} ${getNestedRecordString(normalized.rawData, "original", "product_name") ?? ""}`,
       );
       if (!haystackText.includes(normalizedQuery)) continue;
 
       const validated = adapter.validate(normalized);
       if (validated.ok && validated.value) {
-        // TODO: Unify NormalizedListing types between unified-source-engine and source-adapters
-        // adapter.validate() returns UnifiedSourceAdapter's NormalizedListing
-        // but this array expects legacy NormalizedListing from source-adapters
-        // Both have compatible fields but different schema definitions
-        listings.push(validated.value as any);
+        listings.push(validated.value);
       }
 
       if (listings.length >= 3) break;
@@ -350,7 +352,7 @@ async function searchAdapter(
 async function importListings(
   supabase: SupabaseClient,
   job: QueueJob,
-  listings: NormalizedListing[],
+  listings: SearchQueueListing[],
   resolver: ReturnType<typeof createCategoryResolver>,
 ) {
   let imported = 0;
@@ -385,15 +387,15 @@ async function importListings(
     matchedProductIds.add(String(productId));
     const externalId = listing.externalId || deterministicExternalId(job, listing);
     const existing = await findExistingListing(supabase, listing.sourceName, externalId);
-    const payload: Record<string, unknown> = {
-      product_id: productId,
-      external_id: externalId,
-      title: listing.title,
-      price: listing.price,
-      city: listing.city ?? "Türkiye",
-      source: listing.sourceName,
-      url: listing.url,
-      condition: "Yenilenmiş",
+      const payload: Record<string, unknown> = {
+        product_id: productId,
+        external_id: externalId,
+        title: listing.title,
+        price: listing.price,
+        city: listing.location ?? "Türkiye",
+        source: listing.sourceName,
+        url: listing.url,
+        condition: "Yenilenmiş",
       image_url: listing.imageUrl || "/products/placeholder.svg",
       status: "published",
     };
@@ -412,14 +414,17 @@ async function importListings(
 
 async function ensureProduct(
   supabase: SupabaseClient,
-  listing: NormalizedListing,
+  listing: SearchQueueListing,
   query: string,
   resolver: ReturnType<typeof createCategoryResolver>,
 ) {
   const product = await findOrCreateMatchedProduct({
     supabase,
     title: listing.title || query,
-    productName: listing.model || query,
+    productName:
+      listing.model ??
+      getNestedRecordString(listing.rawData, "original", "product_name") ??
+      query,
     category: listing.category,
     source: listing.sourceName,
     resolver,
@@ -485,7 +490,7 @@ async function saveListingWithSchemaFallback(
   throw new Error("Listing kaydı mevcut şemayla uyumlu hale getirilemedi.");
 }
 
-function deterministicExternalId(job: QueueJob, listing: NormalizedListing) {
+function deterministicExternalId(job: QueueJob, listing: SearchQueueListing) {
   return [
     "instant",
     job.normalized_query,

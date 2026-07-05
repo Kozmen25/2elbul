@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchGetmobilListings, GETMOBIL_PHONE_CATEGORY_URL } from "@/lib/bots/adapters/getmobil";
+import { isBotAdapterListing } from "@/lib/bots/types";
 import type {
   NormalizedListing,
   UnifiedSourceAdapter,
@@ -49,10 +50,11 @@ export function createGetmobilUnifiedAdapter(
     },
 
     normalize(raw): NormalizedListing | null {
-      const listing = raw as any;
-      if (!listing?.title || !listing?.url || !listing?.price) {
+      if (!isBotAdapterListing(raw)) {
         return null;
       }
+
+      const listing = raw;
 
       return createNormalizedListing({
         externalId:
@@ -69,7 +71,7 @@ export function createGetmobilUnifiedAdapter(
         listedAt: listing.listed_at || null,
         rawData: {
           adapter: "getmobil",
-          original: listing,
+          original: raw,
         },
       });
     },

@@ -4,6 +4,7 @@ import type {
   ImportSource,
   RawImportListing,
 } from "@/lib/import/types";
+import { isRecord } from "@/lib/records";
 
 const supportedSources = new Set<ImportSource>([
   "Sahibinden",
@@ -72,16 +73,14 @@ export async function POST(request: Request) {
 function isImportPayload(
   value: unknown,
 ): value is { source: ImportSource; records: RawImportListing[] } {
-  if (!value || typeof value !== "object") return false;
-  const payload = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
+  const payload = value;
 
   return (
     typeof payload.source === "string" &&
     Array.isArray(payload.records) &&
     payload.records.length > 0 &&
     payload.records.length <= 100 &&
-    payload.records.every(
-      (record) => Boolean(record) && typeof record === "object",
-    )
+    payload.records.every(isRecord)
   );
 }

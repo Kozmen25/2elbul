@@ -16,7 +16,11 @@ import {
   type StandardNormalizedListing,
   type StandardSourceAdapter,
 } from "./types";
-import type { BotAdapterListing, SourceIntegrationConfig } from "@/lib/bots/types";
+import {
+  isBotAdapterListing,
+  type BotAdapterListing,
+  type SourceIntegrationConfig,
+} from "@/lib/bots/types";
 
 export type GetmobilStandardAdapterOptions = {
   fetchListings?: (categoryUrl: string, limit: number) => Promise<BotAdapterListing[]>;
@@ -76,7 +80,7 @@ export function createGetmobilStandardAdapter(
       return loadAndNormalize(undefined, limit);
     },
     normalizeListing(raw) {
-      return normalizeGetmobilListing(raw as BotAdapterListing, config);
+      return normalizeGetmobilListing(raw, config);
     },
     async healthCheck() {
       try {
@@ -104,9 +108,11 @@ export function createGetmobilStandardAdapter(
 }
 
 export function normalizeGetmobilListing(
-  listing: BotAdapterListing,
+  listing: unknown,
   config: Pick<SourceIntegrationConfig, "sourceId" | "sourceName">,
 ) {
+  if (!isBotAdapterListing(listing)) return null;
+
   return normalizeBotListingToStandard(
     {
       ...listing,
