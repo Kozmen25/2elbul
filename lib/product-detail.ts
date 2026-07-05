@@ -13,7 +13,9 @@ import {
   buildMarketIntelligence,
   type MarketIntelligence,
   type MarketIntelligenceDecisionInsight,
+  type MarketIntelligenceListing,
 } from "@/lib/market-intelligence";
+import { toConfidenceLevel, toConfidenceResult } from "@/lib/market-intelligence/helpers";
 import {
   calculateMarketStats,
   type PriceHistoryRecord,
@@ -23,7 +25,11 @@ import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseClient } from "@/lib/supabase";
 import { extractBrand, formatBrandDisplayName } from "@/lib/normalization";
-import { toConfidenceResult } from "@/lib/market-intelligence/helpers";
+import {
+  groupListingDuplicates,
+  summarizeDuplicateGroups,
+  type DuplicateBatchSummary,
+} from "@/lib/product-matcher";
 
 export type ProductRecord = {
   id: string;
@@ -35,6 +41,7 @@ export type ProductRecord = {
 export type ProductDetailData = {
   product: ProductRecord;
   listings: Listing[];
+  duplicateSummary: DuplicateBatchSummary;
   priceHistory: PriceHistoryRecord[];
   intelligence: ProductIntelligence;
   decisionInsight: ProductDecisionInsight;
@@ -100,7 +107,15 @@ type ListingRow = {
   image_url?: string | null;
   created_at: string | null;
   updated_at?: string | null;
+  confidence_score?: string | number | null;
 };
+
+type DuplicateSummaryListing = Pick<
+  Listing,
+  "id" | "title" | "price" | "source" | "condition"
+>;
+
+const DUPLICATE_SUMMARY_THRESHOLD = 70;
 
 type RelatedListingRow = {
   product_id: string | number | null;
@@ -174,6 +189,7 @@ export const getProductBySlug = cache(
 
 export async function getProductDetail(
   slug: string,
+  options: { duplicateSummary?: DuplicateBatchSummary | null } = {},
 ): Promise<ProductDetailData | null> {
   const product = await getProductBySlug(slug);
   const supabase = createSupabaseClient();
@@ -183,9 +199,9 @@ export async function getProductDetail(
   const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], []);
 
   const listingColumns = {
-    base: "id, title, price, city, source, url, condition, image_url, created_at",
+    base: "id, title, price, city, source, url, condition, image_url, created_at, confidence_score",
     withUpdated:
-      "id, title, price, city, source, url, condition, image_url, created_at, updated_at",
+      "id, title, price, city, source, url, condition, image_url, created_at, updated_at, confidence_score",
   };
   let useStatusFilter = true;
   let columns = listingColumns.withUpdated;
@@ -231,9 +247,14 @@ export async function getProductDetail(
       "Supabase product listings query failed:",
       listingsResult.error,
     );
+    const duplicateSummary = resolveProductDetailDuplicateSummary(
+      [],
+      options.duplicateSummary,
+    );
     return {
       product,
       listings: [],
+      duplicateSummary,
       priceHistory: [],
       intelligence: emptyIntelligence,
       decisionInsight: emptyDecisionInsight,
@@ -243,6 +264,7 @@ export async function getProductDetail(
         listings: [],
         intelligence: emptyIntelligence,
         decisionInsight: emptyDecisionInsight,
+        duplicateSummary,
       }),
       bestDeals: [],
       relatedProducts: await getRelatedProducts(supabase, product),
@@ -250,28 +272,14 @@ export async function getProductDetail(
   }
 
   const listingsData = (listingsResult.data ?? []) as unknown as ListingRow[];
-  const listings = listingsData
-    .map((listing) => ({
-      id: String(listing.id),
-      productId: product.id,
-      title: String(listing.title),
-      productName: product.name,
-      price: Number(listing.price),
-      city: String(listing.city),
-      source: listing.source as ListingSource,
-      url: String(listing.url),
-      condition: listing.condition as ListingCondition,
-      imageUrl: listing.image_url ? String(listing.image_url) : null,
-      createdAt: String(listing.created_at),
-      updatedAt:
-        "updated_at" in listing && listing.updated_at
-          ? String(listing.updated_at)
-          : null,
-    }))
-    .filter(
-      (listing) =>
-        Number.isFinite(listing.price) && !isPublicDemoListing(listing),
-    );
+  const { listings, marketIntelligenceListings } = buildProductDetailListings(
+    product,
+    listingsData,
+  );
+  const duplicateSummary = resolveProductDetailDuplicateSummary(
+    listings,
+    options.duplicateSummary,
+  );
 
   const historyResult = await supabase
     .from("price_history")
@@ -307,19 +315,87 @@ export async function getProductDetail(
   return {
     product,
     listings,
+    duplicateSummary,
     priceHistory,
     intelligence,
     decisionInsight,
     marketIntelligence: buildMarketIntelligenceForProductDetail({
       product,
       productBrand,
-      listings,
+      listings: marketIntelligenceListings,
       intelligence,
       decisionInsight,
+      duplicateSummary,
     }),
     bestDeals: buildProductBestDeals(listings),
     relatedProducts: await getRelatedProducts(supabase, product),
   };
+}
+
+function buildProductDetailListings(
+  product: ProductRecord,
+  listingRows: ListingRow[],
+): {
+  listings: Listing[];
+  marketIntelligenceListings: MarketIntelligenceListing[];
+} {
+  const pairs = listingRows
+    .map((listing) => {
+      const price = Number(listing.price);
+      if (!Number.isFinite(price)) return null;
+
+      const confidenceScore = normalizeConfidenceScore(listing.confidence_score);
+      const confidenceLevel =
+        confidenceScore !== null ? toConfidenceLevel(confidenceScore) : null;
+
+      const baseListing: Listing = {
+        id: String(listing.id),
+        productId: product.id,
+        title: String(listing.title),
+        productName: product.name,
+        price,
+        city: String(listing.city),
+        source: listing.source as ListingSource,
+        url: String(listing.url),
+        condition: listing.condition as ListingCondition,
+        imageUrl: listing.image_url ? String(listing.image_url) : null,
+        createdAt: String(listing.created_at),
+        updatedAt:
+          "updated_at" in listing && listing.updated_at
+            ? String(listing.updated_at)
+            : null,
+      };
+
+      if (isPublicDemoListing(baseListing)) return null;
+
+      const marketIntelligenceListing: MarketIntelligenceListing = {
+        ...baseListing,
+        status: "published",
+        confidenceScore,
+        confidenceLevel,
+      };
+
+      return { baseListing, marketIntelligenceListing };
+    })
+    .filter(
+      (pair): pair is {
+        baseListing: Listing;
+        marketIntelligenceListing: MarketIntelligenceListing;
+      } => pair !== null,
+    );
+
+  return {
+    listings: pairs.map((pair) => pair.baseListing),
+    marketIntelligenceListings: pairs.map((pair) => pair.marketIntelligenceListing),
+  };
+}
+
+export function resolveProductDetailDuplicateSummary(
+  listings: DuplicateSummaryListing[],
+  duplicateSummary?: DuplicateBatchSummary | null,
+): DuplicateBatchSummary {
+  if (duplicateSummary) return duplicateSummary;
+  return buildDuplicateSummaryFromListings(listings);
 }
 
 async function getProductSearchDemandStats(
@@ -826,18 +902,49 @@ function toMarketIntelligenceDecisionInsight(
   };
 }
 
-function buildMarketIntelligenceForProductDetail({
+function normalizeConfidenceScore(value: unknown) {
+  if (value == null || value === "") return null;
+  const score = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(score) ? score : null;
+}
+
+function buildDuplicateSummaryFromListings(
+  listings: DuplicateSummaryListing[],
+): DuplicateBatchSummary {
+  const duplicateGroups = groupListingDuplicates(
+    listings.map((listing) => ({
+      id: listing.id,
+      title: listing.title,
+      price: listing.price,
+      source: listing.source,
+      condition: listing.condition,
+    })),
+    DUPLICATE_SUMMARY_THRESHOLD,
+  );
+
+  return summarizeDuplicateGroups(
+    duplicateGroups,
+    listings.length,
+    DUPLICATE_SUMMARY_THRESHOLD,
+  );
+}
+
+export function buildMarketIntelligenceForProductDetail({
   product,
   productBrand,
   listings,
   intelligence,
   decisionInsight,
+  duplicateSummary,
+  analyzedAt,
 }: {
   product: ProductRecord;
   productBrand: string | null;
-  listings: Listing[];
+  listings: MarketIntelligenceListing[];
   intelligence: ProductIntelligence;
   decisionInsight: ProductDecisionInsight;
+  duplicateSummary: DuplicateBatchSummary;
+  analyzedAt?: string | Date | null;
 }) {
   return buildMarketIntelligence({
     scope: {
@@ -848,12 +955,10 @@ function buildMarketIntelligenceForProductDetail({
       category: product.category,
       brand: productBrand,
     },
-    listings: listings.map((listing) => ({
-      ...listing,
-      status: "published",
-    })),
+    listings,
     intelligence,
     decisionInsight: toMarketIntelligenceDecisionInsight(decisionInsight),
-    analyzedAt: new Date(),
+    duplicateSummary,
+    analyzedAt: analyzedAt ?? new Date(),
   });
 }
