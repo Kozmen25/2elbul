@@ -75,22 +75,6 @@ export async function importListings(
 
   for (const { index, listing } of normalizedListings) {
     try {
-      const { data: product, error: productError } = await supabase
-        .from("products")
-        .upsert(
-          {
-            name: listing.productName,
-            category: listing.category,
-          },
-          { onConflict: "name" },
-        )
-        .select("id")
-        .single();
-
-      if (productError || !product) {
-        throw new Error(productError?.message ?? "Ürün oluşturulamadı.");
-      }
-
       const matchedProduct = await findOrCreateMatchedProduct({
         supabase,
         title: listing.title,

@@ -109,45 +109,6 @@ export async function importAdminListings(
     }
 
     let productId: string | number;
-    const { data: existingProduct, error: productLookupError } = await supabase
-      .from("products")
-      .select("id")
-      .eq("name", listing.productName)
-      .maybeSingle();
-
-    if (productLookupError) {
-      console.error("Supabase admin import product lookup failed:", productLookupError);
-      addError(result, index, listing.title, productLookupError);
-      continue;
-    }
-
-    if (existingProduct) {
-      productId = existingProduct.id;
-    } else {
-      const { data: createdProduct, error: productInsertError } = await supabase
-        .from("products")
-        .insert({ name: listing.productName })
-        .select("id")
-        .single();
-
-      if (productInsertError || !createdProduct) {
-        if (productInsertError) {
-          console.error(
-            "Supabase admin import product insert failed:",
-            productInsertError,
-          );
-        }
-        addError(
-          result,
-          index,
-          listing.title,
-          productInsertError ?? new Error("Ürün oluşturulamadı."),
-        );
-        continue;
-      }
-
-      productId = createdProduct.id;
-    }
 
     try {
       const matchedProduct = await findOrCreateMatchedProduct({

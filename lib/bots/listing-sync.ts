@@ -75,24 +75,6 @@ export async function syncListingsForSource(
     ]),
   );
 
-  for (const productName of productNames) {
-    if (productIds.has(productName)) continue;
-    const { data: createdProduct, error: productInsertError } = await supabase
-      .from("products")
-      .insert({ name: productName })
-      .select("id")
-      .single();
-
-    if (productInsertError || !createdProduct) {
-      const message =
-        productInsertError?.message ?? `${productName} oluşturulamadı.`;
-      console.error("Listing sync product insert failed:", productInsertError);
-      errors.push(`${productName}: ${message}`);
-      continue;
-    }
-    productIds.set(productName, createdProduct.id);
-  }
-
   const matchedProducts = await applyMatchedProductIds(
     supabase,
     listings,
@@ -242,23 +224,6 @@ export async function insertListingsLegacy(
       product.id as string | number,
     ]),
   );
-
-  for (const productName of productNames) {
-    if (productIds.has(productName)) continue;
-    const { data: createdProduct, error: productInsertError } = await supabase
-      .from("products")
-      .insert({ name: productName })
-      .select("id")
-      .single();
-
-    if (productInsertError || !createdProduct) {
-      errors.push(
-        `${productName}: ${productInsertError?.message ?? "oluşturulamadı."}`,
-      );
-      continue;
-    }
-    productIds.set(productName, createdProduct.id);
-  }
 
   const matchedProducts = await applyMatchedProductIds(
     supabase,
