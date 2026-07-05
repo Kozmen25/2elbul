@@ -10,6 +10,11 @@ import {
 } from "@/lib/intelligence-engine";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import {
+  buildMarketIntelligence,
+  type MarketIntelligence,
+  type MarketIntelligenceDecisionInsight,
+} from "@/lib/market-intelligence";
+import {
   calculateMarketStats,
   type PriceHistoryRecord,
 } from "@/lib/price-insights";
@@ -17,6 +22,8 @@ import { createProductSlug } from "@/lib/product-slug";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseClient } from "@/lib/supabase";
+import { extractBrand, formatBrandDisplayName } from "@/lib/normalization";
+import { toConfidenceResult } from "@/lib/market-intelligence/helpers";
 
 export type ProductRecord = {
   id: string;
@@ -31,6 +38,7 @@ export type ProductDetailData = {
   priceHistory: PriceHistoryRecord[];
   intelligence: ProductIntelligence;
   decisionInsight: ProductDecisionInsight;
+  marketIntelligence: MarketIntelligence;
   bestDeals: ProductBestDeal[];
   relatedProducts: RelatedProductSummary[];
 };
@@ -170,6 +178,9 @@ export async function getProductDetail(
   const product = await getProductBySlug(slug);
   const supabase = createSupabaseClient();
   if (!product || !supabase) return null;
+  const productBrand = formatBrandDisplayName(extractBrand(product.name));
+  const emptyIntelligence = calculateProductIntelligence({ listings: [] });
+  const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], []);
 
   const listingColumns = {
     base: "id, title, price, city, source, url, condition, image_url, created_at",
@@ -224,8 +235,15 @@ export async function getProductDetail(
       product,
       listings: [],
       priceHistory: [],
-      intelligence: calculateProductIntelligence({ listings: [] }),
-      decisionInsight: buildProductDecisionInsight(product.name, [], []),
+      intelligence: emptyIntelligence,
+      decisionInsight: emptyDecisionInsight,
+      marketIntelligence: buildMarketIntelligenceForProductDetail({
+        product,
+        productBrand,
+        listings: [],
+        intelligence: emptyIntelligence,
+        decisionInsight: emptyDecisionInsight,
+      }),
       bestDeals: [],
       relatedProducts: await getRelatedProducts(supabase, product),
     };
@@ -275,21 +293,30 @@ export async function getProductDetail(
         }))
         .filter((record) => Number.isFinite(record.price));
   const demand = await getProductSearchDemandStats(supabase, product.name);
+  const intelligence = calculateProductIntelligence({
+    listings,
+    priceHistory,
+    demand,
+  });
+  const decisionInsight = buildProductDecisionInsight(
+    product.name,
+    listings,
+    priceHistory,
+  );
 
   return {
     product,
     listings,
     priceHistory,
-    intelligence: calculateProductIntelligence({
+    intelligence,
+    decisionInsight,
+    marketIntelligence: buildMarketIntelligenceForProductDetail({
+      product,
+      productBrand,
       listings,
-      priceHistory,
-      demand,
+      intelligence,
+      decisionInsight,
     }),
-    decisionInsight: buildProductDecisionInsight(
-      product.name,
-      listings,
-      priceHistory,
-    ),
     bestDeals: buildProductBestDeals(listings),
     relatedProducts: await getRelatedProducts(supabase, product),
   };
@@ -788,4 +815,45 @@ function isMissingProductCategoryColumn(error: unknown) {
     record.code === "PGRST204" ||
     text.includes("category")
   );
+}
+
+function toMarketIntelligenceDecisionInsight(
+  insight: ProductDecisionInsight,
+): MarketIntelligenceDecisionInsight {
+  return {
+    confidence: toConfidenceResult(insight.confidence.score, insight.confidence.reasons),
+    smartPrice: insight.smartPrice,
+  };
+}
+
+function buildMarketIntelligenceForProductDetail({
+  product,
+  productBrand,
+  listings,
+  intelligence,
+  decisionInsight,
+}: {
+  product: ProductRecord;
+  productBrand: string | null;
+  listings: Listing[];
+  intelligence: ProductIntelligence;
+  decisionInsight: ProductDecisionInsight;
+}) {
+  return buildMarketIntelligence({
+    scope: {
+      productId: product.id,
+      productName: product.name,
+      slug: product.slug,
+      url: `/product/${product.slug}`,
+      category: product.category,
+      brand: productBrand,
+    },
+    listings: listings.map((listing) => ({
+      ...listing,
+      status: "published",
+    })),
+    intelligence,
+    decisionInsight: toMarketIntelligenceDecisionInsight(decisionInsight),
+    analyzedAt: new Date(),
+  });
 }

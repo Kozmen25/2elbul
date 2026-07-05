@@ -31,10 +31,6 @@ import {
   type ProductRecord,
   type RelatedProductSummary,
 } from "@/lib/product-detail";
-import {
-  extractBrand,
-  formatBrandDisplayName,
-} from "@/lib/normalization";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   ListingPriceHistoryChart,
@@ -105,8 +101,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const detail = await getProductDetail(slug);
   if (!detail) notFound();
 
-  const { product, listings, intelligence, decisionInsight, bestDeals, relatedProducts } =
-    detail;
+  const {
+    product,
+    listings,
+    intelligence,
+    decisionInsight,
+    bestDeals,
+    relatedProducts,
+    marketIntelligence,
+  } = detail;
   const prices = listings.map((listing) => listing.price);
   const listingCount = listings.length;
   const marketStats = calculateMarketStats(prices);
@@ -209,6 +212,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     lowestPrice,
     highestPrice,
     bestDeals,
+    brandName: marketIntelligence.scope.brand,
   });
   return (
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
@@ -216,6 +220,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(marketIntelligence.structuredData).replace(
+            /</g,
+            "\\u003c",
+          ),
         }}
       />
       <div className="container-shell min-w-0">
@@ -1179,12 +1192,14 @@ function buildProductJsonLd({
   lowestPrice,
   highestPrice,
   bestDeals,
+  brandName,
 }: {
   product: ProductRecord;
   listingCount: number;
   lowestPrice: number;
   highestPrice: number;
   bestDeals: ProductBestDeal[];
+  brandName?: string | null;
 }) {
   const productUrl = getAbsoluteUrl(`/product/${product.slug}`);
   const offers =
@@ -1219,7 +1234,7 @@ function buildProductJsonLd({
     name: product.name,
     category: product.category ?? undefined,
     url: productUrl,
-    brand: inferProductBrand(product.name),
+    brand: brandName ?? undefined,
     offers,
   };
 }
@@ -1229,10 +1244,6 @@ function getAbsoluteUrl(path: string) {
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://2elbul.vercel.app";
   return `${siteUrl}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function inferProductBrand(name: string) {
-  return formatBrandDisplayName(extractBrand(name)) ?? undefined;
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {
