@@ -4,10 +4,12 @@ import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { MaintenanceGate } from "@/components/maintenance-gate";
 import { getSiteGeneralSettings } from "@/lib/site-settings";
+import { getMetadataBase } from "@/lib/site-url";
 
 export async function generateMetadata(): Promise<Metadata> {
   const general = await getSiteGeneralSettings();
   return {
+    metadataBase: getMetadataBase(),
     title: `${general.siteName} | İkinci Elin Doğru Fiyatı`,
     description: general.siteDescription,
     icons: {

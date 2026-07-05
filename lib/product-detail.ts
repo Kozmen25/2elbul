@@ -21,6 +21,7 @@ import {
   type PriceHistoryRecord,
 } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
+import { getAbsoluteUrl } from "@/lib/site-url";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseClient } from "@/lib/supabase";
@@ -951,7 +952,7 @@ export function buildMarketIntelligenceForProductDetail({
       productId: product.id,
       productName: product.name,
       slug: product.slug,
-      url: `/product/${product.slug}`,
+      url: getAbsoluteUrl(`/product/${product.slug}`),
       category: product.category,
       brand: productBrand,
     },

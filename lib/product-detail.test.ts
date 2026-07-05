@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
 import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { MarketIntelligenceListing } from "@/lib/market-intelligence";
+import { getAbsoluteUrl } from "@/lib/site-url";
 import {
   buildMarketIntelligenceForProductDetail,
   resolveProductDetailDuplicateSummary,
@@ -347,6 +348,22 @@ describe("buildMarketIntelligenceForProductDetail", () => {
     });
 
     expect(getProperty(result, "Sources used")).toBe("EasyCep, Getmobil");
+  });
+
+  it("uses the absolute product URL in JSON-LD", () => {
+    const result = buildMarketIntelligenceForProductDetail({
+      product,
+      productBrand: "Apple",
+      listings: duplicatedListings,
+      intelligence,
+      decisionInsight,
+      duplicateSummary,
+      analyzedAt,
+    });
+
+    expect(result.structuredData.url).toBe(
+      getAbsoluteUrl(`/product/${product.slug}`),
+    );
   });
 
   it("preserves product intelligence in the opportunity block", () => {

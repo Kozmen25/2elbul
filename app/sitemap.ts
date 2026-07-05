@@ -5,6 +5,7 @@ import {
   isPublicDemoListing,
   isPublicDemoProductName,
 } from "@/lib/public-data-cleanup";
+import { getSiteUrl } from "@/lib/site-url";
 import { createSupabaseClient } from "@/lib/supabase";
 
 type ProductRow = {
@@ -21,9 +22,8 @@ type SitemapListingRow = {
   url?: string | null;
 };
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://2elbul.vercel.app";
-
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const siteUrl = getSiteUrl();
   const now = new Date();
   const routes: MetadataRoute.Sitemap = [
     {

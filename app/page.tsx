@@ -23,6 +23,7 @@ import {
 import { ListingImage } from "@/components/listing-image";
 import { SearchBar } from "@/components/search-bar";
 import { createProductSlug } from "@/lib/product-slug";
+import { getAbsoluteUrl } from "@/lib/site-url";
 import {
   getHomeData,
   type HomeListing,
@@ -33,15 +34,20 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const homeUrl = getAbsoluteUrl("/");
+
 export const metadata: Metadata = {
   title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
   description:
     "Telefon, bilgisayar, konsol ve daha fazlasi icin ikinci el ilanlari tek yerde karsilastir; ortalama fiyati, en ucuz ilani ve fiyat gecmisini gor.",
+  alternates: {
+    canonical: homeUrl,
+  },
   openGraph: {
     title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
     description:
       "2ElBul ile ikinci el ilanlari karsilastir, ortalama fiyati, en ucuz ilani, fiyat gecmisini ve guven skorunu gor.",
-    url: "https://2elbul.vercel.app",
+    url: homeUrl,
     siteName: "2ElBul",
     locale: "tr_TR",
     type: "website",

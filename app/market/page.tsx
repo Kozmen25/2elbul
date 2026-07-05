@@ -2,21 +2,24 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, Flame, PackageSearch, TrendingDown } from "lucide-react";
 import { getHomeData, type MarketPulseItem } from "@/lib/home-data";
+import { getAbsoluteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
+
+const marketUrl = getAbsoluteUrl("/market");
 
 export const metadata: Metadata = {
   title: "İkinci El Piyasa Merkezi | 2ElBul",
   description:
     "2ElBul Piyasa Merkezi, ikinci el piyasasındaki arama, ilan ve fiyat sinyallerini analiz ederek öne çıkan ürünleri gösterir.",
   alternates: {
-    canonical: "/market",
+    canonical: marketUrl,
   },
   openGraph: {
     title: "İkinci El Piyasa Merkezi | 2ElBul",
     description:
       "İkinci el piyasasında en çok aranan ürünleri, fırsatları ve fiyatı düşen ürünleri 2ElBul Piyasa Merkezi'nde incele.",
-    url: "/market",
+    url: marketUrl,
     siteName: "2ElBul",
     locale: "tr_TR",
     type: "website",

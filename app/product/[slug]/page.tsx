@@ -31,6 +31,7 @@ import {
   type ProductRecord,
   type RelatedProductSummary,
 } from "@/lib/product-detail";
+import { getAbsoluteUrl } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { MarketIntelligencePanel } from "./market-intelligence-panel";
 import {
@@ -1240,13 +1241,6 @@ function buildProductJsonLd({
     brand: brandName ?? undefined,
     offers,
   };
-}
-
-function getAbsoluteUrl(path: string) {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://2elbul.vercel.app";
-  return `${siteUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {
