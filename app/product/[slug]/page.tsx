@@ -31,6 +31,10 @@ import {
   type ProductRecord,
   type RelatedProductSummary,
 } from "@/lib/product-detail";
+import {
+  extractBrand,
+  formatBrandDisplayName,
+} from "@/lib/normalization";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   ListingPriceHistoryChart,
@@ -1228,13 +1232,7 @@ function getAbsoluteUrl(path: string) {
 }
 
 function inferProductBrand(name: string) {
-  const normalized = name.toLocaleLowerCase("tr-TR");
-  if (normalized.includes("iphone") || normalized.includes("apple")) return "Apple";
-  if (normalized.includes("samsung") || normalized.includes("galaxy")) return "Samsung";
-  if (normalized.includes("playstation") || normalized.includes("ps5")) return "Sony";
-  if (normalized.includes("macbook")) return "Apple";
-  if (normalized.includes("rtx")) return "NVIDIA";
-  return undefined;
+  return formatBrandDisplayName(extractBrand(name)) ?? undefined;
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string) {

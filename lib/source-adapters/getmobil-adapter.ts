@@ -12,6 +12,10 @@ import {
   fetchGetmobilListings,
   GETMOBIL_PHONE_CATEGORY_URL,
 } from "@/lib/bots/adapters/getmobil";
+import {
+  extractBrand,
+  formatBrandDisplayName,
+} from "@/lib/normalization";
 import type {
   NormalizedListing,
   SourceAdapter,
@@ -99,14 +103,5 @@ function deterministicExternalId(source: string, url: string, title: string) {
 }
 
 function deriveBrand(title: string) {
-  const normalizedTitle = normalize(title);
-  if (normalizedTitle.includes("iphone") || normalizedTitle.includes("apple")) {
-    return "Apple";
-  }
-  if (normalizedTitle.includes("samsung")) return "Samsung";
-  if (normalizedTitle.includes("xiaomi")) return "Xiaomi";
-  if (normalizedTitle.includes("huawei")) return "Huawei";
-  if (normalizedTitle.includes("oppo")) return "Oppo";
-  if (normalizedTitle.includes("realme")) return "Realme";
-  return null;
+  return formatBrandDisplayName(extractBrand(title));
 }

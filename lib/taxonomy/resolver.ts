@@ -1,5 +1,6 @@
 import type { CategoryPathResolution, TaxonomyNode } from "./types";
 import registry from "./registry";
+import { extractBrand } from "../normalization";
 
 type ResolutionRule = {
   pattern: RegExp;
@@ -32,10 +33,11 @@ class CategoryResolver {
       const subCat = registry.findByLabel("Akıllı Telefon");
 
       let brand: TaxonomyNode | undefined;
-      if (query.match(/iphone|apple/i)) brand = registry.findByLabel("Apple");
-      else if (query.match(/samsung|galaxy/i)) brand = registry.findByLabel("Samsung");
-      else if (query.match(/xiaomi|redmi/i)) brand = registry.findByLabel("Xiaomi");
-      else if (query.match(/oppo/i)) brand = registry.findByLabel("Oppo");
+      const brandKey = extractBrand(query);
+      if (brandKey === "apple") brand = registry.findByLabel("Apple");
+      else if (brandKey === "samsung") brand = registry.findByLabel("Samsung");
+      else if (brandKey === "xiaomi") brand = registry.findByLabel("Xiaomi");
+      else if (brandKey === "oppo") brand = registry.findByLabel("Oppo");
 
       return {
         mainCategory: mainCat,
@@ -72,8 +74,9 @@ class CategoryResolver {
       const cat = registry.findByLabel("Tablet");
 
       let brand: TaxonomyNode | undefined;
-      if (query.match(/ipad|apple/i)) brand = registry.findByLabel("Apple");
-      else if (query.match(/samsung|galaxy/i)) brand = registry.findByLabel("Samsung");
+      const brandKey = extractBrand(query);
+      if (brandKey === "apple") brand = registry.findByLabel("Apple");
+      else if (brandKey === "samsung") brand = registry.findByLabel("Samsung");
 
       return {
         mainCategory: mainCat,

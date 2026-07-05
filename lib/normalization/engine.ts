@@ -217,43 +217,157 @@ export function extractStorageSize(input: string): string | null {
   return match ? match[1] : null;
 }
 
+export function isBareIphoneModel(input: string): boolean {
+  const normalized = normalizeProductTitle(input);
+  return /\b1[1-6]\s*(pro\s*max|pro|plus|mini)\b/.test(normalized);
+}
+
+export function isBareSamsungModel(input: string): boolean {
+  const normalized = normalizeProductTitle(input);
+  return /\b(?:s|a|m)\d{2}\s*(?:ultra|plus|fe)?\b/.test(normalized);
+}
+
+const BRAND_RULES: Array<{ brand: string; matches: (normalized: string) => boolean }> = [
+  {
+    brand: 'apple',
+    matches: (normalized) =>
+      normalized.includes('apple') ||
+      normalized.includes('iphone') ||
+      normalized.includes('ipad') ||
+      normalized.includes('macbook') ||
+      normalized.includes('airpods') ||
+      normalized.includes('apple watch') ||
+      isBareIphoneModel(normalized),
+  },
+  {
+    brand: 'samsung',
+    matches: (normalized) =>
+      normalized.includes('samsung') ||
+      normalized.includes('galaxy') ||
+      isBareSamsungModel(normalized),
+  },
+  {
+    brand: 'google',
+    matches: (normalized) => normalized.includes('google'),
+  },
+  {
+    brand: 'xiaomi',
+    matches: (normalized) =>
+      normalized.includes('xiaomi') ||
+      normalized.includes('redmi') ||
+      normalized.includes('poco'),
+  },
+  {
+    brand: 'huawei',
+    matches: (normalized) => normalized.includes('huawei'),
+  },
+  {
+    brand: 'realme',
+    matches: (normalized) => normalized.includes('realme'),
+  },
+  {
+    brand: 'oneplus',
+    matches: (normalized) => normalized.includes('oneplus'),
+  },
+  {
+    brand: 'oppo',
+    matches: (normalized) => normalized.includes('oppo'),
+  },
+  {
+    brand: 'vivo',
+    matches: (normalized) => normalized.includes('vivo'),
+  },
+  {
+    brand: 'motorola',
+    matches: (normalized) => normalized.includes('motorola'),
+  },
+  {
+    brand: 'nokia',
+    matches: (normalized) => normalized.includes('nokia'),
+  },
+  {
+    brand: 'sony',
+    matches: (normalized) =>
+      normalized.includes('sony') ||
+      normalized.includes('playstation') ||
+      normalized.includes('ps5') ||
+      normalized.includes('ps4') ||
+      normalized.includes('xperia'),
+  },
+  {
+    brand: 'nvidia',
+    matches: (normalized) =>
+      normalized.includes('nvidia') ||
+      normalized.includes('rtx') ||
+      normalized.includes('geforce'),
+  },
+  {
+    brand: 'lg',
+    matches: (normalized) => /\blg\b/.test(normalized),
+  },
+  {
+    brand: 'lenovo',
+    matches: (normalized) => normalized.includes('lenovo'),
+  },
+  {
+    brand: 'hp',
+    matches: (normalized) => /\bhp\b/.test(normalized),
+  },
+  {
+    brand: 'dell',
+    matches: (normalized) => normalized.includes('dell'),
+  },
+  {
+    brand: 'asus',
+    matches: (normalized) => normalized.includes('asus'),
+  },
+  {
+    brand: 'razer',
+    matches: (normalized) => normalized.includes('razer'),
+  },
+  {
+    brand: 'blackberry',
+    matches: (normalized) => normalized.includes('blackberry'),
+  },
+  {
+    brand: 'htc',
+    matches: (normalized) => normalized.includes('htc'),
+  },
+  {
+    brand: 'honor',
+    matches: (normalized) => normalized.includes('honor'),
+  },
+  {
+    brand: 'nothing',
+    matches: (normalized) => normalized.includes('nothing'),
+  },
+];
+
 export function extractBrand(input: string): string | null {
   const normalized = normalizeProductTitle(input);
-  const brands = [
-    'apple',
-    'samsung',
-    'google',
-    'xiaomi',
-    'realme',
-    'oneplus',
-    'oppo',
-    'vivo',
-    'motorola',
-    'nokia',
-    'sony',
-    'lg',
-    'asus',
-    'razer',
-    'blackberry',
-    'htc',
-    'honor',
-    'nothing',
-  ];
-
-  for (const brand of brands) {
-    if (normalized.includes(brand)) {
-      return brand;
-    }
-  }
-
-  const appleKeywords = ['iphone', 'ipad', 'macbook', 'airpods', 'apple watch'];
-  for (const keyword of appleKeywords) {
-    if (normalized.includes(keyword)) {
-      return 'apple';
+  for (const rule of BRAND_RULES) {
+    if (rule.matches(normalized)) {
+      return rule.brand;
     }
   }
 
   return null;
+}
+
+export function formatBrandDisplayName(brand: string | null): string | null {
+  if (!brand) return null;
+
+  const specialCases: Record<string, string> = {
+    hp: "HP",
+    lg: "LG",
+    nvidia: "NVIDIA",
+    oneplus: "OnePlus",
+  };
+
+  return (
+    specialCases[brand] ??
+    brand.charAt(0).toLocaleUpperCase("en-US") + brand.slice(1)
+  );
 }
 
 export function getTokens(input: string): string[] {

@@ -180,10 +180,40 @@ describe('Normalization Engine', () => {
   });
 
   describe('extractBrand', () => {
-    it('should extract known brands', () => {
+    it('should extract Apple from explicit brand text', () => {
+      expect(extractBrand('Apple iPhone 15')).toBe('apple');
+    });
+
+    it('should extract Apple from iPhone text', () => {
+      expect(extractBrand('iPhone 15 Pro Max')).toBe('apple');
+    });
+
+    it('should extract Samsung from explicit brand text', () => {
       expect(extractBrand('Samsung Galaxy S24')).toBe('samsung');
-      expect(extractBrand('Google Pixel 8')).toBe('google');
-      expect(extractBrand('iPhone 15')).toBe('apple');
+    });
+
+    it('should extract Samsung from Galaxy text', () => {
+      expect(extractBrand('Galaxy S24 Ultra')).toBe('samsung');
+    });
+
+    it('should extract Xiaomi', () => {
+      expect(extractBrand('Xiaomi Redmi Note 13')).toBe('xiaomi');
+    });
+
+    it('should extract Huawei', () => {
+      expect(extractBrand('Huawei P60 Pro')).toBe('huawei');
+    });
+
+    it('should extract Lenovo', () => {
+      expect(extractBrand('Lenovo ThinkPad X1 Carbon')).toBe('lenovo');
+    });
+
+    it('should extract HP', () => {
+      expect(extractBrand('HP Pavilion 15')).toBe('hp');
+    });
+
+    it('should extract Dell', () => {
+      expect(extractBrand('Dell XPS 13')).toBe('dell');
     });
 
     it('should be case insensitive', () => {

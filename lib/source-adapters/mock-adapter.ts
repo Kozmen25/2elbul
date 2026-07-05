@@ -3,6 +3,10 @@ import type {
   SearchInput,
   SourceAdapter,
 } from "@/lib/source-adapters/types";
+import {
+  extractBrand,
+  formatBrandDisplayName,
+} from "@/lib/normalization";
 
 export const mockSourceAdapter: SourceAdapter = {
   slug: "mock",
@@ -59,14 +63,7 @@ function inferCategory(query: string) {
 }
 
 function inferBrand(query: string) {
-  const text = query.toLocaleLowerCase("tr-TR");
-  if (text.includes("iphone") || text.includes("ipad") || text.includes("macbook")) {
-    return "Apple";
-  }
-  if (text.includes("samsung")) return "Samsung";
-  if (text.includes("playstation") || text.includes("ps5")) return "Sony";
-  if (text.includes("rtx")) return "NVIDIA";
-  return null;
+  return formatBrandDisplayName(extractBrand(query));
 }
 
 function slugify(value: string) {

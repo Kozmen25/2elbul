@@ -74,6 +74,18 @@ describe("product matcher", () => {
     });
   });
 
+  it("extracts shared brand signals for laptop brands", () => {
+    expect(extractProductSignals("Lenovo Laptop V15")).toMatchObject({
+      brand: "lenovo",
+    });
+    expect(extractProductSignals("HP Laptop 250 G9")).toMatchObject({
+      brand: "hp",
+    });
+    expect(extractProductSignals("Dell Laptop Latitude 5440")).toMatchObject({
+      brand: "dell",
+    });
+  });
+
   it("summarizes duplicate batches for pipeline metadata", () => {
     const listings = [
       {

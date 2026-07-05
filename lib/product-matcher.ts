@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ICategoryResolver } from "./taxonomy/integration";
-import { normalizeProductTitle as newNormalizeProductTitle } from "./normalization";
+import {
+  extractBrand,
+  isBareIphoneModel,
+  isBareSamsungModel,
+  normalizeProductTitle as newNormalizeProductTitle,
+} from "./normalization";
 import type { DuplicateMatch, DuplicateGroup } from "./duplicate-engine/types";
 import type { ConfidenceMetadata } from "./confidence-engine";
 import {
@@ -150,7 +155,7 @@ function buildProductConfidenceMetadata(
 export function extractProductSignals(title: string, resolver?: ICategoryResolver): ProductSignals {
   const normalized = normalizeProductTitle(title);
   const tokens = normalized.split(" ").filter(Boolean);
-  const brand = detectBrand(normalized);
+  const brand = extractBrand(normalized);
   const model = detectModel(normalized, tokens, brand);
   const storage = detectStorage(normalized, tokens);
   const ram = detectRam(normalized);
@@ -470,22 +475,6 @@ export function summarizeDuplicateGroups(
   };
 }
 
-function detectBrand(normalized: string) {
-  if (/\b(iphone|apple)\b/.test(normalized) || isBareIphoneModel(normalized)) {
-    return "apple";
-  }
-  if (/\b(samsung|galaxy)\b/.test(normalized) || isBareSamsungModel(normalized)) {
-    return "samsung";
-  }
-  if (/\bxiaomi\b/.test(normalized)) return "xiaomi";
-  if (/\bhuawei\b/.test(normalized)) return "huawei";
-  if (/\boppo\b/.test(normalized)) return "oppo";
-  if (/\brealme\b/.test(normalized)) return "realme";
-  if (/\bmacbook\b/.test(normalized)) return "apple";
-  if (/\bipad\b/.test(normalized)) return "apple";
-  return null;
-}
-
 function detectModel(
   normalized: string,
   tokens: string[],
@@ -589,14 +578,6 @@ function createCanonicalProductName(signals: ProductSignals, fallback: string) {
   }
 
   return titleCase(normalizeProductTitle(fallback));
-}
-
-function isBareIphoneModel(normalized: string) {
-  return /\b1[1-6]\s*(pro\s*max|pro|plus|mini)\b/.test(normalized);
-}
-
-function isBareSamsungModel(normalized: string) {
-  return /\b(?:s|a|m)\d{2}\s*(?:ultra|plus|fe)?\b/.test(normalized);
 }
 
 function compactModelSuffix(value: string | undefined) {

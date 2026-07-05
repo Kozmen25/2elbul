@@ -1,6 +1,7 @@
 import type { ICategoryResolver, CategoryResolutionResult } from "./integration";
 import { normalizeCategoryText, findCategoryMatches } from "../category-taxonomy";
 import { CATEGORY_TAXONOMY } from "../category-taxonomy";
+import { extractBrand, isBareIphoneModel } from "../normalization";
 
 export class LegacyAdapter implements ICategoryResolver {
   async resolve(input: string, context?: Record<string, unknown>): Promise<CategoryResolutionResult> {
@@ -59,16 +60,13 @@ export class LegacyAdapter implements ICategoryResolver {
 
   private detectCategoryByBrand(normalized: string): { id: string; label: string } | null {
     const lower = normalized.toLocaleLowerCase("tr-TR");
+    const brand = extractBrand(lower);
 
-    // Hardcoded brand-based detection (from product-matcher.ts)
-    if (
-      lower.includes("apple") &&
-      (lower.includes("iphone") || this.isBareIphoneModel(lower))
-    ) {
+    if (brand === "apple" && (lower.includes("iphone") || isBareIphoneModel(lower))) {
       return this.findCategoryByLabel("Telefon");
     }
 
-    if (lower.includes("samsung") && /\b(galaxy|s\d{2}|a\d{2})\b/.test(lower)) {
+    if (brand === "samsung" && /\b(galaxy|s\d{2}|a\d{2})\b/.test(lower)) {
       return this.findCategoryByLabel("Telefon");
     }
 
@@ -89,10 +87,6 @@ export class LegacyAdapter implements ICategoryResolver {
     }
 
     return null;
-  }
-
-  private isBareIphoneModel(normalized: string): boolean {
-    return /\b1[1-6]\s*(pro\s*max|pro|plus|mini)\b/.test(normalized);
   }
 
   private findCategoryByLabel(label: string) {

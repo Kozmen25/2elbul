@@ -194,6 +194,24 @@ describe('Duplicate Detection Engine', () => {
     });
   });
 
+  describe('Generic Laptop Brands', () => {
+    it('Lenovo ThinkPad same model should still score high', () => {
+      const input1 = createComparisonInput('Lenovo ThinkPad X1 Carbon', {
+        brand: 'lenovo',
+        model: 'thinkpad-x1-carbon',
+      });
+
+      const input2 = createComparisonInput('Lenovo ThinkPad X1 Carbon', {
+        brand: 'lenovo',
+        model: 'thinkpad-x1-carbon',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBeGreaterThanOrEqual(75);
+      expect(result.signals.brand).toBe(100);
+    });
+  });
+
   describe('Apple AirPods Examples', () => {
     it('AirPods Pro 2 vs AirPods Pro Gen2 should match reasonably', () => {
       const input1 = createComparisonInput('AirPods Pro 2', {

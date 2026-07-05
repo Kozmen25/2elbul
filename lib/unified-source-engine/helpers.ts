@@ -1,4 +1,8 @@
-import { normalizeSearchText as newNormalizeSearchText } from "../normalization";
+import {
+  extractBrand,
+  formatBrandDisplayName,
+  normalizeSearchText as newNormalizeSearchText,
+} from "../normalization";
 
 export const normalizeSearchText = newNormalizeSearchText;
 
@@ -14,17 +18,5 @@ export function createDeterministicExternalId(
 }
 
 export function deriveBrand(title: string): string | null {
-  const normalizedTitle = normalizeSearchText(title);
-  if (
-    normalizedTitle.includes("iphone") ||
-    normalizedTitle.includes("apple")
-  ) {
-    return "Apple";
-  }
-  if (normalizedTitle.includes("samsung")) return "Samsung";
-  if (normalizedTitle.includes("xiaomi")) return "Xiaomi";
-  if (normalizedTitle.includes("huawei")) return "Huawei";
-  if (normalizedTitle.includes("oppo")) return "Oppo";
-  if (normalizedTitle.includes("realme")) return "Realme";
-  return null;
+  return formatBrandDisplayName(extractBrand(title));
 }
