@@ -34,6 +34,7 @@ import {
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { MarketIntelligencePanel } from "./market-intelligence-panel";
+import { OpportunityScorePanel } from "./opportunity-score-panel";
 import {
   ListingPriceHistoryChart,
   type ListingPriceHistoryPoint,
@@ -279,6 +280,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
 
         <MarketIntelligencePanel marketIntelligence={marketIntelligence} />
+
+        <OpportunityScorePanel
+          opportunityAnalysis={marketIntelligence.opportunityAnalysis}
+          marketIntelligence={marketIntelligence}
+        />
 
         <div className="mt-6 max-w-md">
           <PriceAlertForm
