@@ -32,6 +32,21 @@ export type ListingSyncResult = {
   duplicateSummary: DuplicateBatchSummary | null;
 };
 
+type PreparedListingSyncState = {
+  productIds: Map<string, string | number>;
+  matchedProducts: number;
+  duplicateSummary: DuplicateBatchSummary;
+  errors: string[];
+};
+
+type DuplicateListingInput = {
+  id: string;
+  title: string;
+  price: number;
+  source: string;
+  condition?: string;
+};
+
 export function normalizeSyncStatus(value: unknown) {
   if (value === "pending" || value === "inactive" || value === "active") {
     return value;
@@ -42,6 +57,28 @@ export function normalizeSyncStatus(value: unknown) {
 
 export function createListingExternalId(url: string) {
   return createHash("sha1").update(url.trim().toLowerCase()).digest("hex");
+}
+
+async function prepareListingSyncState(
+  supabase: SupabaseClient,
+  listings: BotAdapterListing[],
+): Promise<PreparedListingSyncState> {
+  const productIds = await loadProductIdsForListings(supabase, listings);
+  const errors: string[] = [];
+  const matchedProducts = await resolveMatchedProductIds(
+    supabase,
+    listings,
+    productIds,
+    errors,
+  );
+  const duplicateSummary = buildDuplicateSummary(listings);
+
+  return {
+    productIds,
+    matchedProducts,
+    duplicateSummary,
+    errors,
+  };
 }
 
 export async function syncListingsForSource(
@@ -56,82 +93,22 @@ export async function syncListingsForSource(
   let reactivated = 0;
   let skipped = 0;
   let errorCount = 0;
-  const errors: string[] = [];
-  let duplicateSummary: DuplicateBatchSummary | null = null;
 
-  const productNames = [
-    ...new Set(listings.map((listing) => listing.product_name)),
-  ];
-  const { data: existingProducts, error: productLookupError } = await supabase
-    .from("products")
-    .select("id, name")
-    .in("name", productNames);
+  const syncState = await prepareListingSyncState(supabase, listings);
+  const errors = [...syncState.errors];
 
-  if (productLookupError) throw productLookupError;
+  logDuplicateSummary(`Source ${sourceId}`, syncState.duplicateSummary);
 
-  const productIds = new Map(
-    (existingProducts ?? []).map((product) => [
-      String(product.name),
-      product.id,
-    ]),
-  );
-
-  const matchedProducts = await applyMatchedProductIds(
-    supabase,
-    listings,
-    productIds,
-    errors,
-  );
-
-  const duplicateGroups = groupListingDuplicates(
-    listings.map((l) => ({
-      id: l.external_id || createListingExternalId(l.url),
-      title: l.title,
-      price: l.price,
-      source: l.source,
-      condition: l.condition,
-    })),
-    70,
-  );
-
-  if (duplicateGroups.matchedCount > 0) {
-    console.log(`[Duplicate Detection] Source ${sourceId}: Found ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`);
-  }
-  duplicateSummary = summarizeDuplicateGroups(duplicateGroups, listings.length, 70);
-
-  const payload = [];
+  const payload: Array<Record<string, unknown>> = [];
   for (const listing of listings) {
-    const productId = productIds.get(listing.product_name);
+    const productId = syncState.productIds.get(listing.product_name);
     if (!productId) {
       errorCount += 1;
       errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
       continue;
     }
 
-    payload.push({
-      external_id: listing.external_id || createListingExternalId(listing.url),
-      product_id: productId,
-      title: listing.title,
-      price: listing.price,
-      city: listing.city,
-      source: listing.source,
-      url: listing.url,
-      condition: listing.condition,
-      image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-      description: listing.description ?? null,
-      old_price: listing.old_price ?? null,
-      brand: listing.brand ?? null,
-      model: listing.model ?? null,
-      storage: listing.storage ?? null,
-      ram: listing.ram ?? null,
-      color: listing.color ?? null,
-      warranty: listing.warranty ?? null,
-      seller_name: listing.seller_name ?? null,
-      source_type: listing.source_type ?? null,
-      category: listing.category ?? null,
-      status: normalizeSyncStatus(listing.status),
-      raw_payload: listing,
-    });
+    payload.push(buildRpcListingPayload(listing, productId));
   }
 
   if (!payload.length) {
@@ -141,10 +118,10 @@ export async function syncListingsForSource(
       inactive,
       reactivated,
       skipped,
-      matchedProducts,
+      matchedProducts: syncState.matchedProducts,
       errorCount,
       errors,
-      duplicateSummary,
+      duplicateSummary: syncState.duplicateSummary,
     };
   }
 
@@ -169,13 +146,13 @@ export async function syncListingsForSource(
       inactive: legacy.inactive,
       reactivated: legacy.reactivated,
       skipped: legacy.skipped,
-      matchedProducts,
+      matchedProducts: syncState.matchedProducts,
       errorCount: legacy.errorCount,
       errors: [
         `RPC başarısız oldu, direct fallback kullanıldı: ${rpcResult.error.message}`,
         ...legacy.errors,
       ],
-      duplicateSummary: legacy.duplicateSummary ?? duplicateSummary,
+      duplicateSummary: legacy.duplicateSummary ?? syncState.duplicateSummary,
     };
   }
 
@@ -192,10 +169,10 @@ export async function syncListingsForSource(
     inactive,
     reactivated,
     skipped,
-    matchedProducts,
+    matchedProducts: syncState.matchedProducts,
     errorCount,
     errors,
-    duplicateSummary,
+    duplicateSummary: syncState.duplicateSummary,
   };
 }
 
@@ -206,48 +183,10 @@ export async function insertListingsLegacy(
   let imported = 0;
   let skipped = 0;
   let errorCount = 0;
-  const errors: string[] = [];
-  let duplicateSummary: DuplicateBatchSummary | null = null;
+  const syncState = await prepareListingSyncState(supabase, listings);
+  const errors = [...syncState.errors];
 
-  const productNames = [
-    ...new Set(listings.map((listing) => listing.product_name)),
-  ];
-  const { data: existingProducts, error: productLookupError } = await supabase
-    .from("products")
-    .select("id, name")
-    .in("name", productNames);
-
-  if (productLookupError) throw productLookupError;
-
-  const productIds = new Map(
-    (existingProducts ?? []).map((product) => [
-      String(product.name),
-      product.id,
-    ]),
-  );
-
-  const matchedProducts = await applyMatchedProductIds(
-    supabase,
-    listings,
-    productIds,
-    errors,
-  );
-
-  const duplicateGroups = groupListingDuplicates(
-    listings.map((l) => ({
-      id: l.external_id || createListingExternalId(l.url),
-      title: l.title,
-      price: l.price,
-      source: l.source,
-      condition: l.condition,
-    })),
-    70,
-  );
-
-  if (duplicateGroups.matchedCount > 0) {
-    console.log(`[Duplicate Detection] Legacy sync: Found ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`);
-  }
-  duplicateSummary = summarizeDuplicateGroups(duplicateGroups, listings.length, 70);
+  logDuplicateSummary("Legacy sync", syncState.duplicateSummary);
 
   const urls = listings.map((listing) => listing.url);
   const { data: existingListings, error: duplicateError } = await supabase
@@ -266,28 +205,16 @@ export async function insertListingsLegacy(
       continue;
     }
 
-    const productId = productIds.get(listing.product_name);
+    const productId = syncState.productIds.get(listing.product_name);
     if (!productId) {
       errorCount += 1;
       errors.push(`${listing.title}: ürün kimliği bulunamadı.`);
       continue;
     }
 
-    const status =
-      listing.status === "pending" ? "pending" : normalizeSyncStatus(listing.status);
     const { data: createdListing, error: listingInsertError } = await supabase
       .from("listings")
-      .insert({
-        product_id: productId,
-        title: listing.title,
-        price: listing.price,
-        city: listing.city,
-        source: listing.source,
-        url: listing.url,
-        condition: listing.condition,
-        image_url: listing.image_url ?? listing.image_urls[0] ?? null,
-        status,
-      })
+      .insert(buildLegacyListingPayload(listing, productId))
       .select("id")
       .single();
 
@@ -300,6 +227,7 @@ export async function insertListingsLegacy(
       );
       continue;
     }
+
     await recordListingPriceHistory(supabase, {
       productId,
       listingId: createdListing.id,
@@ -315,10 +243,10 @@ export async function insertListingsLegacy(
     inactive: 0,
     reactivated: 0,
     skipped,
-    matchedProducts,
+    matchedProducts: syncState.matchedProducts,
     errorCount,
     errors,
-    duplicateSummary,
+    duplicateSummary: syncState.duplicateSummary,
   };
 }
 
@@ -336,7 +264,112 @@ function isRpcSignatureError(error: unknown) {
   );
 }
 
-async function applyMatchedProductIds(
+async function loadProductIdsForListings(
+  supabase: SupabaseClient,
+  listings: BotAdapterListing[],
+) {
+  const productNames = [...new Set(listings.map((listing) => listing.product_name))];
+  const { data: existingProducts, error: productLookupError } = await supabase
+    .from("products")
+    .select("id, name")
+    .in("name", productNames);
+
+  if (productLookupError) throw productLookupError;
+
+  return new Map(
+    (existingProducts ?? []).map((product) => [String(product.name), product.id]),
+  );
+}
+
+function buildDuplicateSummary(listings: BotAdapterListing[]) {
+  const duplicateGroups = groupListingDuplicates(
+    listings.map(toDuplicateListingInput),
+    70,
+  );
+
+  return summarizeDuplicateGroups(duplicateGroups, listings.length, 70);
+}
+
+function logDuplicateSummary(
+  label: string,
+  duplicateSummary: DuplicateBatchSummary | null,
+) {
+  if (!duplicateSummary || duplicateSummary.matchedGroupCount === 0) return;
+  console.log(
+    `[Duplicate Detection] ${label}: Found ${duplicateSummary.groupCount} groups, ${duplicateSummary.matchedGroupCount} with duplicates`,
+  );
+}
+
+function toDuplicateListingInput(
+  listing: BotAdapterListing,
+): DuplicateListingInput {
+  return {
+    id: listing.external_id || createListingExternalId(listing.url),
+    title: listing.title,
+    price: listing.price,
+    source: listing.source,
+    condition: listing.condition,
+  };
+}
+
+function resolveListingImageUrl(listing: BotAdapterListing) {
+  return listing.image_url ?? listing.image_urls[0] ?? null;
+}
+
+function resolveListingExternalId(listing: BotAdapterListing) {
+  return listing.external_id || createListingExternalId(listing.url);
+}
+
+function buildListingPayloadBase(
+  listing: BotAdapterListing,
+  productId: string | number,
+) {
+  return {
+    product_id: productId,
+    title: listing.title,
+    price: listing.price,
+    city: listing.city,
+    source: listing.source,
+    url: listing.url,
+    condition: listing.condition,
+    image_url: resolveListingImageUrl(listing),
+  };
+}
+
+function buildRpcListingPayload(
+  listing: BotAdapterListing,
+  productId: string | number,
+) {
+  return {
+    ...buildListingPayloadBase(listing, productId),
+    external_id: resolveListingExternalId(listing),
+    description: listing.description ?? null,
+    old_price: listing.old_price ?? null,
+    brand: listing.brand ?? null,
+    model: listing.model ?? null,
+    storage: listing.storage ?? null,
+    ram: listing.ram ?? null,
+    color: listing.color ?? null,
+    warranty: listing.warranty ?? null,
+    seller_name: listing.seller_name ?? null,
+    source_type: listing.source_type ?? null,
+    category: listing.category ?? null,
+    status: normalizeSyncStatus(listing.status),
+    raw_payload: listing,
+  };
+}
+
+function buildLegacyListingPayload(
+  listing: BotAdapterListing,
+  productId: string | number,
+) {
+  return {
+    ...buildListingPayloadBase(listing, productId),
+    status: normalizeSyncStatus(listing.status),
+  };
+}
+
+async function resolveMatchedProductIds(
   supabase: SupabaseClient,
   listings: BotAdapterListing[],
   productIds: Map<string, string | number>,

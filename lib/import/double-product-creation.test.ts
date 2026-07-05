@@ -8,7 +8,7 @@ import { importListings } from "./import-listings";
 
 type QueryResult<T> = {
   data: T;
-  error: null;
+  error: unknown | null;
 };
 
 type CallRecord = {
@@ -409,6 +409,59 @@ describe("double product creation guard", () => {
           ]),
         }),
       );
+    });
+
+    it("falls back to legacy sync when the RPC signature is unavailable", async () => {
+      const stub = createSupabaseStub({
+        tables: {
+          products: {
+            defaultResult: { data: [], error: null },
+          },
+          listings: {
+            defaultResult: { data: [], error: null },
+            singleResult: { data: { id: 88 }, error: null },
+          },
+        },
+        rpcResult: {
+          data: null,
+          error: {
+            code: "PGRST202",
+            message: "could not find the function public.sync_source_listings",
+            details: "",
+          },
+        },
+      });
+
+      findOrCreateMatchedProductMock.mockResolvedValueOnce(matchedProduct(701));
+      findOrCreateMatchedProductMock.mockResolvedValueOnce(matchedProduct(701));
+
+      const result = await syncListingsForSource(
+        stub.supabase as unknown as SupabaseClient,
+        15,
+        [
+          makeBotListing({
+            external_id: "sync-fallback-1",
+            product_name: "iPhone 14",
+            title: "iPhone 14 128GB",
+            url: "https://easycep.com/sync-fallback-1",
+          }),
+        ],
+      );
+
+      expect(stub.rpc).toHaveBeenCalledTimes(2);
+      expect(findOrCreateMatchedProductMock).toHaveBeenCalledTimes(2);
+      expect(result.imported).toBe(1);
+      expect(result.errorCount).toBe(0);
+      expect(result.duplicateSummary).not.toBeNull();
+
+      const insertCall = stub.calls.find(
+        (call) => call.table === "listings" && call.method === "insert",
+      );
+      expect(insertCall?.args[0]).toMatchObject({
+        product_id: 701,
+        status: "active",
+      });
+      expect(recordListingPriceHistoryMock).toHaveBeenCalledTimes(1);
     });
 
     it("does not directly insert products in the legacy fallback path", async () => {
