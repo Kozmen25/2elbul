@@ -32,6 +32,7 @@ import {
   type RelatedProductSummary,
 } from "@/lib/product-detail";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { MarketIntelligencePanel } from "./market-intelligence-panel";
 import {
   ListingPriceHistoryChart,
   type ListingPriceHistoryPoint,
@@ -275,6 +276,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             wide
           />
         </div>
+
+        <MarketIntelligencePanel marketIntelligence={marketIntelligence} />
 
         <div className="mt-6 max-w-md">
           <PriceAlertForm
