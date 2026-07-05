@@ -9,6 +9,7 @@ import {
   normalizeSyncStatus,
   syncListingsForSource,
 } from "@/lib/bots/listing-sync";
+import type { DuplicateBatchSummary } from "@/lib/product-matcher";
 import type { BotAdapterListing } from "@/lib/bots/types";
 
 export type SourceRunRecord = {
@@ -38,6 +39,7 @@ export type SourceRunResult = {
   errorCount: number;
   errorMessage: string | null;
   durationMs: number;
+  duplicateSummary: DuplicateBatchSummary | null;
 };
 
 type RunSourceOptions = {
@@ -103,6 +105,7 @@ export async function runSourceScrapeBot(
   let matchedProducts = 0;
   let errorCount = 0;
   const errors: string[] = [];
+  let duplicateSummary: DuplicateBatchSummary | null = null;
   let finalStatus: "success" | "failed" = "success";
   let durationMs = 0;
 
@@ -143,6 +146,7 @@ export async function runSourceScrapeBot(
       matchedProducts = result.matchedProducts;
       errorCount += result.errorCount;
       errors.push(...result.errors);
+      duplicateSummary = result.duplicateSummary;
       if (errorCount > 0) finalStatus = "failed";
     }
   } catch (error) {
@@ -216,6 +220,7 @@ export async function runSourceScrapeBot(
     errorCount,
     errorMessage,
     durationMs,
+    duplicateSummary,
   };
 }
 
@@ -302,6 +307,7 @@ function emptyFailedResult(
     errorCount: 1,
     errorMessage,
     durationMs: 0,
+    duplicateSummary: null,
   };
 }
 

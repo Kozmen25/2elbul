@@ -3,6 +3,8 @@ import {
   extractProductSignals,
   generateProductKey,
   normalizeProductTitle,
+  groupListingDuplicates,
+  summarizeDuplicateGroups,
 } from "./product-matcher";
 
 describe("product matcher", () => {
@@ -70,5 +72,40 @@ describe("product matcher", () => {
       category: "Telefon",
       normalizedKey: "samsung-galaxy-s23-ultra-256gb",
     });
+  });
+
+  it("summarizes duplicate batches for pipeline metadata", () => {
+    const listings = [
+      {
+        id: "dup-1",
+        title: "iPhone 13 Pro 128GB",
+        price: 24000,
+        source: "EasyCep",
+        condition: "refurbished",
+      },
+      {
+        id: "dup-2",
+        title: "Apple iPhone 13 Pro 128 GB",
+        price: 24200,
+        source: "Getmobil",
+        condition: "refurbished",
+      },
+      {
+        id: "uniq-1",
+        title: "Samsung Galaxy S23 Ultra 256GB",
+        price: 30000,
+        source: "Teknosa",
+        condition: "refurbished",
+      },
+    ];
+
+    const grouped = groupListingDuplicates(listings, 70);
+    const summary = summarizeDuplicateGroups(grouped, listings.length, 70);
+
+    expect(summary.itemCount).toBe(3);
+    expect(summary.groupCount).toBe(grouped.count);
+    expect(summary.matchedGroupCount).toBe(grouped.matchedCount);
+    expect(summary.duplicatePairCount).toBeGreaterThan(0);
+    expect(summary.topGroups.length).toBeGreaterThan(0);
   });
 });

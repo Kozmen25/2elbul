@@ -3,7 +3,12 @@ import "server-only";
 import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotAdapterListing } from "@/lib/bots/types";
-import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import {
+  findOrCreateMatchedProduct,
+  groupListingDuplicates,
+  summarizeDuplicateGroups,
+  type DuplicateBatchSummary,
+} from "@/lib/product-matcher";
 import { recordListingPriceHistory } from "@/lib/price-history";
 
 type SyncRpcResult = {
@@ -23,6 +28,7 @@ export type ListingSyncResult = {
   matchedProducts: number;
   errorCount: number;
   errors: string[];
+  duplicateSummary: DuplicateBatchSummary | null;
 };
 
 export function normalizeSyncStatus(value: unknown) {
@@ -50,6 +56,7 @@ export async function syncListingsForSource(
   let skipped = 0;
   let errorCount = 0;
   const errors: string[] = [];
+  let duplicateSummary: DuplicateBatchSummary | null = null;
 
   const productNames = [
     ...new Set(listings.map((listing) => listing.product_name)),
@@ -92,6 +99,22 @@ export async function syncListingsForSource(
     productIds,
     errors,
   );
+
+  const duplicateGroups = groupListingDuplicates(
+    listings.map((l) => ({
+      id: l.external_id || createListingExternalId(l.url),
+      title: l.title,
+      price: l.price,
+      source: l.source,
+      condition: l.condition,
+    })),
+    70,
+  );
+
+  if (duplicateGroups.matchedCount > 0) {
+    console.log(`[Duplicate Detection] Source ${sourceId}: Found ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`);
+  }
+  duplicateSummary = summarizeDuplicateGroups(duplicateGroups, listings.length, 70);
 
   const payload = [];
   for (const listing of listings) {
@@ -138,6 +161,7 @@ export async function syncListingsForSource(
       matchedProducts,
       errorCount,
       errors,
+      duplicateSummary,
     };
   }
 
@@ -168,6 +192,7 @@ export async function syncListingsForSource(
         `RPC başarısız oldu, direct fallback kullanıldı: ${rpcResult.error.message}`,
         ...legacy.errors,
       ],
+      duplicateSummary: legacy.duplicateSummary ?? duplicateSummary,
     };
   }
 
@@ -187,6 +212,7 @@ export async function syncListingsForSource(
     matchedProducts,
     errorCount,
     errors,
+    duplicateSummary,
   };
 }
 
@@ -198,6 +224,7 @@ export async function insertListingsLegacy(
   let skipped = 0;
   let errorCount = 0;
   const errors: string[] = [];
+  let duplicateSummary: DuplicateBatchSummary | null = null;
 
   const productNames = [
     ...new Set(listings.map((listing) => listing.product_name)),
@@ -239,6 +266,22 @@ export async function insertListingsLegacy(
     productIds,
     errors,
   );
+
+  const duplicateGroups = groupListingDuplicates(
+    listings.map((l) => ({
+      id: l.external_id || createListingExternalId(l.url),
+      title: l.title,
+      price: l.price,
+      source: l.source,
+      condition: l.condition,
+    })),
+    70,
+  );
+
+  if (duplicateGroups.matchedCount > 0) {
+    console.log(`[Duplicate Detection] Legacy sync: Found ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`);
+  }
+  duplicateSummary = summarizeDuplicateGroups(duplicateGroups, listings.length, 70);
 
   const urls = listings.map((listing) => listing.url);
   const { data: existingListings, error: duplicateError } = await supabase
@@ -309,6 +352,7 @@ export async function insertListingsLegacy(
     matchedProducts,
     errorCount,
     errors,
+    duplicateSummary,
   };
 }
 

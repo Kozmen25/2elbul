@@ -1,4 +1,5 @@
 import type { ListingCondition, ListingSource } from "@/lib/listings";
+import type { DuplicateBatchSummary } from "@/lib/product-matcher";
 
 export type ImportSource = Extract<
   ListingSource,
@@ -40,4 +41,5 @@ export type ImportResult = {
   imported: number;
   failed: number;
   errors: Array<{ index: number; message: string }>;
+  duplicateSummary: DuplicateBatchSummary | null;
 };

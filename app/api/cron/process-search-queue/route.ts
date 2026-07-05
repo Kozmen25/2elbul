@@ -4,7 +4,12 @@ import {
   getInstantSearchAdapters,
   type NormalizedListing,
 } from "@/lib/source-adapters";
-import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import {
+  findOrCreateMatchedProduct,
+  groupListingDuplicates,
+  summarizeDuplicateGroups,
+  type DuplicateBatchSummary,
+} from "@/lib/product-matcher";
 import { recordListingPriceHistory } from "@/lib/price-history";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeSearchText } from "@/lib/unified-source-engine/helpers";
@@ -34,6 +39,7 @@ type ImportedListingResult = {
   updated: number;
   skipped: number;
   matchedProducts: number;
+  duplicateSummary: DuplicateBatchSummary | null;
 };
 
 type SearchAdapterResult = {
@@ -144,6 +150,7 @@ export async function GET(request: NextRequest) {
           imported: 0,
           updated: 0,
           skipped: 1,
+          duplicateSummary: null,
           triedAdapters: searchResult.triedAdapters,
           message,
         });
@@ -213,7 +220,13 @@ export async function GET(request: NextRequest) {
         .eq("id", job.demand_id);
 
       failed += 1;
-      results.push({ id: job.id, ok: false, error: message, retry: shouldRetry });
+      results.push({
+        id: job.id,
+        ok: false,
+        error: message,
+        retry: shouldRetry,
+        duplicateSummary: null,
+      });
     }
   }
 
@@ -345,6 +358,29 @@ async function importAdapterListings(
   let updated = 0;
   let skipped = 0;
   const matchedProductIds = new Set<string>();
+  let duplicateSummary: DuplicateBatchSummary | null = null;
+
+  if (listings.length > 1) {
+    const duplicateGroups = groupListingDuplicates(
+      listings.map((l, idx) => ({
+        id: l.externalId || `queue-${idx}`,
+        title: l.title,
+        price: l.price,
+        source: l.sourceName,
+        condition: "İkinci El",
+      })),
+      70,
+    );
+
+    if (duplicateGroups.matchedCount > 0) {
+      console.log(`[Process Queue Duplicate Detection] Source "${source.name}" Query "${job.query}": Found ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`);
+    }
+    duplicateSummary = summarizeDuplicateGroups(
+      duplicateGroups,
+      listings.length,
+      70,
+    );
+  }
 
   for (const listing of listings) {
     const productId = await ensureProduct(supabase, listing, job.query);
@@ -390,7 +426,13 @@ async function importAdapterListings(
   }
 
   if (!listings.length) skipped += 1;
-  return { imported, updated, skipped, matchedProducts: matchedProductIds.size };
+  return {
+    imported,
+    updated,
+    skipped,
+    matchedProducts: matchedProductIds.size,
+    duplicateSummary,
+  };
 }
 
 async function ensureProduct(

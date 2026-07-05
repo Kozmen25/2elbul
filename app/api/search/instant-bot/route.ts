@@ -4,7 +4,12 @@ import {
   getInstantSearchAdapters,
   type NormalizedListing,
 } from "@/lib/source-adapters";
-import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import {
+  findOrCreateMatchedProduct,
+  groupListingDuplicates,
+  summarizeDuplicateGroups,
+  type DuplicateBatchSummary,
+} from "@/lib/product-matcher";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeSearchText } from "@/lib/unified-source-engine/helpers";
@@ -164,6 +169,7 @@ export async function POST(request: NextRequest) {
           found: 0,
           imported: 0,
           updated: 0,
+          duplicateSummary: null,
           triedAdapters: searchResult.triedAdapters,
           message,
         });
@@ -224,7 +230,13 @@ export async function POST(request: NextRequest) {
           error_message: message,
         })
         .eq("id", job.demand_id);
-      results.push({ id: job.id, ok: false, error: message, retry: shouldRetry });
+      results.push({
+        id: job.id,
+        ok: false,
+        error: message,
+        retry: shouldRetry,
+        duplicateSummary: null,
+      });
     }
   }
 
@@ -344,6 +356,29 @@ async function importListings(
   let imported = 0;
   let updated = 0;
   const matchedProductIds = new Set<string>();
+  let duplicateSummary: DuplicateBatchSummary | null = null;
+
+  if (listings.length > 1) {
+    const duplicateGroups = groupListingDuplicates(
+      listings.map((l, idx) => ({
+        id: l.externalId || `search-${idx}`,
+        title: l.title,
+        price: l.price,
+        source: l.sourceName,
+        condition: "Yenilenmiş",
+      })),
+      70,
+    );
+
+    if (duplicateGroups.matchedCount > 0) {
+      console.log(`[Search Pipeline Duplicate Detection] Query: "${job.query}": Found ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`);
+    }
+    duplicateSummary = summarizeDuplicateGroups(
+      duplicateGroups,
+      listings.length,
+      70,
+    );
+  }
 
   for (const listing of listings) {
     const productId = await ensureProduct(supabase, listing, job.query, resolver);
@@ -367,7 +402,12 @@ async function importListings(
     else imported += 1;
   }
 
-  return { imported, updated, matchedProducts: matchedProductIds.size };
+  return {
+    imported,
+    updated,
+    matchedProducts: matchedProductIds.size,
+    duplicateSummary,
+  };
 }
 
 async function ensureProduct(

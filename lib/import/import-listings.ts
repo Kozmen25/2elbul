@@ -4,7 +4,11 @@ import type {
   ImportSource,
   RawImportListing,
 } from "@/lib/import/types";
-import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
+import {
+  findOrCreateMatchedProduct,
+  groupListingDuplicates,
+  summarizeDuplicateGroups,
+} from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGlobalContext } from "@/lib/taxonomy/context";
 
@@ -20,11 +24,57 @@ export async function importListings(
   const resolver = getGlobalContext().getResolver();
 
   const adapter = importAdapters[source];
-  const result: ImportResult = { imported: 0, failed: 0, errors: [] };
+  const result: ImportResult = {
+    imported: 0,
+    failed: 0,
+    errors: [],
+    duplicateSummary: null,
+  };
 
-  for (const [index, record] of records.entries()) {
+  const normalizedListings = records
+    .map((record, index) => {
+      try {
+        return {
+          index,
+          listing: adapter.normalize(record),
+        };
+      } catch (error) {
+        result.failed += 1;
+        result.errors.push({
+          index,
+          message: error instanceof Error ? error.message : "Normalizasyon hatası",
+        });
+        return null;
+      }
+    })
+    .filter((x) => x !== null) as Array<{ index: number; listing: ReturnType<typeof adapter.normalize> }>;
+
+  if (normalizedListings.length > 0) {
+    const duplicateGroups = groupListingDuplicates(
+      normalizedListings.map((entry) => ({
+        id: entry.listing.externalId || `item-${entry.index}`,
+        title: entry.listing.title,
+        price: entry.listing.price,
+        source: entry.listing.source,
+        condition: entry.listing.condition,
+      })),
+      70,
+    );
+    result.duplicateSummary = summarizeDuplicateGroups(
+      duplicateGroups,
+      normalizedListings.length,
+      70,
+    );
+
+    if (duplicateGroups.matchedCount > 0) {
+      console.log(
+        `[Import Duplicate Detection] Source ${source}: ${duplicateGroups.count} groups, ${duplicateGroups.matchedCount} with duplicates`,
+      );
+    }
+  }
+
+  for (const { index, listing } of normalizedListings) {
     try {
-      const listing = adapter.normalize(record);
       const { data: product, error: productError } = await supabase
         .from("products")
         .upsert(
