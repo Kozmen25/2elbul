@@ -17,6 +17,11 @@ import {
 } from "@/lib/market-intelligence";
 import { toConfidenceLevel, toConfidenceResult } from "@/lib/market-intelligence/helpers";
 import {
+  buildOpportunityAnalysis,
+  buildOpportunityJsonLdProperties,
+  type OpportunityAnalysis,
+} from "@/lib/opportunity-engine";
+import {
   calculateMarketStats,
   type PriceHistoryRecord,
 } from "@/lib/price-insights";
@@ -46,9 +51,13 @@ export type ProductDetailData = {
   priceHistory: PriceHistoryRecord[];
   intelligence: ProductIntelligence;
   decisionInsight: ProductDecisionInsight;
-  marketIntelligence: MarketIntelligence;
+  marketIntelligence: ProductDetailMarketIntelligence;
   bestDeals: ProductBestDeal[];
   relatedProducts: RelatedProductSummary[];
+};
+
+export type ProductDetailMarketIntelligence = MarketIntelligence & {
+  opportunityAnalysis: OpportunityAnalysis;
 };
 
 export type ConfidenceLevel =
@@ -930,6 +939,22 @@ function buildDuplicateSummaryFromListings(
   );
 }
 
+function getLatestListingTimestamp(listings: MarketIntelligenceListing[]) {
+  let latestTime = Number.NEGATIVE_INFINITY;
+
+  for (const listing of listings) {
+    for (const candidate of [listing.updatedAt, listing.createdAt]) {
+      if (!candidate) continue;
+      const time = new Date(candidate).getTime();
+      if (Number.isFinite(time) && time > latestTime) {
+        latestTime = time;
+      }
+    }
+  }
+
+  return Number.isFinite(latestTime) ? new Date(latestTime).toISOString() : null;
+}
+
 export function buildMarketIntelligenceForProductDetail({
   product,
   productBrand,
@@ -946,8 +971,8 @@ export function buildMarketIntelligenceForProductDetail({
   decisionInsight: ProductDecisionInsight;
   duplicateSummary: DuplicateBatchSummary;
   analyzedAt?: string | Date | null;
-}) {
-  return buildMarketIntelligence({
+}): ProductDetailMarketIntelligence {
+  const marketIntelligence = buildMarketIntelligence({
     scope: {
       productId: product.id,
       productName: product.name,
@@ -962,4 +987,24 @@ export function buildMarketIntelligenceForProductDetail({
     duplicateSummary,
     analyzedAt: analyzedAt ?? new Date(),
   });
+
+  const opportunityAnalysis = buildOpportunityAnalysis({
+    marketIntelligence,
+    intelligence,
+    duplicateSummary,
+    analyzedAt: marketIntelligence.analysisGeneratedAt,
+    latestListingAt: getLatestListingTimestamp(listings),
+  });
+
+  return {
+    ...marketIntelligence,
+    opportunityAnalysis,
+    structuredData: {
+      ...marketIntelligence.structuredData,
+      additionalProperty: [
+        ...marketIntelligence.structuredData.additionalProperty,
+        ...buildOpportunityJsonLdProperties(opportunityAnalysis, marketIntelligence),
+      ],
+    },
+  };
 }

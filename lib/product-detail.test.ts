@@ -426,4 +426,70 @@ describe("buildMarketIntelligenceForProductDetail", () => {
     expect(result.marketSummary.duplicateGroupCount).toBe(fallback.groupCount);
     expect(result.marketSummary.duplicatePairCount).toBe(fallback.duplicatePairCount);
   });
+
+  it("exposes opportunity analysis on the returned market intelligence", () => {
+    const result = buildMarketIntelligenceForProductDetail({
+      product,
+      productBrand: "Apple",
+      listings: duplicatedListings,
+      intelligence,
+      decisionInsight,
+      duplicateSummary,
+      analyzedAt,
+    });
+
+    expect(result.opportunityAnalysis.sampleSize).toBe(3);
+    expect(result.opportunityAnalysis.scoreGeneratedAt).toBe(analyzedAt);
+    expect(result.opportunityAnalysis.scoreVersion).toBe("opportunity-score-v1");
+    expect(result.opportunityAnalysis.dataFreshness).toBe("stale");
+  });
+
+  it("embeds opportunity metadata into JSON-LD additional properties", () => {
+    const result = buildMarketIntelligenceForProductDetail({
+      product,
+      productBrand: "Apple",
+      listings: duplicatedListings,
+      intelligence,
+      decisionInsight,
+      duplicateSummary,
+      analyzedAt,
+    });
+
+    expect(getProperty(result, "Opportunity score")).toBe(result.opportunityAnalysis.opportunityScore);
+    expect(getProperty(result, "Opportunity level")).toBeDefined();
+    expect(getProperty(result, "Risk level")).toBeDefined();
+    expect(getProperty(result, "Recommendation")).toBeDefined();
+    expect(getProperty(result, "Score version")).toBe("opportunity-score-v1");
+  });
+
+  it("keeps the opportunity engine safe for an empty product dataset", () => {
+    const result = buildMarketIntelligenceForProductDetail({
+      product,
+      productBrand: "Apple",
+      listings: [],
+      intelligence: intelligence as ProductIntelligence,
+      decisionInsight: emptyDecisionInsight,
+      duplicateSummary: emptySummary,
+      analyzedAt,
+    });
+
+    expect(result.opportunityAnalysis.recommendation.action).toBe("insufficient_data");
+    expect(result.opportunityAnalysis.sampleSize).toBe(0);
+    expect(result.opportunityAnalysis.dataFreshness).toBe("unknown");
+  });
+
+  it("keeps duplicate-driven warning signals in the product detail pipeline", () => {
+    const result = buildMarketIntelligenceForProductDetail({
+      product,
+      productBrand: "Apple",
+      listings: duplicatedListings,
+      intelligence,
+      decisionInsight,
+      duplicateSummary,
+      analyzedAt,
+    });
+
+    expect(result.opportunityAnalysis.warningSignals).toContain("Duplicate yoğunluğu yüksek");
+    expect(result.opportunityAnalysis.positiveSignals).toContain("Fiyat ortalamanın altında");
+  });
 });
