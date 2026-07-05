@@ -382,6 +382,7 @@ async function applyMatchedProductIds(
         title: listing.title,
         productName: listing.product_name,
         category: listing.category,
+        source: listing.source,
       });
       productIds.set(listing.product_name, product.id);
       matchedIds.add(String(product.id));

@@ -96,6 +96,7 @@ export async function importListings(
         title: listing.title,
         productName: listing.productName,
         category: listing.category,
+        source,
         resolver,
       });
 

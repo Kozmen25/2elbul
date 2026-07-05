@@ -3,6 +3,7 @@ import {
   compareMultiple,
   findBestMatch,
 } from './engine';
+import type { ConfidenceMetadata } from '../confidence-engine';
 import type {
   ComparisonInput,
   DuplicateMatch,
@@ -33,6 +34,9 @@ export function findDuplicateMatches(
           listing2Id: listings[j].id,
           score: result.score,
           confidence: result.confidence,
+          confidenceScore: result.confidenceScore,
+          confidenceLevel: result.confidenceLevel,
+          confidenceReasons: result.confidenceReasons,
         });
       }
     }
@@ -81,6 +85,10 @@ export function groupDuplicates(
         return {
           ...listing,
           score: result.score,
+          confidence: result.confidence,
+          confidenceScore: result.confidenceScore,
+          confidenceLevel: result.confidenceLevel,
+          confidenceReasons: result.confidenceReasons,
         };
       });
 
@@ -95,7 +103,11 @@ export function getHighestScoringDuplicate(
   reference: ComparisonInput,
   candidates: Array<ComparisonInput & { id: string | number }>,
   threshold: number = 70
-): (ComparisonInput & { id: string | number; score: number }) | null {
+): (ComparisonInput & {
+  id: string | number;
+  score: number;
+  confidence: 'same' | 'strong' | 'possible' | 'different';
+}) & ConfidenceMetadata | null {
   const results = compareMultiple(reference, candidates);
 
   for (const result of results) {
@@ -105,6 +117,10 @@ export function getHighestScoringDuplicate(
         return {
           ...candidate,
           score: result.result.score,
+          confidence: result.result.confidence,
+          confidenceScore: result.result.confidenceScore,
+          confidenceLevel: result.result.confidenceLevel,
+          confidenceReasons: result.result.confidenceReasons,
         };
       }
     }

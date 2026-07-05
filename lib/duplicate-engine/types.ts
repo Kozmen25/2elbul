@@ -1,3 +1,5 @@
+import type { ConfidenceMetadata } from "../confidence-engine";
+
 export interface DuplicateScore {
   normalization: number;
   brand: number;
@@ -11,7 +13,7 @@ export interface DuplicateScore {
   sourceDiversity: number;
 }
 
-export interface DuplicateResult {
+export interface DuplicateResult extends ConfidenceMetadata {
   score: number;
   confidence: 'same' | 'strong' | 'possible' | 'different';
   signals: DuplicateScore;
@@ -39,14 +41,20 @@ export interface ComparisonInput {
   sourceId?: number | null;
 }
 
-export interface DuplicateMatch {
+export interface DuplicateMatch extends ConfidenceMetadata {
   listing1Id: string | number;
   listing2Id: string | number;
   score: number;
   confidence: 'same' | 'strong' | 'possible' | 'different';
 }
 
+export interface DuplicateGroupItem extends ConfidenceMetadata {
+  id: string | number;
+  score: number;
+  confidence: 'same' | 'strong' | 'possible' | 'different';
+}
+
 export interface DuplicateGroup {
   canonical: ComparisonInput;
-  duplicates: Array<ComparisonInput & { score: number }>;
+  duplicates: Array<ComparisonInput & DuplicateGroupItem>;
 }

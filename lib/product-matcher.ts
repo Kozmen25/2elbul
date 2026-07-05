@@ -2,11 +2,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ICategoryResolver } from "./taxonomy/integration";
 import { normalizeProductTitle as newNormalizeProductTitle } from "./normalization";
 import type { DuplicateMatch, DuplicateGroup } from "./duplicate-engine/types";
+import type { ConfidenceMetadata } from "./confidence-engine";
 import {
   createComparisonInput,
   compareListings,
   groupDuplicates as groupDuplicatesEngine,
 } from "./duplicate-engine";
+import {
+  buildProductMatcherConfidenceInput,
+  calculateConfidence,
+  toConfidenceMetadata,
+} from "./confidence-engine";
 
 export type ProductSignals = {
   brand: string | null;
@@ -23,7 +29,7 @@ export type MatchedProduct = {
   name: string;
   signals: ProductSignals;
   created: boolean;
-};
+} & ConfidenceMetadata;
 
 export type ProductMatcherDryRunResult = {
   inputTitle: string;
@@ -36,7 +42,7 @@ export type ProductMatcherDryRunResult = {
   } | null;
   wouldCreate: boolean;
   suggestedName: string;
-};
+} & ConfidenceMetadata;
 
 export type ListingDuplicateDetectionResult = {
   listing: ComparisonListing;
@@ -88,6 +94,7 @@ type FindOrCreateMatchedProductInput = {
   title: string;
   productName?: string | null;
   category?: string | null;
+  source?: string | null;
   resolver?: ICategoryResolver;
 };
 
@@ -117,6 +124,28 @@ const colors = [
 ];
 
 export const normalizeProductTitle = newNormalizeProductTitle;
+
+function buildProductConfidenceMetadata(
+  signals: ProductSignals,
+  input: {
+    normalizedTitle: string;
+    canonicalTitle: string;
+    source?: string | null;
+    category?: string | null;
+  },
+): ConfidenceMetadata {
+  const confidence = calculateConfidence(
+    buildProductMatcherConfidenceInput({
+      signals,
+      normalizedTitle: input.normalizedTitle,
+      canonicalTitle: input.canonicalTitle,
+      sourceName: input.source ?? null,
+      categoryConfidence: input.category ? "medium" : null,
+    }),
+  );
+
+  return toConfidenceMetadata(confidence);
+}
 
 export function extractProductSignals(title: string, resolver?: ICategoryResolver): ProductSignals {
   const normalized = normalizeProductTitle(title);
@@ -159,6 +188,7 @@ export async function dryRunProductMatch({
   title,
   productName,
   category,
+  source,
   resolver,
 }: FindOrCreateMatchedProductInput): Promise<ProductMatcherDryRunResult> {
   const combinedTitle = `${productName ?? ""} ${title}`.trim();
@@ -166,6 +196,12 @@ export async function dryRunProductMatch({
   const normalizedTitle = normalizeProductTitle(combinedTitle);
   const productKey = signals.normalizedKey;
   const suggestedName = createCanonicalProductName(signals, productName || title);
+  const confidence = buildProductConfidenceMetadata(signals, {
+    normalizedTitle,
+    canonicalTitle: suggestedName,
+    source: source ?? null,
+    category: category || signals.category,
+  });
   const matchedProduct = await findExistingMatchedProduct(
     supabase,
     suggestedName,
@@ -188,6 +224,7 @@ export async function dryRunProductMatch({
       : null,
     wouldCreate: !matchedProduct,
     suggestedName,
+    ...confidence,
   };
 }
 
@@ -196,11 +233,20 @@ export async function findOrCreateMatchedProduct({
   title,
   productName,
   category,
+  source,
   resolver,
 }: FindOrCreateMatchedProductInput): Promise<MatchedProduct> {
-  const signals = extractProductSignals(`${productName ?? ""} ${title}`, resolver);
+  const combinedTitle = `${productName ?? ""} ${title}`.trim();
+  const normalizedTitle = normalizeProductTitle(combinedTitle);
+  const signals = extractProductSignals(combinedTitle, resolver);
   const canonicalName = createCanonicalProductName(signals, productName || title);
   const canonicalKey = signals.normalizedKey;
+  const confidence = buildProductConfidenceMetadata(signals, {
+    normalizedTitle,
+    canonicalTitle: canonicalName,
+    source: source ?? null,
+    category: category || signals.category,
+  });
 
   const matchedProduct = await findExistingMatchedProduct(
     supabase,
@@ -213,6 +259,7 @@ export async function findOrCreateMatchedProduct({
       name: matchedProduct.name,
       signals,
       created: false,
+      ...confidence,
     };
   }
 
@@ -240,6 +287,7 @@ export async function findOrCreateMatchedProduct({
         name: String(duplicateLookup.data.name),
         signals,
         created: false,
+        ...confidence,
       };
     }
   }
@@ -252,6 +300,7 @@ export async function findOrCreateMatchedProduct({
     name: String(createdProduct.name),
     signals,
     created: true,
+    ...confidence,
   };
 }
 
@@ -319,17 +368,27 @@ export function detectListingDuplicates(
         listing2Id: candidate.id,
         score: result.score,
         confidence: result.confidence,
+        confidenceScore: result.confidenceScore,
+        confidenceLevel: result.confidenceLevel,
+        confidenceReasons: result.confidenceReasons,
       });
     }
   }
 
-  const maxScore = matches.length > 0 ? matches[0].score : 0;
+  const bestMatch = matches.reduce<DuplicateMatch | null>(
+    (best, match) => {
+      if (!best) return match;
+      return match.score > best.score ? match : best;
+    },
+    null,
+  );
+  const maxScore = bestMatch?.score ?? 0;
 
   return {
     listing: reference,
     duplicates: matches,
     isDuplicate: maxScore >= threshold,
-    confidenceScore: maxScore,
+    confidenceScore: bestMatch?.confidenceScore ?? maxScore,
     suggestion:
       maxScore >= threshold ? "match" : maxScore >= 50 ? "review" : "none",
   };

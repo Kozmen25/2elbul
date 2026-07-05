@@ -9,6 +9,11 @@ import type {
   ComparisonInput,
   DuplicateScore,
 } from './types';
+import {
+  buildDuplicateConfidenceInput,
+  calculateConfidence,
+  toConfidenceMetadata,
+} from '../confidence-engine';
 
 export function createDuplicateFingerprint(
   title: string,
@@ -49,12 +54,21 @@ export function calculateDuplicateScoreForInputs(
   const aggregate = aggregateScores(scores);
   const confidence = determineConfidence(aggregate);
   const reasoning = generateReasoning(scores, aggregate);
+  const confidenceResult = calculateConfidence(
+    buildDuplicateConfidenceInput({
+      duplicateScore: aggregate,
+      signals: scores,
+      sourceCount: resolveSourceCount(input1.sourceId, input2.sourceId),
+      sourceReliability: resolveSourceReliability(input1.sourceId, input2.sourceId),
+    })
+  );
 
   return {
     score: aggregate,
     confidence,
     signals: scores,
     reasoning,
+    ...toConfidenceMetadata(confidenceResult),
   };
 }
 
@@ -155,4 +169,20 @@ export function findBestMatch(
 } | null {
   const results = compareMultiple(reference, candidates);
   return results.length > 0 ? results[0] : null;
+}
+
+function resolveSourceCount(
+  sourceId1: number | null | undefined,
+  sourceId2: number | null | undefined,
+) {
+  if (sourceId1 == null || sourceId2 == null) return 1;
+  return sourceId1 === sourceId2 ? 1 : 2;
+}
+
+function resolveSourceReliability(
+  sourceId1: number | null | undefined,
+  sourceId2: number | null | undefined,
+) {
+  const count = resolveSourceCount(sourceId1, sourceId2);
+  return count >= 2 ? 70 : 55;
 }

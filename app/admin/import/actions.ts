@@ -154,6 +154,7 @@ export async function importAdminListings(
         supabase,
         title: listing.title,
         productName: listing.productName,
+        source: listing.source,
       });
       productId = matchedProduct.id;
     } catch (error) {

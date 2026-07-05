@@ -445,6 +445,7 @@ async function ensureProduct(
     title: listing.title || query,
     productName: listing.model || query,
     category: listing.category,
+    source: listing.sourceName,
   });
   return Number(product.id);
 }
