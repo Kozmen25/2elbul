@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ListingImage } from "@/components/listing-image";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import type { ListingPriceAnalysis } from "@/lib/price-analysis";
 import {
   bulkListingAction,
@@ -489,11 +490,7 @@ function statusLabel(status: string) {
 }
 
 function formatPrice(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatCurrencyTRY(value);
 }
 
 function isTestSource(source: string) {
@@ -501,8 +498,8 @@ function isTestSource(source: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }

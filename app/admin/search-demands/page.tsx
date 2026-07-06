@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
+import { formatDateTR } from "@/lib/formatters";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 type SearchDemand = {
@@ -281,8 +282,8 @@ function statusLabel(status: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }

@@ -42,6 +42,7 @@ import {
 import { calculateOpportunityRating } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import { groupListingDuplicates, summarizeDuplicateGroups } from "@/lib/product-matcher";
+import { formatCurrencyTRY, formatDateTR, formatNumberTR } from "@/lib/formatters";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { toConfidenceResult } from "@/lib/market-intelligence/helpers";
 import { recordSearch } from "./actions";
@@ -92,24 +93,17 @@ type SearchResultsClientProps = {
 const searchDemandMessage =
   "Bu ürün için piyasayı tarıyoruz. Yeni ilanlar geldikçe sonuçlar güncellenecek.";
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+const formatPrice = (price: number) => formatCurrencyTRY(price);
 
 const formatFilterPrice = (price: number) =>
-  `${new Intl.NumberFormat("tr-TR", {
-    maximumFractionDigits: 0,
-  }).format(price)} TL`;
+  `${formatNumberTR(price)} TL`;
 
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("tr-TR", {
+  formatDateTR(date, {
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date(date));
+  });
 
 export function SearchResultsClient({
   query,

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { ListingImage } from "@/components/listing-image";
 import { SearchBar } from "@/components/search-bar";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { createProductSlug } from "@/lib/product-slug";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import {
@@ -92,20 +93,15 @@ const fallbackPopularSearches = [
   "Samsung",
 ];
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+const formatPrice = (price: number) => formatCurrencyTRY(price);
 
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("tr-TR", {
+  formatDateTR(date, {
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(date));
+  });
 
 export default async function Home() {
   const {

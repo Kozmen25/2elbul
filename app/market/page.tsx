@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, Flame, PackageSearch, TrendingDown } from "lucide-react";
+import { formatCurrencyTRY } from "@/lib/formatters";
 import { getHomeData, type MarketPulseItem } from "@/lib/home-data";
 import { getAbsoluteUrl } from "@/lib/site-url";
 
@@ -316,9 +317,5 @@ function formatDemand(item: MarketPulseItem) {
 }
 
 function formatPrice(price: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+  return formatCurrencyTRY(price);
 }

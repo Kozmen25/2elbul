@@ -20,6 +20,7 @@ import {
   formatMarketIntelligenceSources,
   formatMarketIntelligenceTimestamp,
 } from "@/app/product/[slug]/market-intelligence-panel";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import {
   formatOpportunityFreshness,
   formatOpportunityLevel,
@@ -674,23 +675,14 @@ function formatTrend(
 }
 
 function formatListingDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  });
 }
 
 function formatPrice(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—";
-
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatCurrencyTRY(value);
 }

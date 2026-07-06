@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { formatDateTR } from "@/lib/formatters";
 
 type BotTask = "search_queue" | "sources" | "price_alerts" | "daily";
 
@@ -516,10 +517,10 @@ function statusLabel(status: string) {
 
 function formatDate(value: string | null) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }
 
 function formatDuration(value: number | null) {

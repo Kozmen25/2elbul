@@ -11,6 +11,7 @@ import {
   getPublicDemoListingReasons,
   getPublicDemoProductReasons,
 } from "@/lib/public-data-cleanup";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { DataCleanupDeactivateButton } from "./data-cleanup-actions";
 
@@ -45,24 +46,16 @@ type Candidate = {
 };
 
 const formatPrice = (price: number | null) =>
-  price === null
-    ? "—"
-    : new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: "TRY",
-        maximumFractionDigits: 0,
-      }).format(price);
+  formatCurrencyTRY(price);
 
 const formatDate = (date: string | null) =>
-  date
-    ? new Intl.DateTimeFormat("tr-TR", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(date))
-    : "—";
+  formatDateTR(date, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export default async function AdminDataCleanupPage() {
   const supabase = createSupabaseAdminClient();

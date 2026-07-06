@@ -22,6 +22,7 @@ import {
   type SourceActionResult,
   type SourceInput,
 } from "./actions";
+import { formatDateTR } from "@/lib/formatters";
 
 export type AdminSource = {
   id: number;
@@ -849,10 +850,10 @@ function typeLabel(type: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }
 
 function cronScheduleLabel(value: string) {

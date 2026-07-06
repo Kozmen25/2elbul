@@ -33,6 +33,7 @@ import {
   type RelatedProductSummary,
 } from "@/lib/product-detail";
 import { getAbsoluteUrl } from "@/lib/site-url";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   MarketIntelligencePanel,
@@ -51,12 +52,7 @@ type ProductPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+const formatPrice = (price: number) => formatCurrencyTRY(price);
 
 const formatOptionalPrice = (price: number | null | undefined) =>
   typeof price === "number" && Number.isFinite(price) && price > 0
@@ -64,11 +60,11 @@ const formatOptionalPrice = (price: number | null | undefined) =>
     : "—";
 
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("tr-TR", {
+  formatDateTR(date, {
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date(date));
+  });
 
 export async function generateMetadata({
   params,

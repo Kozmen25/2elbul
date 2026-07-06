@@ -30,6 +30,7 @@ import { getAbsoluteUrl } from "@/lib/site-url";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseClient } from "@/lib/supabase";
+import { formatCurrencyTRY } from "@/lib/formatters";
 import { extractBrand, formatBrandDisplayName } from "@/lib/normalization";
 import {
   groupListingDuplicates,
@@ -844,11 +845,7 @@ function fetchProductListings(
 }
 
 function formatPrice(price: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+  return formatCurrencyTRY(price);
 }
 
 function calculateStandardDeviation(prices: number[], average: number) {

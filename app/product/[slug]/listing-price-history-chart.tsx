@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 
 export type ListingPriceHistoryPoint = {
   date: string;
@@ -22,21 +23,16 @@ const chartWidth = 720;
 const chartHeight = 280;
 const padding = { top: 24, right: 28, bottom: 42, left: 78 };
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+const formatPrice = (price: number) => formatCurrencyTRY(price);
 
 const formatShortPrice = (price: number) =>
   `${Math.round(price / 1000).toLocaleString("tr-TR")} bin`;
 
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("tr-TR", {
+  formatDateTR(`${date}T00:00:00`, {
     day: "numeric",
     month: "short",
-  }).format(new Date(`${date}T00:00:00`));
+  });
 
 export function ListingPriceHistoryChart({
   points,

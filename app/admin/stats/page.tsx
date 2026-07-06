@@ -1,4 +1,5 @@
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
+import { formatCurrencyTRY } from "@/lib/formatters";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 type CountValue = { label: string; value: number };
@@ -134,9 +135,5 @@ function StatPanel({
 }
 
 function formatPrice(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatCurrencyTRY(value);
 }

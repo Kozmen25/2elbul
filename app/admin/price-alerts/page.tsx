@@ -1,5 +1,6 @@
 import { BellRing } from "lucide-react";
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 type AdminPriceAlert = {
@@ -15,11 +16,7 @@ type AdminPriceAlert = {
 };
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+  formatCurrencyTRY(price);
 
 export default async function AdminPriceAlertsPage() {
   const supabase = createSupabaseAdminClient();
@@ -197,8 +194,8 @@ function statusLabel(status: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  });
 }

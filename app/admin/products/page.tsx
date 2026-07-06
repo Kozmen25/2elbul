@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
+import { formatCurrencyTRY } from "@/lib/formatters";
 import { createProductSlug } from "@/lib/product-slug";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { ProductActions } from "./product-actions";
@@ -136,10 +137,5 @@ export default async function AdminProductsPage() {
 }
 
 function formatPrice(value: number) {
-  if (!value) return "—";
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatCurrencyTRY(value);
 }

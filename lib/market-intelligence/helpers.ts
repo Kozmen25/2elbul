@@ -1,4 +1,5 @@
 import type { ConfidenceLevel, ConfidenceResult } from "@/lib/confidence-engine";
+import { formatCurrencyTRY } from "@/lib/formatters";
 import { calculateConfidenceLevel, clampScore } from "@/lib/confidence-engine/scoring";
 import type { MarketIntelligenceListing, MarketSourceBreakdown } from "./types";
 
@@ -58,13 +59,7 @@ export function roundDecimal(value: number, digits = 1): number {
 }
 
 export function formatCurrency(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatCurrencyTRY(value);
 }
 
 export function getValidPrices(listings: MarketIntelligenceListing[]): number[] {

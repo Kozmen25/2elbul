@@ -6,6 +6,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { MarketIntelligence } from "@/lib/market-intelligence";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 
 export function MarketIntelligencePanel({
   marketIntelligence,
@@ -141,13 +142,10 @@ export function formatMarketIntelligenceSources(sources: string[]) {
 }
 
 export function formatMarketIntelligenceTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return new Intl.DateTimeFormat("tr-TR", {
+  return formatDateTR(value, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  });
 }
 
 export function getConfidencePresentation(
@@ -175,13 +173,7 @@ export function getConfidencePresentation(
 }
 
 function formatMarketPrice(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—";
-
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return formatCurrencyTRY(value);
 }
 
 function MarketMetric({

@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
+import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const metadata: Metadata = {
@@ -19,19 +20,14 @@ export const metadata: Metadata = {
   },
 };
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    maximumFractionDigits: 0,
-  }).format(price);
+const formatPrice = (price: number) => formatCurrencyTRY(price);
 
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("tr-TR", {
+  formatDateTR(date, {
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date(date));
+  });
 
 export default async function FavoritesPage() {
   const supabase = await createSupabaseServerClient();
