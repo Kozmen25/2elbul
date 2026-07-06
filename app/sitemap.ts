@@ -3,6 +3,7 @@ import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createProductSlug } from "@/lib/product-slug";
 import { getBrandCatalog } from "@/lib/brand-intelligence";
 import { getCategoryCatalog } from "@/lib/category-intelligence";
+import { getCityCatalog } from "@/lib/city-intelligence";
 import {
   isPublicDemoListing,
   isPublicDemoProductName,
@@ -64,8 +65,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.65,
   }));
 
+  const cityCatalog = await getCityCatalog();
+  const cityRoutes = cityCatalog.map((city) => ({
+    url: `${siteUrl}/city/${city.slug}`,
+    lastModified: city.latestListingAt ? new Date(city.latestListingAt) : now,
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
+
   const supabase = createSupabaseClient();
-  if (!supabase) return [...routes, ...brandRoutes, ...categoryRoutes];
+  if (!supabase) return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes];
 
   let listingsResult = await supabase
     .from("listings")
@@ -82,7 +91,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (listingsResult.error) {
     console.error("Sitemap listing query failed:", listingsResult.error);
-    return [...routes, ...brandRoutes, ...categoryRoutes];
+    return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes];
   }
 
   const publicProductIds = new Set(
@@ -92,7 +101,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter(Boolean),
   );
 
-  if (!publicProductIds.size) return [...routes, ...brandRoutes, ...categoryRoutes];
+  if (!publicProductIds.size) return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes];
 
   const { data, error } = await supabase
     .from("products")
@@ -103,7 +112,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (error) {
     console.error("Sitemap product query failed:", error);
-    return [...routes, ...brandRoutes, ...categoryRoutes];
+    return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes];
   }
 
   const productRoutes = ((data ?? []) as ProductRow[])
@@ -115,5 +124,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-  return [...routes, ...brandRoutes, ...categoryRoutes, ...productRoutes];
+  return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes, ...productRoutes];
 }
