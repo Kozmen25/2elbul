@@ -9,6 +9,7 @@ import {
   normalizeKeyword,
   extractStorageSize,
   extractBrand,
+  formatBrandDisplayName,
   getTokens,
   createSearchFingerprint,
   isSimilarAfterNormalization,
@@ -204,6 +205,10 @@ describe('Normalization Engine', () => {
       expect(extractBrand('Huawei P60 Pro')).toBe('huawei');
     });
 
+    it('should extract MSI', () => {
+      expect(extractBrand('MSI Katana 15')).toBe('msi');
+    });
+
     it('should extract Lenovo', () => {
       expect(extractBrand('Lenovo ThinkPad X1 Carbon')).toBe('lenovo');
     });
@@ -233,6 +238,12 @@ describe('Normalization Engine', () => {
     it('should handle brands in different positions', () => {
       expect(extractBrand('Pixel Google')).toBe('google');
       expect(extractBrand('Pro Samsung Galaxy')).toBe('samsung');
+    });
+  });
+
+  describe('formatBrandDisplayName', () => {
+    it('should format MSI in uppercase', () => {
+      expect(formatBrandDisplayName('msi')).toBe('MSI');
     });
   });
 

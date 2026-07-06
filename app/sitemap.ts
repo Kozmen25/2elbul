@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createProductSlug } from "@/lib/product-slug";
+import { getBrandCatalog } from "@/lib/brand-intelligence";
 import {
   isPublicDemoListing,
   isPublicDemoProductName,
@@ -46,8 +47,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
+  const brandCatalog = await getBrandCatalog();
+  const brandRoutes = brandCatalog.map((brand) => ({
+    url: `${siteUrl}/brand/${brand.slug}`,
+    lastModified: brand.latestProductAt ? new Date(brand.latestProductAt) : now,
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
+
   const supabase = createSupabaseClient();
-  if (!supabase) return routes;
+  if (!supabase) return [...routes, ...brandRoutes];
 
   let listingsResult = await supabase
     .from("listings")
@@ -64,7 +73,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (listingsResult.error) {
     console.error("Sitemap listing query failed:", listingsResult.error);
-    return routes;
+    return [...routes, ...brandRoutes];
   }
 
   const publicProductIds = new Set(
@@ -74,7 +83,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter(Boolean),
   );
 
-  if (!publicProductIds.size) return routes;
+  if (!publicProductIds.size) return [...routes, ...brandRoutes];
 
   const { data, error } = await supabase
     .from("products")
@@ -85,7 +94,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (error) {
     console.error("Sitemap product query failed:", error);
-    return routes;
+    return [...routes, ...brandRoutes];
   }
 
   const productRoutes = ((data ?? []) as ProductRow[])
@@ -97,5 +106,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-  return [...routes, ...productRoutes];
+  return [...routes, ...brandRoutes, ...productRoutes];
 }

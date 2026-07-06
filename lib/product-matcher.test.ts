@@ -86,6 +86,12 @@ describe("product matcher", () => {
     });
   });
 
+  it("extracts MSI brand signals for gaming laptops", () => {
+    expect(extractProductSignals("MSI Katana 15 16GB 512GB")).toMatchObject({
+      brand: "msi",
+    });
+  });
+
   it("summarizes duplicate batches for pipeline metadata", () => {
     const listings = [
       {

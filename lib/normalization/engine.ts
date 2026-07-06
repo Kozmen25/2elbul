@@ -338,6 +338,10 @@ const BRAND_RULES: Array<{ brand: string; matches: (normalized: string) => boole
     matches: (normalized) => normalized.includes('honor'),
   },
   {
+    brand: 'msi',
+    matches: (normalized) => normalized.includes('msi') || normalized.includes('msı'),
+  },
+  {
     brand: 'nothing',
     matches: (normalized) => normalized.includes('nothing'),
   },
@@ -361,6 +365,7 @@ export function formatBrandDisplayName(brand: string | null): string | null {
     hp: "HP",
     lg: "LG",
     nvidia: "NVIDIA",
+    msi: "MSI",
     oneplus: "OnePlus",
   };
 

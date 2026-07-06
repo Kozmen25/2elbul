@@ -210,6 +210,22 @@ describe('Duplicate Detection Engine', () => {
       expect(result.score).toBeGreaterThanOrEqual(75);
       expect(result.signals.brand).toBe(100);
     });
+
+    it('MSI Katana same model should still score high', () => {
+      const input1 = createComparisonInput('MSI Katana 15', {
+        brand: 'msi',
+        model: 'katana-15',
+      });
+
+      const input2 = createComparisonInput('MSI Katana 15', {
+        brand: 'msi',
+        model: 'katana-15',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBeGreaterThanOrEqual(75);
+      expect(result.signals.brand).toBe(100);
+    });
   });
 
   describe('Apple AirPods Examples', () => {
