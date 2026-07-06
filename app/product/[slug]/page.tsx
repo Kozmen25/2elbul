@@ -28,13 +28,20 @@ import {
   getProductDetail,
   type ProductBestDeal,
   type ProductDecisionInsight,
+  type ProductDetailMarketIntelligence,
   type ProductRecord,
   type RelatedProductSummary,
 } from "@/lib/product-detail";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { MarketIntelligencePanel } from "./market-intelligence-panel";
+import {
+  MarketIntelligencePanel,
+  formatMarketConfidenceLevel,
+  formatMarketIntelligenceSources,
+  formatMarketIntelligenceTimestamp,
+} from "./market-intelligence-panel";
 import { OpportunityScorePanel } from "./opportunity-score-panel";
+import { formatOpportunityFreshness, formatOpportunityLevel } from "@/lib/opportunity-engine";
 import {
   ListingPriceHistoryChart,
   type ListingPriceHistoryPoint,
@@ -50,6 +57,11 @@ const formatPrice = (price: number) =>
     currency: "TRY",
     maximumFractionDigits: 0,
   }).format(price);
+
+const formatOptionalPrice = (price: number | null | undefined) =>
+  typeof price === "number" && Number.isFinite(price) && price > 0
+    ? formatPrice(price)
+    : "—";
 
 const formatDate = (date: string) =>
   new Intl.DateTimeFormat("tr-TR", {
@@ -107,7 +119,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const {
     product,
     listings,
-    intelligence,
     decisionInsight,
     bestDeals,
     relatedProducts,
@@ -126,13 +137,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const lowestPrice = marketStats?.lowest ?? 0;
   const highestPrice = marketStats?.highest ?? 0;
   const averagePrice = marketStats?.average ?? 0;
-  const medianPrice = marketStats?.median ?? 0;
   const marketValue = marketStats?.marketValue ?? 0;
   const listingPriceHistory = buildListingPriceHistory(listings);
-  const newestListing = [...listings].sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )[0];
   const cheapestListings = [...listings]
     .sort((a, b) => a.price - b.price)
     .slice(0, 5);
@@ -236,54 +242,32 @@ export default async function ProductPage({ params }: ProductPageProps) {
       />
       <div className="container-shell min-w-0">
         <div className="max-w-4xl">
-          <p className="text-sm font-bold text-[#ff6b00]">
-            İkinci el fiyat rehberi
+        <p className="text-sm font-bold text-[#ff6b00]">
+            Karar odaklı ürün analizi
           </p>
           <h1 className="mt-2 break-words text-3xl font-black tracking-[-0.045em] sm:text-5xl">
             {product.name}
           </h1>
           <p className="mt-3 text-black/50">
-            Güncel ilanları, fiyat aralığını ve şehir dağılımını karşılaştır.
+            Fırsatı, riski ve fiyat avantajını tek ekranda değerlendir.
           </p>
         </div>
 
-        {product.category ? (
-          <p className="mt-4 inline-flex rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-black text-black/55">
-            Kategori: {product.category}
-          </p>
-        ) : null}
-
-        <div className="mt-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-6">
-          <StatCard label="Toplam ilan" value={`${listingCount}`} />
-          <StatCard
-            label="Ortalama fiyat"
-            value={listingCount ? formatPrice(averagePrice) : "—"}
-          />
-          <StatCard
-            label="En düşük fiyat"
-            value={listingCount ? formatPrice(lowestPrice) : "—"}
-            accent
-          />
-          <StatCard
-            label="En yüksek fiyat"
-            value={listingCount ? formatPrice(highestPrice) : "—"}
-          />
-          <StatCard
-            label="Medyan fiyat"
-            value={listingCount ? formatPrice(medianPrice) : "—"}
-          />
-          <StatCard
-            label="Son güncelleme"
-            value={newestListing ? formatDate(newestListing.createdAt) : "—"}
-            wide
-          />
-        </div>
-
-        <MarketIntelligencePanel marketIntelligence={marketIntelligence} />
-
-        <OpportunityScorePanel
-          opportunityAnalysis={marketIntelligence.opportunityAnalysis}
+        <DecisionDashboardHero
+          product={product}
           marketIntelligence={marketIntelligence}
+          decisionInsight={decisionInsight}
+          bestDealDiscount={bestDealDiscount}
+        />
+
+        <BestDealCard
+            listing={bestDealListing}
+            averagePrice={averagePrice}
+            discountPercent={bestDealDiscount}
+            priceStats={productPriceStats}
+            isFavorite={bestDealListing ? favoriteIds.has(bestDealListing.id) : false}
+            isAuthenticated={isAuthenticated}
+            loginNext={loginNext}
         />
 
         <div className="mt-6 max-w-md">
@@ -296,39 +280,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
           />
         </div>
 
-        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)_minmax(300px,0.8fr)]">
-          <IntelligenceCard intelligence={intelligence} />
-
-          <DecisionSupportCard intelligence={intelligence} />
-
-          <AdvancedPriceInsightCard insight={decisionInsight.smartPrice} />
-        </div>
-
-        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(280px,0.8fr)_minmax(300px,0.8fr)]">
-          <ConfidenceScoreCard insight={decisionInsight.confidence} />
-
-          <BestDealCard
-            listing={bestDealListing}
-            averagePrice={averagePrice}
-            discountPercent={bestDealDiscount}
-            priceStats={productPriceStats}
-            isFavorite={bestDealListing ? favoriteIds.has(bestDealListing.id) : false}
-            isAuthenticated={isAuthenticated}
-            loginNext={loginNext}
-          />
-        </div>
-
         <PriceAnalysisBox
           stats={productPriceStats}
           analysis={bestListingAnalysis}
         />
 
-        <BestDealsSection deals={bestDeals} />
-
         <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
           <SectionTitle
             icon={ChartNoAxesCombined}
-            eyebrow="Fiyat Geçmişi"
+            eyebrow="Fiyat geçmişi"
             title="Fiyat Geçmişi"
           />
           <p className="mt-4 text-sm leading-6 text-black/55">
@@ -336,6 +296,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </p>
           <ListingPriceHistoryChart points={listingPriceHistory} />
         </section>
+
+        <BestDealsSection deals={bestDeals} />
 
         <ProductListingSection
           eyebrow="Riskli fiyat"
@@ -449,8 +411,240 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           </section>
         </div>
+
+        <MarketIntelligencePanel marketIntelligence={marketIntelligence} />
+
+        <OpportunityScorePanel
+          opportunityAnalysis={marketIntelligence.opportunityAnalysis}
+          marketIntelligence={marketIntelligence}
+        />
       </div>
     </main>
+  );
+}
+
+export function DecisionDashboardHero({
+  product,
+  marketIntelligence,
+  decisionInsight,
+  bestDealDiscount,
+}: {
+  product: ProductRecord;
+  marketIntelligence: ProductDetailMarketIntelligence;
+  decisionInsight: ProductDecisionInsight;
+  bestDealDiscount: number | null;
+}) {
+  const opportunityAnalysis = marketIntelligence.opportunityAnalysis;
+  const hasInsufficientData = marketIntelligence.sampleSize < 3;
+  const sourceLabel = formatMarketIntelligenceSources(
+    marketIntelligence.sourcesUsed,
+  );
+
+  return (
+    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-3xl">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+            Karar paneli
+          </p>
+          <h2 className="mt-1 break-words text-3xl font-black tracking-[-0.035em] sm:text-4xl">
+            AI Kararı
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-black/55">
+            {decisionInsight.smartPrice.summary}
+          </p>
+        </div>
+        <span
+          className={`inline-flex rounded-full border px-4 py-2 text-xs font-black ${getDecisionBadgeClassName(opportunityAnalysis.recommendation.label)}`}
+        >
+          {opportunityAnalysis.recommendation.label}
+        </span>
+      </div>
+
+      {product.category ? (
+        <p className="mt-4 inline-flex rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-black text-black/55">
+          Kategori: {product.category}
+        </p>
+      ) : null}
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <div className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]/75">
+                Fırsat skoru
+              </p>
+              <p className="mt-2 text-5xl font-black tracking-[-0.08em] text-[#d95700]">
+                {opportunityAnalysis.opportunityScore}
+                <span className="text-xl text-black/35">/100</span>
+              </p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-black/60">
+                {opportunityAnalysis.recommendation.description}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-white/90 px-4 py-3 text-right shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
+                Güçlü fırsat mı?
+              </p>
+              <p className="mt-2 text-xl font-black tracking-[-0.03em] text-black">
+                {formatOpportunityLevel(opportunityAnalysis.opportunityLevel)}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-black/45">
+                Risk: {formatOpportunityLevel(opportunityAnalysis.riskLevel)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <StatCard
+              label="Confidence skoru"
+              value={`${marketIntelligence.confidenceScore ?? 0}/100`}
+              accent
+            />
+            <StatCard
+              label="Örneklem"
+              value={`${marketIntelligence.sampleSize}`}
+            />
+            <StatCard
+              label="Veri tazeliği"
+              value={formatOpportunityFreshness(
+                opportunityAnalysis.dataFreshness,
+              )}
+            />
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <StatCard
+              label="Ortalama fiyat"
+              value={formatOptionalPrice(marketIntelligence.priceAnalysis.averagePrice)}
+            />
+            <StatCard
+              label="En düşük fiyat"
+              value={formatOptionalPrice(marketIntelligence.priceAnalysis.minPrice)}
+              accent
+            />
+            <StatCard
+              label="Medyan fiyat"
+              value={formatOptionalPrice(marketIntelligence.priceAnalysis.medianPrice)}
+            />
+            <StatCard
+              label="Fiyat avantajı"
+              value={bestDealDiscount !== null ? `%${bestDealDiscount}` : "—"}
+              accent
+            />
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-black/8 bg-white p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
+              Karar nedenleri
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {opportunityAnalysis.positiveSignals.slice(0, 3).map((signal) => (
+                <span
+                  key={signal}
+                  className="rounded-full border border-green-100 bg-green-50 px-3 py-1.5 text-xs font-semibold leading-5 text-green-800"
+                >
+                  {signal}
+                </span>
+              ))}
+              {opportunityAnalysis.warningSignals.slice(0, 2).map((signal) => (
+                <span
+                  key={signal}
+                  className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold leading-5 text-amber-800"
+                >
+                  {signal}
+                </span>
+              ))}
+            </div>
+            <p className="mt-4 text-sm font-semibold leading-6 text-black/58">
+              {decisionInsight.confidence.description}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
+          <p className="text-xs font-black uppercase tracking-[0.08em] text-black/35">
+            Piyasa özeti
+          </p>
+          <p className="mt-3 text-sm font-semibold leading-6 text-black/60">
+            Bu analiz {marketIntelligence.sampleSize} ilan üzerinden oluşturuldu.
+          </p>
+          <p className="mt-4 text-sm font-semibold leading-6 text-black/60">
+            Son güncelleme:{" "}
+            {formatMarketIntelligenceTimestamp(
+              marketIntelligence.analysisGeneratedAt,
+            )}
+          </p>
+          <p className="mt-4 text-xs font-semibold leading-6 text-black/45">
+            Kullanılan kaynaklar: {sourceLabel}
+          </p>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <StatCard
+              label="Kaynak sayısı"
+              value={`${marketIntelligence.marketSummary.sourceCount}`}
+            />
+            <StatCard
+              label="Toplam ilan"
+              value={`${marketIntelligence.marketSummary.totalListingCount}`}
+            />
+            <StatCard
+              label="Aktif ilan"
+              value={`${marketIntelligence.marketSummary.activeListingCount}`}
+            />
+            <StatCard
+              label="Duplicate yoğunluğu"
+              value={
+                typeof marketIntelligence.marketSummary.duplicateDensity === "number"
+                  ? `%${Math.round(
+                      marketIntelligence.marketSummary.duplicateDensity * 100,
+                    )}`
+                  : "—"
+              }
+            />
+            <StatCard
+              label="Confidence seviyesi"
+              value={formatMarketConfidenceLevel(marketIntelligence.confidenceLevel)}
+              accent
+            />
+          </div>
+
+          {hasInsufficientData ? (
+            <div className="mt-5 flex gap-3 rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+              <TriangleAlert className="mt-0.5 shrink-0" size={17} />
+              <span>
+                Yetersiz veri: karar notu daha fazla ilan geldikçe otomatik olarak güçlenecek.
+              </span>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-green-100 bg-green-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-green-800/75">
+                EEAT notu
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-green-900">
+                Bu karar, güncel ilan verisi ve kaynak çeşitliliği üzerinden üretilmiştir.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-5 rounded-2xl border border-black/8 bg-white p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
+              Kaynak sinyalleri
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {marketIntelligence.sourcesUsed.slice(0, 4).map((source) => (
+                <span
+                  key={source}
+                  className="rounded-full border border-black/8 bg-[#fafaf8] px-3 py-1.5 text-xs font-semibold leading-5 text-black/58"
+                >
+                  {source}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -504,7 +698,7 @@ function ProductListingSection({
 function BestDealsSection({ deals }: { deals: ProductBestDeal[] }) {
   return (
     <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle icon={Tag} eyebrow="Fırsat seçkisi" title="En İyi Fırsatlar" />
+      <SectionTitle icon={Tag} eyebrow="Alternatif ilanlar" title="En İyi Fırsatlar" />
       {deals.length > 0 ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {deals.map((deal) => (
@@ -561,7 +755,7 @@ function RelatedProductsSection({
 }) {
   return (
     <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle icon={Store} eyebrow="Alternatifler" title="Benzer Ürünler" />
+      <SectionTitle icon={Store} eyebrow="Benzer ürünler" title="Benzer Ürünler" />
       {products.length > 0 ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => (
@@ -842,7 +1036,7 @@ function ConfidenceScoreCard({
   );
 }
 
-function BestDealCard({
+export function BestDealCard({
   listing,
   averagePrice,
   discountPercent,
@@ -862,7 +1056,7 @@ function BestDealCard({
   if (!listing) {
     return (
       <section className="rounded-3xl border border-dashed border-black/15 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-        <SectionTitle icon={Tag} eyebrow="En iyi fırsat" title="Henüz ilan yok" />
+        <SectionTitle icon={Tag} eyebrow="En iyi ilan" title="Henüz ilan yok" />
         <p className="mt-5 text-sm font-semibold leading-6 text-black/45">
           Bu ürün için yayında ilan geldiğinde en düşük fiyatlı seçenek burada görünecek.
         </p>
@@ -878,7 +1072,7 @@ function BestDealCard({
 
   return (
     <section className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle icon={Tag} eyebrow="En iyi fırsat" title="En düşük fiyatlı ilan" />
+      <SectionTitle icon={Tag} eyebrow="En iyi ilan" title="En avantajlı ilan" />
       <div className="mt-5">
         <ListingImage
           imageUrl={listing.imageUrl}
@@ -938,7 +1132,7 @@ function PriceAnalysisBox({
     <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
       <SectionTitle
         icon={ChartNoAxesCombined}
-        eyebrow="Akıllı fiyat analizi"
+        eyebrow="Fiyat analizi"
         title="Piyasaya göre fiyat durumu"
       />
       <p className="mt-4 text-sm leading-6 text-black/55">
@@ -1188,11 +1382,12 @@ function formatScoreLevel(
 }
 
 function getDecisionBadgeClassName(
-  label: ProductIntelligence["decisionSupport"]["label"],
+  label: string,
 ) {
-  if (label === "Şimdi Al") return "border-green-200 bg-green-50 text-green-700";
-  if (label === "Bekle") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (label === "Takip Et") return "border-amber-200 bg-amber-50 text-amber-800";
+  const normalized = label.toLocaleLowerCase("tr-TR");
+  if (normalized === "şimdi al") return "border-green-200 bg-green-50 text-green-700";
+  if (normalized === "bekle") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (normalized === "takip et") return "border-amber-200 bg-amber-50 text-amber-800";
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
