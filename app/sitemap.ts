@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createProductSlug } from "@/lib/product-slug";
 import { getBrandCatalog } from "@/lib/brand-intelligence";
+import { getCategoryCatalog } from "@/lib/category-intelligence";
 import {
   isPublicDemoListing,
   isPublicDemoProductName,
@@ -55,8 +56,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
+  const categoryCatalog = await getCategoryCatalog();
+  const categoryRoutes = categoryCatalog.map((category) => ({
+    url: `${siteUrl}/category/${category.slug}`,
+    lastModified: category.latestListingAt ? new Date(category.latestListingAt) : now,
+    changeFrequency: "weekly" as const,
+    priority: 0.65,
+  }));
+
   const supabase = createSupabaseClient();
-  if (!supabase) return [...routes, ...brandRoutes];
+  if (!supabase) return [...routes, ...brandRoutes, ...categoryRoutes];
 
   let listingsResult = await supabase
     .from("listings")
@@ -73,7 +82,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (listingsResult.error) {
     console.error("Sitemap listing query failed:", listingsResult.error);
-    return [...routes, ...brandRoutes];
+    return [...routes, ...brandRoutes, ...categoryRoutes];
   }
 
   const publicProductIds = new Set(
@@ -83,7 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter(Boolean),
   );
 
-  if (!publicProductIds.size) return [...routes, ...brandRoutes];
+  if (!publicProductIds.size) return [...routes, ...brandRoutes, ...categoryRoutes];
 
   const { data, error } = await supabase
     .from("products")
@@ -94,7 +103,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   if (error) {
     console.error("Sitemap product query failed:", error);
-    return [...routes, ...brandRoutes];
+    return [...routes, ...brandRoutes, ...categoryRoutes];
   }
 
   const productRoutes = ((data ?? []) as ProductRow[])
@@ -106,5 +115,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-  return [...routes, ...brandRoutes, ...productRoutes];
+  return [...routes, ...brandRoutes, ...categoryRoutes, ...productRoutes];
 }
