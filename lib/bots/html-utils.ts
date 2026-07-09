@@ -1,5 +1,6 @@
 import type { ListingCondition } from "@/lib/listings";
 import type { CheerioAPI } from "cheerio";
+import { withRetry, HttpError, RetryMetrics } from "./retry";
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (compatible; 2ElBulBot/1.0; +https://2elbul.com)";
@@ -56,6 +57,7 @@ export async function safeFetchHtml(
     maxBytes?: number;
     retries?: number;
     retryDelayMs?: number;
+    source?: string;
   } = {},
 ) {
   const parsedUrl = new URL(url);
@@ -65,66 +67,77 @@ export async function safeFetchHtml(
 
   const timeoutMs = options.timeoutMs ?? 15_000;
   const maxBytes = options.maxBytes ?? 5_000_000;
-  const retries = options.retries ?? 1;
-  const retryDelayMs = options.retryDelayMs ?? 700;
-  let lastError: unknown = null;
+  const maxRetries = (options.retries ?? 1) + 1;
+  const baseDelayMs = options.retryDelayMs ?? 700;
 
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  return withRetry(
+    async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    try {
-      const response = await fetch(parsedUrl, {
-        cache: "no-store",
-        redirect: "follow",
-        signal: controller.signal,
-        headers: {
-          Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.7",
-          "User-Agent": options.userAgent ?? DEFAULT_USER_AGENT,
-        },
-      });
+      try {
+        const response = await fetch(parsedUrl, {
+          cache: "no-store",
+          redirect: "follow",
+          signal: controller.signal,
+          headers: {
+            Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.7",
+            "User-Agent": options.userAgent ?? DEFAULT_USER_AGENT,
+          },
+        });
 
-      if (!response.ok) {
-        throw new Error(`Kaynak HTTP ${response.status} yanıtı verdi.`);
+        if (!response.ok) {
+          throw new HttpError(
+            `Kaynak HTTP ${response.status} yanıtı verdi.`,
+            response.status,
+          );
+        }
+
+        const contentType = response.headers.get("content-type") ?? "";
+        if (
+          contentType &&
+          !contentType.includes("text/html") &&
+          !contentType.includes("application/xhtml+xml")
+        ) {
+          throw new Error(`Beklenmeyen içerik türü: ${contentType}`);
+        }
+
+        const contentLength = Number(response.headers.get("content-length"));
+        if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+          throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
+        }
+
+        const html = await response.text();
+        if (Buffer.byteLength(html, "utf8") > maxBytes) {
+          throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
+        }
+
+        return {
+          html,
+          finalUrl: response.url || parsedUrl.toString(),
+          status: response.status,
+        };
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          const enriched = new Error(
+            `Kaynak isteği ${timeoutMs} ms içinde tamamlanamadı.`,
+          );
+          enriched.name = "AbortError";
+          throw enriched;
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const contentType = response.headers.get("content-type") ?? "";
-      if (
-        contentType &&
-        !contentType.includes("text/html") &&
-        !contentType.includes("application/xhtml+xml")
-      ) {
-        throw new Error(`Beklenmeyen içerik türü: ${contentType}`);
-      }
-
-      const contentLength = Number(response.headers.get("content-length"));
-      if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-        throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
-      }
-
-      const html = await response.text();
-      if (Buffer.byteLength(html, "utf8") > maxBytes) {
-        throw new Error("Kaynak HTML yanıtı izin verilen boyutu aşıyor.");
-      }
-
-      return {
-        html,
-        finalUrl: response.url || parsedUrl.toString(),
-        status: response.status,
-      };
-    } catch (error) {
-      lastError =
-        error instanceof Error && error.name === "AbortError"
-          ? new Error(`Kaynak isteği ${timeoutMs} ms içinde tamamlanamadı.`)
-          : error;
-      if (attempt < retries) await sleep(retryDelayMs * (attempt + 1));
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  throw lastError;
+    },
+    {
+      maxRetries,
+      baseDelayMs,
+      maxDelayMs: 4000,
+      source: options.source,
+    },
+  );
 }
 
 export function extractImageUrl(
@@ -246,21 +259,27 @@ async function isValidImageUrl(url: string, timeoutMs: number) {
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) return false;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(parsed, {
-        method: "HEAD",
-        cache: "no-store",
-        signal: controller.signal,
-        headers: { "User-Agent": DEFAULT_USER_AGENT },
-      });
-      if (!response.ok) return false;
-      const contentType = response.headers.get("content-type") ?? "";
-      return contentType.toLowerCase().startsWith("image/");
-    } finally {
-      clearTimeout(timeout);
-    }
+
+    return await withRetry(
+      async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(parsed, {
+            method: "HEAD",
+            cache: "no-store",
+            signal: controller.signal,
+            headers: { "User-Agent": DEFAULT_USER_AGENT },
+          });
+          if (!response.ok) return false;
+          const contentType = response.headers.get("content-type") ?? "";
+          return contentType.toLowerCase().startsWith("image/");
+        } finally {
+          clearTimeout(timeout);
+        }
+      },
+      { maxRetries: 2, baseDelayMs: 1000, maxDelayMs: 2000 },
+    );
   } catch {
     return false;
   }
