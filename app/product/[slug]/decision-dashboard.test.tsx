@@ -16,6 +16,10 @@ vi.mock("@/components/favorite-button", () => ({
   FavoriteButton: () => <button type="button">Favori</button>,
 }));
 
+vi.mock("@/components/compare-button", () => ({
+  CompareButton: () => <button type="button">Karşılaştır</button>,
+}));
+
 vi.mock("@/components/listing-image", () => ({
   ListingImage: ({ alt }: { alt: string }) => <img alt={alt} />,
 }));

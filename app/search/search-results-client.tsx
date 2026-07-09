@@ -16,6 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
+import { CompareButton } from "@/components/compare-button";
 import {
   calculateProductIntelligence,
   type ProductIntelligence,
@@ -657,13 +658,20 @@ export function SearchResultsClient({
                     >
                       {listing.productName}
                     </Link>
-                    <FavoriteButton
-                      listingId={listing.id}
-                      initialIsFavorite={favoriteIds.has(listing.id)}
-                      isAuthenticated={isAuthenticated}
-                      loginNext={loginNext}
-                      compact
-                    />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <CompareButton
+                        listingId={listing.id}
+                        productName={listing.productName}
+                        compact
+                      />
+                      <FavoriteButton
+                        listingId={listing.id}
+                        initialIsFavorite={favoriteIds.has(listing.id)}
+                        isAuthenticated={isAuthenticated}
+                        loginNext={loginNext}
+                        compact
+                      />
+                    </div>
                   </div>
 
                   <h3 className="min-h-12 break-words text-base font-black leading-6">

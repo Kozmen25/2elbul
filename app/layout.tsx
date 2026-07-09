@@ -3,6 +3,8 @@ import "./globals.css";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { MaintenanceGate } from "@/components/maintenance-gate";
+import { CompareBar } from "@/components/compare-bar";
+import { CompareProvider } from "@/components/compare-context";
 import { getSiteGeneralSettings } from "@/lib/site-settings";
 import { getMetadataBase } from "@/lib/site-url";
 
@@ -41,11 +43,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="tr">
       <body>
-        <Header />
-        <main>
-          <MaintenanceGate>{children}</MaintenanceGate>
-        </main>
-        <Footer />
+        <CompareProvider>
+          <Header />
+          <main>
+            <MaintenanceGate>{children}</MaintenanceGate>
+          </main>
+          <Footer />
+          <CompareBar />
+        </CompareProvider>
       </body>
     </html>
   );

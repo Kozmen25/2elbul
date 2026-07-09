@@ -13,6 +13,7 @@ import {
 import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
+import { CompareButton } from "@/components/compare-button";
 import { PriceAlertForm } from "@/components/price-alert-form";
 import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { Listing } from "@/lib/listings";
@@ -724,16 +725,23 @@ function BestDealsSection({ deals }: { deals: ProductBestDeal[] }) {
                   <CalendarDays size={14} /> {formatDate(deal.listing.createdAt)}
                 </span>
               </div>
-              {deal.listing.url ? (
-                <a
-                  href={deal.listing.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="orange-button mt-4 py-2.5 text-sm"
-                >
-                  İlana git <ArrowUpRight size={16} />
-                </a>
-              ) : null}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {deal.listing.url ? (
+                  <a
+                    href={deal.listing.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="orange-button flex-1 py-2.5 text-sm"
+                  >
+                    İlana git <ArrowUpRight size={16} />
+                  </a>
+                ) : null}
+                <CompareButton
+                  listingId={deal.listing.id}
+                  productName={deal.listing.productName}
+                  compact
+                />
+              </div>
             </article>
           ))}
         </div>
@@ -1112,6 +1120,11 @@ export function BestDealCard({
           loginNext={loginNext}
           compact
         />
+        <CompareButton
+          listingId={listing.id}
+          productName={listing.productName}
+          compact
+        />
       </div>
     </section>
   );
@@ -1189,7 +1202,7 @@ function ListingCard({
         productName={listing.productName}
         alt={listing.title}
       />
-      <div className="mt-4 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <span
           className={`rounded-full px-3 py-1.5 text-xs font-bold ${
             listing.condition === "Yenilenmiş"
@@ -1199,13 +1212,20 @@ function ListingCard({
         >
           {listing.condition}
         </span>
-        <FavoriteButton
-          listingId={listing.id}
-          initialIsFavorite={isFavorite}
-          isAuthenticated={isAuthenticated}
-          loginNext={loginNext}
-          compact
-        />
+        <div className="flex items-center gap-2">
+          <CompareButton
+            listingId={listing.id}
+            productName={listing.productName}
+            compact
+          />
+          <FavoriteButton
+            listingId={listing.id}
+            initialIsFavorite={isFavorite}
+            isAuthenticated={isAuthenticated}
+            loginNext={loginNext}
+            compact
+          />
+        </div>
       </div>
       <h3 className="mt-4 break-words font-black leading-6">{listing.title}</h3>
       <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
@@ -1243,6 +1263,12 @@ function ListingCard({
       >
         İlana git <ArrowUpRight size={17} />
       </a>
+      <div className="mt-3 flex items-center justify-end">
+        <CompareButton
+          listingId={listing.id}
+          productName={listing.productName}
+        />
+      </div>
     </article>
   );
 }
