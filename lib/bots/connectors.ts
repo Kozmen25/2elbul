@@ -6,11 +6,13 @@ import {
   fetchGetmobilListings,
   fetchHepsiburadaRenewedListings,
   fetchMediaMarktRenewedListings,
+  fetchSahibindenListings,
   fetchTeknosaRenewedListings,
   fetchYenilenmisMarketListings,
   GETMOBIL_PHONE_CATEGORY_URL,
   HEPSIBURADA_RENEWED_CATEGORY_URL,
   MEDIAMARKT_RENEWED_CATEGORY_URL,
+  SAHIBINDEN_PHONE_CATEGORY_URL,
   TEKNOSA_RENEWED_CATEGORY_URL,
   YENILENMIS_MARKET_CATEGORY_URL,
 } from "@/lib/bots/adapters";
@@ -18,6 +20,7 @@ import { parseEasyCepProductPage } from "@/lib/bots/adapters/easycep";
 import { createEasyCepStandardAdapter } from "@/lib/bots/adapters/easycep-adapter";
 import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
 import { createGetmobilStandardAdapter } from "@/lib/bots/adapters/getmobil-adapter";
+import { parseSahibindenProductPage } from "@/lib/bots/adapters/sahibinden";
 import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
 import { getUnifiedSourceRegistry } from "@/lib/unified-source-engine/adapters";
 import { isBotAdapterListing } from "@/lib/bots/types";
@@ -52,6 +55,11 @@ const SCRAPE_FETCHERS: Record<
       scrapeUrl || YENILENMIS_MARKET_CATEGORY_URL,
       limit,
     ),
+  sahibinden: (scrapeUrl, limit) =>
+    fetchSahibindenListings(
+      scrapeUrl || SAHIBINDEN_PHONE_CATEGORY_URL,
+      limit,
+    ),
 };
 
 export const SCRAPE_READY_SLUGS = Object.keys(SCRAPE_FETCHERS);
@@ -74,7 +82,9 @@ export function getSourceConnector(
         ? parseEasyCepProductPage
         : config.sourceSlug === "getmobil"
           ? parseGetmobilProductPage
-          : undefined,
+          : config.sourceSlug === "sahibinden"
+            ? parseSahibindenProductPage
+            : undefined,
     async fetchListings(integrationConfig) {
       const scrapeFetcher = SCRAPE_FETCHERS[integrationConfig.sourceSlug];
       if (scrapeFetcher) {
@@ -147,6 +157,7 @@ function defaultScrapeUrl(slug: string) {
     "teknosa-yenilenmis": TEKNOSA_RENEWED_CATEGORY_URL,
     "mediamarkt-yenilenmis": MEDIAMARKT_RENEWED_CATEGORY_URL,
     "yenilenmis-market": YENILENMIS_MARKET_CATEGORY_URL,
+    sahibinden: SAHIBINDEN_PHONE_CATEGORY_URL,
   };
   return defaults[slug] ?? "";
 }

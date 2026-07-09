@@ -26,3 +26,9 @@ export {
   YENILENMIS_MARKET_CATEGORY_URL,
   fetchYenilenmisMarketListings,
 } from "@/lib/bots/adapters/yenilenmis-market";
+export {
+  SAHIBINDEN_PHONE_CATEGORY_URL,
+  fetchSahibindenListings,
+  parseSahibindenCategoryHtml,
+  parseSahibindenProductPage,
+} from "@/lib/bots/adapters/sahibinden";
