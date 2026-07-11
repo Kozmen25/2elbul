@@ -8,10 +8,13 @@ export type {
   ComparisonListing,
   ProductRow,
   FindOrCreateMatchedProductInput,
+  BatchMatchCandidate,
+  BatchMatcherInput,
 } from "./types";
 
 export { normalizeProductTitle } from "./helpers";
 export { extractProductSignals, generateProductKey } from "./signals";
-export { dryRunProductMatch, findOrCreateMatchedProduct } from "./matcher";
+export { batchFindOrCreateMatchedProducts, dryRunProductMatch, findOrCreateMatchedProduct } from "./matcher";
+export { batchFindExistingMatchedProducts, findExistingMatchedProduct } from "./repository";
 export { detectListingDuplicates, groupListingDuplicates } from "./duplicate";
 export { summarizeDuplicateGroups } from "./summary";

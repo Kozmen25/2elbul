@@ -78,6 +78,18 @@ export type ProductRow = {
   category?: string | null;
 };
 
+export type BatchMatcherInput = {
+  title: string;
+  productName?: string | null;
+  category?: string | null;
+  source?: string | null;
+};
+
+export type BatchMatchCandidate = {
+  canonicalName: string;
+  canonicalKey: string;
+};
+
 export type FindOrCreateMatchedProductInput = {
   supabase: SupabaseClient;
   title: string;

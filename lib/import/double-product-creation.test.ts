@@ -31,6 +31,7 @@ type TableChain = {
   in: (...args: unknown[]) => TableChain;
   limit: (...args: unknown[]) => TableChain;
   order: (...args: unknown[]) => TableChain;
+  range: (...args: unknown[]) => TableChain;
   single: (...args: unknown[]) => Promise<QueryResult<unknown>>;
   maybeSingle: (...args: unknown[]) => Promise<QueryResult<unknown>>;
   then: PromiseLike<QueryResult<unknown>>["then"];
@@ -549,6 +550,7 @@ function createTableChain(
   chain.in = vi.fn((...args: unknown[]) => record("in", args));
   chain.limit = vi.fn((...args: unknown[]) => record("limit", args));
   chain.order = vi.fn((...args: unknown[]) => record("order", args));
+  chain.range = vi.fn((...args: unknown[]) => record("range", args));
   chain.single = vi.fn(async (...args: unknown[]) => {
     calls.push({ table, method: "single", args });
     return resolvedConfig.singleResult ?? resolvedConfig.defaultResult;
