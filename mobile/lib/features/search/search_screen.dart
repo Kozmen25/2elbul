@@ -27,6 +27,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   int? _minPrice;
   int? _maxPrice;
   SearchSort _sort = SearchSort.relevance;
+  String? _lastPrefetchedKey;
 
   @override
   void initState() {
@@ -65,238 +66,266 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     await ref.read(catalogRepositoryProvider).recordRecentSearch(normalized);
   }
 
+  SearchQuery _currentQuery() {
+    return SearchQuery(
+      query: _query,
+      source: _source,
+      minPrice: _minPrice,
+      maxPrice: _maxPrice,
+      sort: _sort,
+    );
+  }
+
+  Future<void> _refreshSearch() async {
+    final query = _currentQuery();
+    final repo = ref.read(catalogRepositoryProvider);
+    await repo.refreshSearchCatalog(query);
+    ref.invalidate(searchResultProvider(query));
+    ref.invalidate(suggestionsProvider(_query));
+    if (_query.isEmpty) {
+      ref.invalidate(recentSearchesProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final suggestions = ref.watch(suggestionsProvider(_query));
     final recentSearches = ref.watch(recentSearchesProvider);
-    final results = ref.watch(
-      searchResultProvider(
-        SearchQuery(
-          query: _query,
-          source: _source,
-          minPrice: _minPrice,
-          maxPrice: _maxPrice,
-          sort: _sort,
-        ),
-      ),
-    );
+    final currentQuery = _currentQuery();
+    final results = ref.watch(searchResultProvider(currentQuery));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Arama')),
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              sliver: SliverToBoxAdapter(
-                child: TextField(
-                  controller: _controller,
-                  onChanged: _onChanged,
-                  onSubmitted: (value) => _commitSearch(value),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'iPhone, MacBook, PS5...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        _controller.clear();
-                        _onChanged('');
-                      },
-                      icon: const Icon(Icons.clear),
+      body: RefreshIndicator(
+        onRefresh: _refreshSearch,
+        child: SafeArea(
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                sliver: SliverToBoxAdapter(
+                  child: TextField(
+                    controller: _controller,
+                    onChanged: _onChanged,
+                    onSubmitted: _commitSearch,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: 'iPhone, MacBook, PS5...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: IconButton(
+                        onPressed: () {
+                          _controller.clear();
+                          _onChanged('');
+                        },
+                        icon: const Icon(Icons.clear),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverToBoxAdapter(
-                child: _FilterBar(
-                  source: _source,
-                  minPrice: _minPrice,
-                  maxPrice: _maxPrice,
-                  sort: _sort,
-                  onChanged: (value) => setState(() {
-                    _source = value.source;
-                    _minPrice = value.minPrice;
-                    _maxPrice = value.maxPrice;
-                    _sort = value.sort;
-                  }),
-                  onClear: () => setState(() {
-                    _source = null;
-                    _minPrice = null;
-                    _maxPrice = null;
-                    _sort = SearchSort.relevance;
-                  }),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-              sliver: SliverToBoxAdapter(
-                child: SectionHeader(
-                  title: _query.isEmpty ? 'Öneriler' : 'Sonuçlar',
-                  subtitle: _query.isEmpty
-                      ? 'Popüler ürünleri ve hızlı aramaları keşfet.'
-                      : 'Filtreleri değiştirerek daha iyi eşleşme bul.',
-                ),
-              ),
-            ),
-            if (_query.isEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                sliver: SliverToBoxAdapter(
-                  child: recentSearches.when(
-                    data: (items) {
-                      if (items.isEmpty) return const SizedBox.shrink();
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SectionHeader(
-                            title: 'Son aramalar',
-                            subtitle: 'Yakın zamanda aradığın terimler.',
-                            action: TextButton(
-                              onPressed: () async {
-                                await ref.read(catalogRepositoryProvider).clearRecentSearches();
-                                ref.invalidate(recentSearchesProvider);
-                              },
-                              child: const Text('Temizle'),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: items
-                                .map(
-                                  (item) => ActionChip(
-                                    label: Text(item),
-                                    onPressed: () => _commitSearch(item),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ],
-                      );
-                    },
-                    loading: () => const SizedBox.shrink(),
-                    error: (error, stack) => const SizedBox.shrink(),
-                  ),
-                ),
-              ),
-            if (_query.isEmpty)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverToBoxAdapter(
-                  child: suggestions.when(
-                    data: (items) => Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: items
-                          .map(
-                            (item) => ActionChip(
-                              label: Text(item),
-                              onPressed: () => _commitSearch(item),
+                  child: _FilterBar(
+                    source: _source,
+                    minPrice: _minPrice,
+                    maxPrice: _maxPrice,
+                    sort: _sort,
+                    onChanged: (value) => setState(() {
+                      _source = value.source;
+                      _minPrice = value.minPrice;
+                      _maxPrice = value.maxPrice;
+                      _sort = value.sort;
+                    }),
+                    onClear: () => setState(() {
+                      _source = null;
+                      _minPrice = null;
+                      _maxPrice = null;
+                      _sort = SearchSort.relevance;
+                    }),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                sliver: SliverToBoxAdapter(
+                  child: SectionHeader(
+                    title: _query.isEmpty ? 'Ã–neriler' : 'SonuÃ§lar',
+                    subtitle: _query.isEmpty
+                        ? 'PopÃ¼ler Ã¼rÃ¼nleri ve hÄ±zlÄ± aramalarÄ± keÅŸfet.'
+                        : 'Filtreleri deÄŸiÅŸtirerek daha iyi eÅŸleÅŸme bul.',
+                  ),
+                ),
+              ),
+              if (_query.isEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  sliver: SliverToBoxAdapter(
+                    child: recentSearches.when(
+                      data: (items) {
+                        if (items.isEmpty) return const SizedBox.shrink();
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionHeader(
+                              title: 'Son aramalar',
+                              subtitle: 'YakÄ±n zamanda aradÄ±ÄŸÄ±n terimler.',
+                              action: TextButton(
+                                onPressed: () async {
+                                  await ref.read(catalogRepositoryProvider).clearRecentSearches();
+                                  ref.invalidate(recentSearchesProvider);
+                                },
+                                child: const Text('Temizle'),
+                              ),
                             ),
-                          )
-                          .toList(),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: items
+                                  .map(
+                                    (item) => ActionChip(
+                                      label: Text(item),
+                                      onPressed: () => _commitSearch(item),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                        );
+                      },
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, _) => const SizedBox.shrink(),
                     ),
-                    loading: () => const LinearProgressIndicator(),
-                    error: (error, stack) => const SizedBox.shrink(),
+                  ),
+                ),
+              if (_query.isEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverToBoxAdapter(
+                    child: suggestions.when(
+                      data: (items) => Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: items
+                            .map(
+                              (item) => ActionChip(
+                                label: Text(item),
+                                onPressed: () => _commitSearch(item),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                sliver: SliverToBoxAdapter(
+                  child: results.when(
+                    data: (data) => Text(
+                      '${data.totalProducts} Ã¼rÃ¼n â€¢ ${data.totalListings} ilan',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
                   ),
                 ),
               ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-              sliver: SliverToBoxAdapter(
-                child: results.when(
-                  data: (data) => Text(
-                    '${data.totalProducts} ürün • ${data.totalListings} ilan',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: results.when(
+                  data: (data) {
+                    if (_query.isEmpty) {
+                      return const SliverToBoxAdapter(
+                        child: EmptyState(
+                          title: 'Bir Ã¼rÃ¼n arayÄ±n',
+                          subtitle: 'Arama baÅŸladÄ±ÄŸÄ±nda sonuÃ§lar burada gÃ¶rÃ¼necek.',
                         ),
-                  ),
-                  loading: () => const SizedBox.shrink(),
-                  error: (error, stack) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: results.when(
-                data: (data) {
-                  if (_query.isEmpty) {
-                    return const SliverToBoxAdapter(
-                      child: EmptyState(
-                        title: 'Bir ürün arayın',
-                        subtitle: 'Arama başladığında sonuçlar burada görünecek.',
-                      ),
-                    );
-                  }
-
-                  if (data.listings.isEmpty) {
-                    return SliverToBoxAdapter(
-                      child: EmptyState(
-                        title: 'Sonuç yok',
-                        subtitle: data.emptyHint,
-                        action: FilledButton(
-                          onPressed: () {
-                            setState(() {
-                              _source = null;
-                              _minPrice = null;
-                              _maxPrice = null;
-                              _sort = SearchSort.relevance;
-                            });
-                          },
-                          child: const Text('Filtreleri temizle'),
-                        ),
-                      ),
-                    );
-                  }
-
-                  return SliverList.separated(
-                    itemCount: data.listings.length,
-                    separatorBuilder: (_, separatorIndex) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final listing = data.listings[index];
-                      return ListingCard(
-                        listing: listing,
-                        onTap: () => context.push('/listing/${listing.id}'),
-                        trailing: CompareToggleButton(listingId: listing.id),
                       );
-                    },
-                  );
-                },
-                loading: () => const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 40),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                ),
-                error: (error, stack) => SliverToBoxAdapter(
-                  child: EmptyState(
-                    title: 'Arama yüklenemedi',
-                    subtitle: 'Arama sonuçları hazırlanırken bir sorun oluştu.',
-                    action: FilledButton(
-                      onPressed: () => ref.invalidate(
-                        searchResultProvider(
-                          SearchQuery(
-                            query: _query,
-                            source: _source,
-                            minPrice: _minPrice,
-                            maxPrice: _maxPrice,
-                            sort: _sort,
+                    }
+
+                    if (data.listings.isEmpty) {
+                      return SliverToBoxAdapter(
+                        child: EmptyState(
+                          title: 'SonuÃ§ yok',
+                          subtitle: data.emptyHint,
+                          action: FilledButton(
+                            onPressed: () {
+                              setState(() {
+                                _source = null;
+                                _minPrice = null;
+                                _maxPrice = null;
+                                _sort = SearchSort.relevance;
+                              });
+                            },
+                            child: const Text('Filtreleri temizle'),
                           ),
                         ),
+                      );
+                    }
+
+                    final key = [
+                      _query,
+                      _source ?? '',
+                      _minPrice?.toString() ?? '',
+                      _maxPrice?.toString() ?? '',
+                      _sort.name,
+                      data.listings.map((item) => item.imageUrl).join('|'),
+                    ].join('::');
+                    if (_lastPrefetchedKey != key) {
+                      _lastPrefetchedKey = key;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        prefetchImageUrls(
+                          context,
+                          [
+                            ...data.products.map((item) => item.imageUrl),
+                            ...data.listings.map((item) => item.imageUrl),
+                          ],
+                        );
+                      });
+                    }
+
+                    return SliverList.separated(
+                      itemCount: data.listings.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final listing = data.listings[index];
+                        return ListingCard(
+                          listing: listing,
+                          onTap: () => context.push('/listing/${listing.id}'),
+                          trailing: CompareToggleButton(listingId: listing.id),
+                        );
+                      },
+                    );
+                  },
+                  loading: () => const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 40),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ),
+                  error: (_, _) => SliverToBoxAdapter(
+                    child: EmptyState(
+                      title: 'Arama yÃ¼klenemedi',
+                      subtitle: 'Arama sonuÃ§larÄ± hazÄ±rlanÄ±rken bir sorun oluÅŸtu.',
+                      action: FilledButton(
+                        onPressed: _refreshSearch,
+                        child: const Text('Yeniden dene'),
                       ),
-                      child: const Text('Yeniden dene'),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          ],
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
         ),
       ),
     );
@@ -348,19 +377,16 @@ class _FilterBar extends StatelessWidget {
                 sort: sort,
               ),
             );
-            switch (picked) {
-              case final pickedValue?:
-                onChanged(
-                  SearchQuery(
-                    query: '',
-                    source: pickedValue.source,
-                    minPrice: pickedValue.minPrice,
-                    maxPrice: pickedValue.maxPrice,
-                    sort: pickedValue.sort,
-                  ),
-                );
-              case null:
-                break;
+            if (picked != null) {
+              onChanged(
+                SearchQuery(
+                  query: '',
+                  source: picked.source,
+                  minPrice: picked.minPrice,
+                  maxPrice: picked.maxPrice,
+                  sort: picked.sort,
+                ),
+              );
             }
           },
           icon: const Icon(Icons.tune),
@@ -368,7 +394,7 @@ class _FilterBar extends StatelessWidget {
         ),
         TextButton(
           onPressed: onClear,
-          child: const Text('Sıfırla'),
+          child: const Text('SÄ±fÄ±rla'),
         ),
       ],
     );
@@ -393,9 +419,12 @@ class _FilterSheet extends StatefulWidget {
 }
 
 class _FilterSheetState extends State<_FilterSheet> {
-  late final TextEditingController _source = TextEditingController(text: widget.source ?? '');
-  late final TextEditingController _min = TextEditingController(text: widget.minPrice?.toString() ?? '');
-  late final TextEditingController _max = TextEditingController(text: widget.maxPrice?.toString() ?? '');
+  late final TextEditingController _source =
+      TextEditingController(text: widget.source ?? '');
+  late final TextEditingController _min =
+      TextEditingController(text: widget.minPrice?.toString() ?? '');
+  late final TextEditingController _max =
+      TextEditingController(text: widget.maxPrice?.toString() ?? '');
   late SearchSort _sort = widget.sort;
 
   @override
@@ -467,8 +496,9 @@ class _FilterSheetState extends State<_FilterSheet> {
                     ),
                   )
                   .toList(),
-              onChanged: (value) => setState(() => _sort = value ?? SearchSort.relevance),
-              decoration: const InputDecoration(labelText: 'Sıralama'),
+              onChanged: (value) =>
+                  setState(() => _sort = value ?? SearchSort.relevance),
+              decoration: const InputDecoration(labelText: 'SÄ±ralama'),
             ),
             const SizedBox(height: 20),
             FilledButton(

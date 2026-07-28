@@ -2,8 +2,10 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../../features/feature_providers.dart';
 
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
@@ -508,6 +510,64 @@ class TopActionButton extends StatelessWidget {
       onPressed: onPressed,
       icon: Icon(icon),
     );
+  }
+}
+
+class OfflineBanner extends ConsumerWidget {
+  const OfflineBanner({super.key, this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offline = ref.watch(offlineModeProvider);
+    return offline.when(
+      data: (isOffline) {
+        if (!isOffline) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: compact ? 8 : 10,
+          ),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            border: Border(
+              top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+              bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.wifi_off, size: compact ? 18 : 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Çevrimdışı görünüm: son kayıtlı veriler gösteriliyor.',
+                  maxLines: 2,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+    );
+  }
+}
+
+Future<void> prefetchImageUrls(
+  BuildContext context,
+  Iterable<String> urls, {
+  int limit = 6,
+}) async {
+  final uniqueUrls = urls.where((url) => url.startsWith('http')).toSet().take(limit);
+  for (final url in uniqueUrls) {
+    await precacheImage(CachedNetworkImageProvider(url), context);
   }
 }
 

@@ -15,17 +15,24 @@ class ListingDetailScreen extends ConsumerStatefulWidget {
   final String listingId;
 
   @override
-  ConsumerState<ListingDetailScreen> createState() =>
-      _ListingDetailScreenState();
+  ConsumerState<ListingDetailScreen> createState() => _ListingDetailScreenState();
 }
 
 class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
+  String? _lastPrefetchedKey;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(catalogRepositoryProvider).markRecentlyViewed(widget.listingId);
     });
+  }
+
+  Future<void> _refreshListing() async {
+    final repo = ref.read(catalogRepositoryProvider);
+    await repo.refreshListingDetail(widget.listingId);
+    ref.invalidate(listingDetailProvider(widget.listingId));
   }
 
   @override
@@ -35,13 +42,13 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('İlan detay'),
+        title: const Text('Ä°lan detay'),
         actions: [
           CompareToggleButton(listingId: widget.listingId),
           const SizedBox(width: 8),
           favorite.when(
             data: (isFavorite) => IconButton(
-              tooltip: isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle',
+              tooltip: isFavorite ? 'Favorilerden Ã§Ä±kar' : 'Favorilere ekle',
               onPressed: () async {
                 await ref.read(catalogRepositoryProvider).toggleFavorite(widget.listingId);
                 ref.invalidate(isFavoriteProvider(widget.listingId));
@@ -50,7 +57,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      isFavorite ? 'Favorilerden kaldırıldı' : 'Favorilere eklendi',
+                      isFavorite ? 'Favorilerden kaldÄ±rÄ±ldÄ±' : 'Favorilere eklendi',
                     ),
                   ),
                 );
@@ -73,145 +80,182 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(listingDetailProvider(widget.listingId)),
+        onRefresh: _refreshListing,
         child: detail.when(
-        data: (data) {
-          return CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                sliver: SliverToBoxAdapter(
-                  child: ListingImage(
-                    imageUrl: data.listing.imageUrl,
-                    heroTag: 'listing-${data.listing.id}',
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        data.listing.title,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        data.summary,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _MetaChip(text: data.listing.source),
-                          _MetaChip(text: data.listing.city),
-                          _MetaChip(text: data.listing.condition.label),
-                          _MetaChip(
-                            text: formatMoney(data.listing.price),
-                            tone: Theme.of(context).colorScheme.primary,
-                          ),
-                          if (data.listing.hasDiscount)
-                            _MetaChip(
-                              text: 'Önce ${formatMoney(data.listing.previousPrice!)}',
-                              tone: Colors.green,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: () => context.push('/product/${data.listing.productSlug}'),
-                              icon: const Icon(Icons.analytics_outlined),
-                              label: const Text('Ürün analizi'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () => _openAlertSheet(context, data),
-                              icon: const Icon(Icons.notifications_active_outlined),
-                              label: const Text('Fiyat alarmı'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                sliver: SliverToBoxAdapter(
-                  child: SectionHeader(
-                    title: 'Fiyat geçmişi',
-                    subtitle: 'Ortalama fiyat değişimi ve en düşük band.',
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverToBoxAdapter(
-                  child: _PriceChart(points: data.priceHistory),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                sliver: SliverToBoxAdapter(
-                  child: SectionHeader(
-                    title: 'Benzer ilanlar',
-                    subtitle: 'Aynı ürün için diğer kaynaklardaki seçenekler.',
-                  ),
-                ),
-              ),
-              if (data.relatedListings.isEmpty)
-                const SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
+          data: (data) {
+            final prefetchedKey = [
+              data.listing.id,
+              data.listing.imageUrl,
+              data.relatedListings.map((item) => item.imageUrl).join('|'),
+            ].join('::');
+            if (_lastPrefetchedKey != prefetchedKey) {
+              _lastPrefetchedKey = prefetchedKey;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                prefetchImageUrls(
+                  context,
+                  [
+                    data.listing.imageUrl,
+                    data.product.imageUrl,
+                    ...data.relatedListings.map((item) => item.imageUrl),
+                  ],
+                );
+              });
+            }
+
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                const SliverToBoxAdapter(child: OfflineBanner(compact: true)),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   sliver: SliverToBoxAdapter(
-                    child: EmptyState(
-                      title: 'Benzer ilan yok',
-                      subtitle: 'Bu ürün için başka ilan bulunamadı.',
+                    child: ListingImage(
+                      imageUrl: data.listing.imageUrl,
+                      heroTag: 'listing-${data.listing.id}',
                     ),
                   ),
-                )
-              else
+                ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverList.separated(
-                    itemBuilder: (context, index) {
-                      final listing = data.relatedListings[index];
-                      return ListingCard(
-                        listing: listing,
-                        onTap: () => context.go('/listing/${listing.id}'),
-                        trailing: CompareToggleButton(listingId: listing.id),
-                      );
-                    },
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemCount: data.relatedListings.length,
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data.listing.title,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          data.summary,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _MetaChip(text: data.listing.source),
+                            _MetaChip(text: data.listing.city),
+                            _MetaChip(text: data.listing.condition.label),
+                            _MetaChip(
+                              text: formatMoney(data.listing.price),
+                              tone: Theme.of(context).colorScheme.primary,
+                            ),
+                            if (data.listing.hasDiscount)
+                              _MetaChip(
+                                text: 'Ã–nce ${formatMoney(data.listing.previousPrice!)}',
+                                tone: Colors.green,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () => context.push('/product/${data.listing.productSlug}'),
+                                icon: const Icon(Icons.analytics_outlined),
+                                label: const Text('ÃœrÃ¼n analizi'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _openAlertSheet(context, data),
+                                icon: const Icon(Icons.notifications_active_outlined),
+                                label: const Text('Fiyat alarmÄ±'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: SectionHeader(
+                      title: 'Fiyat geÃ§miÅŸi',
+                      subtitle: 'Ortalama fiyat deÄŸiÅŸimi ve en dÃ¼ÅŸÃ¼k band.',
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverToBoxAdapter(
+                    child: _PriceChart(points: data.priceHistory),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: SectionHeader(
+                      title: 'Benzer ilanlar',
+                      subtitle: 'AynÄ± Ã¼rÃ¼n iÃ§in diÄŸer kaynaklardaki seÃ§enekler.',
+                    ),
+                  ),
+                ),
+                if (data.relatedListings.isEmpty)
+                  const SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverToBoxAdapter(
+                      child: EmptyState(
+                        title: 'Benzer ilan yok',
+                        subtitle: 'Bu Ã¼rÃ¼n iÃ§in baÅŸka ilan bulunamadÄ±.',
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverList.separated(
+                      itemBuilder: (context, index) {
+                        final listing = data.relatedListings[index];
+                        return ListingCard(
+                          listing: listing,
+                          onTap: () => context.go('/listing/${listing.id}'),
+                          trailing: CompareToggleButton(listingId: listing.id),
+                        );
+                      },
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemCount: data.relatedListings.length,
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              ],
+            );
+          },
+          loading: () => ListView(
+            physics: AlwaysScrollableScrollPhysics(),
+            children: [
+              OfflineBanner(compact: true),
+              SizedBox(height: 220),
+              Center(child: CircularProgressIndicator()),
             ],
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => EmptyState(
-          title: 'İlan yüklenemedi',
-          subtitle: 'İlan detayları hazırlanırken bir sorun oluştu.',
-          action: FilledButton(
-            onPressed: () => ref.invalidate(listingDetailProvider(widget.listingId)),
-            child: const Text('Yeniden dene'),
           ),
-        ),
+          error: (_, _) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            children: [
+              const OfflineBanner(compact: true),
+              const SizedBox(height: 16),
+              EmptyState(
+                title: 'Ä°lan yÃ¼klenemedi',
+                subtitle: 'Ä°lan detaylarÄ± hazÄ±rlanÄ±rken bir sorun oluÅŸtu.',
+                action: FilledButton(
+                  onPressed: _refreshListing,
+                  child: const Text('Yeniden dene'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -238,7 +282,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Fiyat alarmı', style: Theme.of(context).textTheme.titleLarge),
+            Text('Fiyat alarmÄ±', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
@@ -264,7 +308,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
         );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Alarm oluşturuldu: ${formatMoney(target)}')),
+      SnackBar(content: Text('Alarm oluÅŸturuldu: ${formatMoney(target)}')),
     );
   }
 }
@@ -305,7 +349,7 @@ class _PriceChart extends StatelessWidget {
     if (points.isEmpty) {
       return const EmptyState(
         title: 'Yeterli veri yok',
-        subtitle: 'Bu ilan için daha fazla fiyat geçmişi gerekiyor.',
+        subtitle: 'Bu ilan iÃ§in daha fazla fiyat geÃ§miÅŸi gerekiyor.',
       );
     }
 

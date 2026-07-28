@@ -17,7 +17,7 @@ class CompareScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Karşılaştır'),
+        title: const Text('KarÅŸÄ±laÅŸtÄ±r'),
         actions: [
           compare.when(
             data: (items) => items.isEmpty
@@ -35,127 +35,134 @@ class CompareScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: compare.when(
-        data: (items) {
-          if (items.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: CompareEmptyState(
-                  title: 'Karşılaştırma listesi boş',
-                  subtitle: 'İlanlarda karşılaştırma düğmesiyle iki ilan seç.',
-                  action: FilledButton(
-                    onPressed: () => context.go('/search'),
-                    child: const Text('İlan ara'),
+      body: Column(
+        children: [
+          const OfflineBanner(compact: true),
+          Expanded(
+            child: compare.when(
+              data: (items) {
+                if (items.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: CompareEmptyState(
+                        title: 'KarÅŸÄ±laÅŸtÄ±rma listesi boÅŸ',
+                        subtitle: 'Ä°lanlarda karÅŸÄ±laÅŸtÄ±rma dÃ¼ÄŸmesiyle iki ilan seÃ§.',
+                        action: FilledButton(
+                          onPressed: () => context.go('/search'),
+                          child: const Text('Ä°lan ara'),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 760;
+                    return ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'SeÃ§ili ilanlar',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  items.length < 2
+                                      ? 'Bir ilan daha seÃ§erek fiyat, kaynak ve gÃ¼ven skorlarÄ±nÄ± yan yana gÃ¶r.'
+                                      : 'Ä°ki ilanÄ± doÄŸrudan karÅŸÄ±laÅŸtÄ±r ve en iyi seÃ§eneÄŸi hÄ±zlÄ±ca ayÄ±r.',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                                const SizedBox(height: 16),
+                                isWide
+                                    ? Row(
+                                        children: items
+                                            .map(
+                                              (listing) => Expanded(
+                                                child: Padding(
+                                                  padding: EdgeInsets.only(
+                                                    right: listing == items.last ? 0 : 12,
+                                                  ),
+                                                  child: _CompareListingCard(listing: listing),
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                      )
+                                    : Column(
+                                        children: items
+                                            .map(
+                                              (listing) => Padding(
+                                                padding: const EdgeInsets.only(bottom: 12),
+                                                child: _CompareListingCard(listing: listing),
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        if (items.length == 1)
+                          CompareEmptyState(
+                            title: 'KarÅŸÄ±laÅŸtÄ±rma iÃ§in bir ilan daha gerekiyor',
+                            subtitle:
+                                'Arama veya detay ekranlarÄ±ndan ikinci ilanÄ± seÃ§ip bu ekrana geri dÃ¶n.',
+                            action: FilledButton.icon(
+                              onPressed: () => context.go('/search'),
+                              icon: const Icon(Icons.search),
+                              label: const Text('Aramaya devam et'),
+                            ),
+                          )
+                        else ...[
+                          SectionHeader(
+                            title: 'KarÅŸÄ±laÅŸtÄ±rma Ã¶zeti',
+                            subtitle: 'Fiyat, gÃ¼ven ve kaynak farklarÄ±nÄ± hÄ±zlÄ±ca tara.',
+                          ),
+                          const SizedBox(height: 12),
+                          _CompareGrid(listings: items),
+                          const SizedBox(height: 20),
+                          SectionHeader(
+                            title: 'Ã–ne Ã§Ä±kan farklar',
+                            subtitle: 'KararÄ± etkileyen satÄ±rlarÄ± Ã¶ne Ã§Ä±kar.',
+                          ),
+                          const SizedBox(height: 12),
+                          _DifferenceCard(listings: items),
+                        ],
+                      ],
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: EmptyState(
+                    title: 'KarÅŸÄ±laÅŸtÄ±rma yÃ¼klenemedi',
+                    subtitle: 'SeÃ§ili ilanlar hazÄ±rlanÄ±rken bir sorun oluÅŸtu.',
+                    action: FilledButton(
+                      onPressed: () => ref.invalidate(compareListingsProvider),
+                      child: const Text('Yeniden dene'),
+                    ),
                   ),
                 ),
               ),
-            );
-          }
-
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 760;
-              return ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Seçili ilanlar',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            items.length < 2
-                                ? 'Bir ilan daha seçerek fiyat, kaynak ve güven skorlarını yan yana gör.'
-                                : 'İki ilanı doğrudan karşılaştır ve en iyi seçeneği hızlıca ayır.',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                          const SizedBox(height: 16),
-                          isWide
-                              ? Row(
-                                  children: items
-                                      .map(
-                                        (listing) => Expanded(
-                                          child: Padding(
-                                            padding: EdgeInsets.only(
-                                              right: listing == items.last ? 0 : 12,
-                                            ),
-                                            child: _CompareListingCard(listing: listing),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                )
-                              : Column(
-                                  children: items
-                                      .map(
-                                        (listing) => Padding(
-                                          padding: const EdgeInsets.only(bottom: 12),
-                                          child: _CompareListingCard(listing: listing),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (items.length == 1)
-                    CompareEmptyState(
-                      title: 'Karşılaştırma için bir ilan daha gerekiyor',
-                      subtitle:
-                          'Arama veya detay ekranlarından ikinci ilanı seçip bu ekrana geri dön.',
-                      action: FilledButton.icon(
-                        onPressed: () => context.go('/search'),
-                        icon: const Icon(Icons.search),
-                        label: const Text('Aramaya devam et'),
-                      ),
-                    )
-                  else ...[
-                    SectionHeader(
-                      title: 'Karşılaştırma özeti',
-                      subtitle: 'Fiyat, güven ve kaynak farklarını hızlıca tara.',
-                    ),
-                    const SizedBox(height: 12),
-                    _CompareGrid(listings: items),
-                    const SizedBox(height: 20),
-                    SectionHeader(
-                      title: 'Öne çıkan farklar',
-                      subtitle: 'Kararı etkileyen satırları öne çıkar.',
-                    ),
-                    const SizedBox(height: 12),
-                    _DifferenceCard(listings: items),
-                  ],
-                ],
-              );
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: EmptyState(
-              title: 'Karşılaştırma yüklenemedi',
-              subtitle: 'Seçili ilanlar hazırlanırken bir sorun oluştu.',
-              action: FilledButton(
-                onPressed: () => ref.invalidate(compareListingsProvider),
-                child: const Text('Yeniden dene'),
-              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -221,12 +228,12 @@ class _CompareListingCard extends ConsumerWidget {
                 FilledButton.tonalIcon(
                   onPressed: () => context.push('/product/${listing.productSlug}'),
                   icon: const Icon(Icons.analytics_outlined),
-                  label: const Text('Ürün sayfası'),
+                  label: const Text('ÃœrÃ¼n sayfasÄ±'),
                 ),
                 OutlinedButton.icon(
                   onPressed: () => context.go('/listing/${listing.id}'),
                   icon: const Icon(Icons.open_in_new),
-                  label: const Text('İlan'),
+                  label: const Text('Ä°lan'),
                 ),
               ],
             ),
@@ -298,13 +305,13 @@ class _CompareGrid extends StatelessWidget {
         winnerIndex: 2,
       ),
       _CompareMetric(
-        label: 'Şehir',
+        label: 'Åžehir',
         left: left.city,
         right: right.city,
         winnerIndex: 2,
       ),
       _CompareMetric(
-        label: 'Güven',
+        label: 'GÃ¼ven',
         left: left.confidenceScore.toStringAsFixed(2),
         right: right.confidenceScore.toStringAsFixed(2),
         winnerIndex: confidenceWinner,
@@ -455,7 +462,7 @@ class _DifferenceCard extends StatelessWidget {
             ),
             const Divider(height: 24),
             _DifferenceRow(
-              label: 'Daha yüksek güven',
+              label: 'Daha yÃ¼ksek gÃ¼ven',
               left: left.confidenceScore >= right.confidenceScore
                   ? left.title
                   : right.title,

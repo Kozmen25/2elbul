@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,8 @@ class MockCatalogRepository {
   static const _searchesBoxName = 'mobile_searches';
   static const _compareBoxName = 'mobile_compare';
   static const _alertsBoxName = 'mobile_alerts';
+  static const _cacheBoxName = 'mobile_cache';
+  static const _cacheStateBoxName = 'mobile_cache_state';
   static const _sessionKey = 'mobile_session_email';
 
   final _secureStorage = const FlutterSecureStorage();
@@ -37,8 +40,14 @@ class MockCatalogRepository {
   late final Box<dynamic> _searchesBox;
   late final Box<dynamic> _compareBox;
   late final Box<dynamic> _alertsBox;
+  late final Box<dynamic> _cacheBox;
+  late final Box<dynamic> _cacheStateBox;
 
   bool _ready = false;
+  bool _offlineMode = false;
+  DateTime? _lastSyncAt;
+  Timer? _connectivityTimer;
+  final StreamController<bool> _offlineController = StreamController<bool>.broadcast();
   AppPreferences _preferences = const AppPreferences(
     themeMode: AppThemePreference.system,
     localeCode: 'tr',
@@ -53,6 +62,9 @@ class MockCatalogRepository {
   final Map<String, List<PricePoint>> _priceHistory = demoPriceHistory;
 
   AppPreferences get preferences => _preferences;
+  bool get isOfflineMode => _offlineMode;
+  DateTime? get lastSyncAt => _lastSyncAt;
+  Stream<bool> get offlineModeChanges => _offlineController.stream.distinct();
 
   Future<void> initialize() async {
     _settingsBox = await Hive.openBox(_settingsBoxName);
@@ -61,6 +73,8 @@ class MockCatalogRepository {
     _searchesBox = await Hive.openBox(_searchesBoxName);
     _compareBox = await Hive.openBox(_compareBoxName);
     _alertsBox = await Hive.openBox(_alertsBoxName);
+    _cacheBox = await Hive.openBox(_cacheBoxName);
+    _cacheStateBox = await Hive.openBox(_cacheStateBoxName);
 
     final theme = _settingsBox.get('theme') as String?;
     final locale = _settingsBox.get('locale') as String?;
@@ -79,137 +93,105 @@ class MockCatalogRepository {
       authEmail: email,
     );
 
+    _offlineMode = _cacheStateBox.get('offlineMode') as bool? ?? false;
+    final syncedAt = _cacheStateBox.get('lastSyncAt') as String?;
+    _lastSyncAt = syncedAt == null ? null : DateTime.tryParse(syncedAt);
+    _emitOfflineMode(_offlineMode);
+    _connectivityTimer?.cancel();
+    _connectivityTimer = _remoteBaseUrl.isEmpty
+        ? null
+        : Timer.periodic(const Duration(seconds: 45), (_) {
+            unawaited(_probeRemoteConnection());
+          });
+
     _ready = true;
   }
 
-  Future<HomeFeed> loadHomeFeed() async {
+  Future<HomeFeed> loadHomeFeed({bool refresh = false}) async {
     await _ensureReady();
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-
-    final searchTerms = <String>[
-      'iPhone 13',
-      'MacBook Air M2',
-      'PlayStation 5',
-      'Samsung S23',
-      'Xbox Series S',
-      'RTX 4060',
-    ];
-    final latest = [..._listings]
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final latestListings = latest.take(8).toList();
-    final trendingProducts = _products
-        .map((product) => _buildProductCard(product))
-        .take(8)
-        .toList();
-
-    return HomeFeed(
-      heroProduct: _buildProductCard(_products.first),
-      searchTerms: searchTerms,
-      categories: demoCategories,
-      aiCards: demoAiCards,
-      trendingProducts: trendingProducts,
-      latestListings: latestListings,
-      marketSummary: demoMarketSummary,
-      sourceSummary: demoSourceSummary,
-    );
-  }
-
-  Future<SearchResult> searchCatalog(SearchQuery query) async {
-    await _ensureReady();
-    await Future<void>.delayed(const Duration(milliseconds: 160));
-
-    final normalized = query.query.trim().toLowerCase();
-    final productMatches = _products.where((product) {
-      if (normalized.isEmpty) return true;
-      return product.name.toLowerCase().contains(normalized) ||
-          product.category.toLowerCase().contains(normalized) ||
-          product.brand.toLowerCase().contains(normalized);
-    }).toList();
-
-    final listingMatches = _listings.where((listing) {
-      if (normalized.isEmpty) return true;
-      final haystack = [
-        listing.title,
-        listing.productName,
-        listing.source,
-        listing.city,
-        listing.condition.label,
-      ].join(' ').toLowerCase();
-      return haystack.contains(normalized);
-    }).where((listing) {
-      final minOk = query.minPrice == null || listing.price >= query.minPrice!;
-      final maxOk = query.maxPrice == null || listing.price <= query.maxPrice!;
-      final sourceOk = query.source == null ||
-          query.source!.isEmpty ||
-          listing.source == query.source;
-      return minOk && maxOk && sourceOk;
-    }).toList();
-
-    listingMatches.sort((a, b) {
-      switch (query.sort) {
-        case SearchSort.lowestPrice:
-          return a.price.compareTo(b.price);
-        case SearchSort.newest:
-          return b.createdAt.compareTo(a.createdAt);
-        case SearchSort.highestConfidence:
-          return b.confidenceScore.compareTo(a.confidenceScore);
-        case SearchSort.relevance:
-          return _scoreSearchTerm(b, normalized)
-              .compareTo(_scoreSearchTerm(a, normalized));
+    final cacheKey = 'home_feed';
+    if (!refresh) {
+      final cached = _readCache(cacheKey);
+      if (cached != null) {
+        final feed = _decodeHomeFeed(cached['payload'] as Map<String, dynamic>);
+        if (!_isExpired(cached)) {
+          return feed;
+        }
+        unawaited(_refreshHomeFeedInBackground(cacheKey));
+        return feed;
       }
-    });
+    }
 
-    final suggestions = await suggestionsFor(normalized);
-    final filters = SearchFilters(
-      query: query.query,
-      source: query.source,
-      minPrice: query.minPrice,
-      maxPrice: query.maxPrice,
-      sort: query.sort,
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    final feed = _composeHomeFeed();
+    await _writeCache(
+      cacheKey,
+      _encodeHomeFeed(feed),
+      const Duration(minutes: 15),
     );
-
-    return SearchResult(
-      query: query.query,
-      totalProducts: productMatches.length,
-      totalListings: listingMatches.length,
-      products: productMatches.map(_buildProductCard).toList(),
-      listings: listingMatches,
-      suggestions: suggestions,
-      filters: filters,
-      emptyHint: normalized.isEmpty
-          ? 'Bir ürün adı yazdığında canlı sonuçları burada gösteririm.'
-          : 'Bu arama için daha fazla sonuç gelince liste büyüyecek.',
-    );
+    _recordSyncSuccess();
+    return feed;
   }
 
-  Future<ProductDetailData> loadProductDetail(String slug) async {
+  Future<HomeFeed> refreshHomeFeed() => loadHomeFeed(refresh: true);
+
+  Future<SearchResult> searchCatalog(SearchQuery query, {bool refresh = false}) async {
     await _ensureReady();
-    await Future<void>.delayed(const Duration(milliseconds: 220));
+    final cacheKey = _searchCacheKey(query);
+    if (!refresh) {
+      final cached = _readCache(cacheKey);
+      if (cached != null) {
+        final result = _decodeSearchResult(cached['payload'] as Map<String, dynamic>);
+        if (!_isExpired(cached)) {
+          return result;
+        }
+        unawaited(_refreshSearchInBackground(query, cacheKey));
+        return result;
+      }
+    }
 
-    final product = _products.firstWhere((item) => item.slug == slug);
-    final listings = _listings
-        .where((listing) => listing.productSlug == slug)
-        .toList()
-      ..sort((a, b) => a.price.compareTo(b.price));
-    final priceHistory = _priceHistory[slug] ?? const <PricePoint>[];
-    final similarProducts = _products
-        .where((item) => item.slug != slug)
-        .take(6)
-        .map(_buildProductCard)
-        .toList();
-
-    return ProductDetailData(
-      product: _buildProductCard(product),
-      listings: listings,
-      priceHistory: priceHistory,
-      similarProducts: similarProducts,
-      aiSummary: demoProductSummary(slug),
-      confidenceScore: product.confidenceScore,
-      riskScore: product.riskScore,
-      marketSummary: demoMarketSummary,
-      sourceSummary: demoSourceSummary,
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    final result = await _composeSearchResult(query);
+    await _writeCache(
+      cacheKey,
+      _encodeSearchResult(result),
+      const Duration(minutes: 10),
     );
+    _recordSyncSuccess();
+    return result;
   }
+
+  Future<SearchResult> refreshSearchCatalog(SearchQuery query) =>
+      searchCatalog(query, refresh: true);
+
+  Future<ProductDetailData> loadProductDetail(String slug, {bool refresh = false}) async {
+    await _ensureReady();
+    final cacheKey = _productCacheKey(slug);
+    if (!refresh) {
+      final cached = _readCache(cacheKey);
+      if (cached != null) {
+        final detail = _decodeProductDetail(cached['payload'] as Map<String, dynamic>);
+        if (!_isExpired(cached)) {
+          return detail;
+        }
+        unawaited(_refreshProductInBackground(slug, cacheKey));
+        return detail;
+      }
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    final detail = _composeProductDetail(slug);
+    await _writeCache(
+      cacheKey,
+      _encodeProductDetail(detail),
+      const Duration(minutes: 30),
+    );
+    _recordSyncSuccess();
+    return detail;
+  }
+
+  Future<ProductDetailData> refreshProductDetail(String slug) =>
+      loadProductDetail(slug, refresh: true);
 
   Future<List<ListingRecord>> loadFavorites() async {
     await _ensureReady();
@@ -433,10 +415,312 @@ class MockCatalogRepository {
         .toList();
   }
 
-  Future<ListingDetailData> loadListingDetail(String listingId) async {
+  Future<ListingDetailData> loadListingDetail(String listingId, {bool refresh = false}) async {
     await _ensureReady();
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final cacheKey = _listingCacheKey(listingId);
+    if (!refresh) {
+      final cached = _readCache(cacheKey);
+      if (cached != null) {
+        final detail = _decodeListingDetail(cached['payload'] as Map<String, dynamic>);
+        if (!_isExpired(cached)) {
+          return detail;
+        }
+        unawaited(_refreshListingInBackground(listingId, cacheKey));
+        return detail;
+      }
+    }
 
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final detail = _composeListingDetail(listingId);
+    await _writeCache(
+      cacheKey,
+      _encodeListingDetail(detail),
+      const Duration(minutes: 30),
+    );
+    _recordSyncSuccess();
+    return detail;
+  }
+
+  Future<ListingDetailData> refreshListingDetail(String listingId) =>
+      loadListingDetail(listingId, refresh: true);
+
+  Map<String, dynamic>? _readCache(String key) {
+    final raw = _cacheBox.get(key);
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
+  Future<void> _writeCache(
+    String key,
+    Map<String, dynamic> payload,
+    Duration ttl,
+  ) async {
+    final now = DateTime.now().toIso8601String();
+    await _cacheBox.put(key, <String, dynamic>{
+      'savedAt': now,
+      'expiresAt': DateTime.now().add(ttl).toIso8601String(),
+      'payload': payload,
+    });
+  }
+
+  bool _isExpired(Map<String, dynamic> envelope) {
+    final expiresAt = envelope['expiresAt']?.toString();
+    final parsed = expiresAt == null ? null : DateTime.tryParse(expiresAt);
+    if (parsed == null) return true;
+    return parsed.isBefore(DateTime.now());
+  }
+
+  String _homeCacheKey() => 'home_feed';
+
+  String _searchCacheKey(SearchQuery query) {
+    return [
+      'search',
+      query.query.trim().toLowerCase(),
+      query.minPrice?.toString() ?? '',
+      query.maxPrice?.toString() ?? '',
+      query.source?.trim().toLowerCase() ?? '',
+      query.sort.name,
+    ].join('::');
+  }
+
+  String _productCacheKey(String slug) => 'product::$slug';
+  String _listingCacheKey(String listingId) => 'listing::$listingId';
+
+  void _emitOfflineMode(bool value) {
+    if (_offlineMode == value) return;
+    _offlineMode = value;
+    _cacheStateBox.put('offlineMode', value);
+    _offlineController.add(value);
+  }
+
+  void _recordSyncSuccess() {
+    _lastSyncAt = DateTime.now();
+    _cacheStateBox.put('lastSyncAt', _lastSyncAt!.toIso8601String());
+    _emitOfflineMode(false);
+  }
+
+  void _recordSyncFailure() {
+    _emitOfflineMode(true);
+  }
+
+  Future<void> _probeRemoteConnection() async {
+    if (_remoteBaseUrl.isEmpty) return;
+    try {
+      await _dio.get<void>(
+        '/api/search/suggestions',
+        queryParameters: {'q': 'test'},
+      );
+      final wasOffline = _offlineMode;
+      _recordSyncSuccess();
+      if (wasOffline) {
+        await _refreshAllCachedEntries();
+      }
+    } catch (_) {
+      _recordSyncFailure();
+    }
+  }
+
+  Future<void> _refreshAllCachedEntries() async {
+    final keys = _cacheBox.keys.whereType<String>().toList();
+    for (final key in keys) {
+      try {
+        final envelope = _readCache(key);
+        if (envelope == null) continue;
+        final payload = envelope['payload'];
+        if (key == _homeCacheKey()) {
+          await _writeCache(
+            key,
+            _encodeHomeFeed(_composeHomeFeed()),
+            const Duration(minutes: 15),
+          );
+        } else if (key.startsWith('search::') && payload is Map) {
+          final query = _decodeSearchQuery(Map<String, dynamic>.from(payload));
+          await _writeCache(
+            key,
+            _encodeSearchResult(await _composeSearchResult(query)),
+            const Duration(minutes: 10),
+          );
+        } else if (key.startsWith('product::')) {
+          final slug = payload is Map ? payload['slug']?.toString() : null;
+          if (slug != null) {
+            await _writeCache(
+              key,
+              _encodeProductDetail(_composeProductDetail(slug)),
+              const Duration(minutes: 30),
+            );
+          }
+        } else if (key.startsWith('listing::')) {
+          final listingId = payload is Map ? payload['listingId']?.toString() : null;
+          if (listingId != null) {
+            await _writeCache(
+              key,
+              _encodeListingDetail(_composeListingDetail(listingId)),
+              const Duration(minutes: 30),
+            );
+          }
+        }
+      } catch (_) {
+        // Keep stale cache; background refresh is best-effort.
+      }
+    }
+  }
+
+  Future<void> _refreshHomeFeedInBackground(String key) async {
+    try {
+      await _writeCache(key, _encodeHomeFeed(_composeHomeFeed()), const Duration(minutes: 15));
+      _recordSyncSuccess();
+    } catch (_) {
+      _recordSyncFailure();
+    }
+  }
+
+  Future<void> _refreshSearchInBackground(SearchQuery query, String key) async {
+    try {
+      await _writeCache(
+        key,
+        _encodeSearchResult(await _composeSearchResult(query)),
+        const Duration(minutes: 10),
+      );
+      _recordSyncSuccess();
+    } catch (_) {
+      _recordSyncFailure();
+    }
+  }
+
+  Future<void> _refreshProductInBackground(String slug, String key) async {
+    try {
+      await _writeCache(key, _encodeProductDetail(_composeProductDetail(slug)), const Duration(minutes: 30));
+      _recordSyncSuccess();
+    } catch (_) {
+      _recordSyncFailure();
+    }
+  }
+
+  Future<void> _refreshListingInBackground(String listingId, String key) async {
+    try {
+      await _writeCache(key, _encodeListingDetail(_composeListingDetail(listingId)), const Duration(minutes: 30));
+      _recordSyncSuccess();
+    } catch (_) {
+      _recordSyncFailure();
+    }
+  }
+
+  HomeFeed _composeHomeFeed() {
+    final searchTerms = <String>[
+      'iPhone 13',
+      'MacBook Air M2',
+      'PlayStation 5',
+      'Samsung S23',
+      'Xbox Series S',
+      'RTX 4060',
+    ];
+    final latest = [..._listings]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final latestListings = latest.take(8).toList();
+    final trendingProducts = _products.map((product) => _buildProductCard(product)).take(8).toList();
+
+    return HomeFeed(
+      heroProduct: _buildProductCard(_products.first),
+      searchTerms: searchTerms,
+      categories: demoCategories,
+      aiCards: demoAiCards,
+      trendingProducts: trendingProducts,
+      latestListings: latestListings,
+      marketSummary: demoMarketSummary,
+      sourceSummary: demoSourceSummary,
+    );
+  }
+
+  Future<SearchResult> _composeSearchResult(SearchQuery query) async {
+    final normalized = query.query.trim().toLowerCase();
+    final productMatches = _products.where((product) {
+      if (normalized.isEmpty) return true;
+      return product.name.toLowerCase().contains(normalized) ||
+          product.category.toLowerCase().contains(normalized) ||
+          product.brand.toLowerCase().contains(normalized);
+    }).toList();
+
+    final listingMatches = _listings.where((listing) {
+      if (normalized.isEmpty) return true;
+      final haystack = [
+        listing.title,
+        listing.productName,
+        listing.source,
+        listing.city,
+        listing.condition.label,
+      ].join(' ').toLowerCase();
+      return haystack.contains(normalized);
+    }).where((listing) {
+      final minOk = query.minPrice == null || listing.price >= query.minPrice!;
+      final maxOk = query.maxPrice == null || listing.price <= query.maxPrice!;
+      final sourceOk = query.source == null ||
+          query.source!.isEmpty ||
+          listing.source == query.source;
+      return minOk && maxOk && sourceOk;
+    }).toList();
+
+    listingMatches.sort((a, b) {
+      switch (query.sort) {
+        case SearchSort.lowestPrice:
+          return a.price.compareTo(b.price);
+        case SearchSort.newest:
+          return b.createdAt.compareTo(a.createdAt);
+        case SearchSort.highestConfidence:
+          return b.confidenceScore.compareTo(a.confidenceScore);
+        case SearchSort.relevance:
+          return _scoreSearchTerm(b, normalized).compareTo(_scoreSearchTerm(a, normalized));
+      }
+    });
+
+    final suggestions = await suggestionsFor(normalized);
+    final filters = SearchFilters(
+      query: query.query,
+      source: query.source,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
+      sort: query.sort,
+    );
+
+    return SearchResult(
+      query: query.query,
+      totalProducts: productMatches.length,
+      totalListings: listingMatches.length,
+      products: productMatches.map(_buildProductCard).toList(),
+      listings: listingMatches,
+      suggestions: suggestions,
+      filters: filters,
+      emptyHint: normalized.isEmpty
+          ? 'Bir ürün adı yazdığında canlı sonuçları burada gösteririm.'
+          : 'Bu arama için daha fazla sonuç gelince liste büyüyecek.',
+    );
+  }
+
+  ProductDetailData _composeProductDetail(String slug) {
+    final product = _products.firstWhere((item) => item.slug == slug);
+    final listings = _listings.where((listing) => listing.productSlug == slug).toList()
+      ..sort((a, b) => a.price.compareTo(b.price));
+    final priceHistory = _priceHistory[slug] ?? const <PricePoint>[];
+    final similarProducts = _products
+        .where((item) => item.slug != slug)
+        .take(6)
+        .map(_buildProductCard)
+        .toList();
+
+    return ProductDetailData(
+      product: _buildProductCard(product),
+      listings: listings,
+      priceHistory: priceHistory,
+      similarProducts: similarProducts,
+      aiSummary: demoProductSummary(slug),
+      confidenceScore: product.confidenceScore,
+      riskScore: product.riskScore,
+      marketSummary: demoMarketSummary,
+      sourceSummary: demoSourceSummary,
+    );
+  }
+
+  ListingDetailData _composeListingDetail(String listingId) {
     final listing = _listings.firstWhere((item) => item.id == listingId);
     final product = _products.firstWhere((item) => item.slug == listing.productSlug);
     final relatedListings = _listings
@@ -457,12 +741,264 @@ class MockCatalogRepository {
     );
   }
 
+  Map<String, dynamic> _encodeHomeFeed(HomeFeed feed) {
+    return {
+      'heroProductSlug': feed.heroProduct.slug,
+      'searchTerms': feed.searchTerms,
+      'latestListingIds': feed.latestListings.map((item) => item.id).toList(),
+      'trendingProductSlugs': feed.trendingProducts.map((item) => item.slug).toList(),
+      'marketSummary': _encodeMarketSummary(feed.marketSummary),
+      'sourceSummary': feed.sourceSummary.map(_encodeSourceSummary).toList(),
+    };
+  }
+
+  HomeFeed _decodeHomeFeed(Map<String, dynamic> payload) {
+    final heroProductSlug = payload['heroProductSlug']?.toString() ?? _products.first.slug;
+    final searchTerms = (payload['searchTerms'] as List?)?.whereType<String>().toList() ??
+        <String>[];
+    final latestListings = (payload['latestListingIds'] as List?)
+            ?.whereType<String>()
+            .map((id) => _listings.firstWhere((item) => item.id == id, orElse: () => _listings.first))
+            .toList() ??
+        <ListingRecord>[];
+    final trendingProducts = (payload['trendingProductSlugs'] as List?)
+            ?.whereType<String>()
+            .map((slug) => _buildProductCard(
+                  _products.firstWhere((item) => item.slug == slug, orElse: () => _products.first),
+                ))
+            .toList() ??
+        <ProductCard>[];
+    final marketSummary = _decodeMarketSummary(Map<String, dynamic>.from(payload['marketSummary'] as Map));
+    final sourceSummary = (payload['sourceSummary'] as List?)
+            ?.whereType<Map>()
+            .map((item) => _decodeSourceSummary(Map<String, dynamic>.from(item)))
+            .toList() ??
+        demoSourceSummary;
+
+    return HomeFeed(
+      heroProduct: _buildProductCard(
+        _products.firstWhere((item) => item.slug == heroProductSlug, orElse: () => _products.first),
+      ),
+      searchTerms: searchTerms,
+      categories: demoCategories,
+      aiCards: demoAiCards,
+      trendingProducts: trendingProducts,
+      latestListings: latestListings,
+      marketSummary: marketSummary,
+      sourceSummary: sourceSummary,
+    );
+  }
+
+  Map<String, dynamic> _encodeSearchResult(SearchResult result) {
+    return {
+      'query': result.query,
+      'totalProducts': result.totalProducts,
+      'totalListings': result.totalListings,
+      'productSlugs': result.products.map((item) => item.slug).toList(),
+      'listingIds': result.listings.map((item) => item.id).toList(),
+      'suggestions': result.suggestions,
+      'filters': {
+        'query': result.filters.query,
+        'source': result.filters.source,
+        'minPrice': result.filters.minPrice,
+        'maxPrice': result.filters.maxPrice,
+        'sort': result.filters.sort.name,
+      },
+      'emptyHint': result.emptyHint,
+    };
+  }
+
+  SearchResult _decodeSearchResult(Map<String, dynamic> payload) {
+    final productSlugs = (payload['productSlugs'] as List?)?.whereType<String>().toList() ?? <String>[];
+    final listingIds = (payload['listingIds'] as List?)?.whereType<String>().toList() ?? <String>[];
+    final suggestions = (payload['suggestions'] as List?)?.whereType<String>().toList() ?? <String>[];
+    final filtersRaw = Map<String, dynamic>.from(payload['filters'] as Map);
+    final filters = SearchFilters(
+      query: filtersRaw['query']?.toString() ?? '',
+      source: filtersRaw['source']?.toString(),
+      minPrice: filtersRaw['minPrice'] as int?,
+      maxPrice: filtersRaw['maxPrice'] as int?,
+      sort: SearchSort.values.firstWhere(
+        (item) => item.name == filtersRaw['sort']?.toString(),
+        orElse: () => SearchSort.relevance,
+      ),
+    );
+
+    return SearchResult(
+      query: payload['query']?.toString() ?? '',
+      totalProducts: payload['totalProducts'] as int? ?? 0,
+      totalListings: payload['totalListings'] as int? ?? 0,
+      products: productSlugs
+          .map((slug) => _buildProductCard(
+                _products.firstWhere((item) => item.slug == slug, orElse: () => _products.first),
+              ))
+          .toList(),
+      listings: listingIds
+          .map((id) => _listings.firstWhere((item) => item.id == id, orElse: () => _listings.first))
+          .toList(),
+      suggestions: suggestions,
+      filters: filters,
+      emptyHint: payload['emptyHint']?.toString() ?? '',
+    );
+  }
+
+  SearchQuery _decodeSearchQuery(Map<String, dynamic> payload) {
+    final filtersRaw = Map<String, dynamic>.from(payload['filters'] as Map? ?? {});
+    return SearchQuery(
+      query: payload['query']?.toString() ?? filtersRaw['query']?.toString() ?? '',
+      source: filtersRaw['source']?.toString(),
+      minPrice: _asInt(filtersRaw['minPrice']),
+      maxPrice: _asInt(filtersRaw['maxPrice']),
+      sort: SearchSort.values.firstWhere(
+        (item) => item.name == filtersRaw['sort']?.toString(),
+        orElse: () => SearchSort.relevance,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _encodeProductDetail(ProductDetailData detail) {
+    return {
+      'slug': detail.product.slug,
+      'listingIds': detail.listings.map((item) => item.id).toList(),
+      'priceHistory': detail.priceHistory
+          .map((point) => {
+                'date': point.date.toIso8601String(),
+                'average': point.average,
+                'lowest': point.lowest,
+              })
+          .toList(),
+      'similarProductSlugs': detail.similarProducts.map((item) => item.slug).toList(),
+      'aiSummary': detail.aiSummary,
+      'confidenceScore': detail.confidenceScore,
+      'riskScore': detail.riskScore,
+    };
+  }
+
+  ProductDetailData _decodeProductDetail(Map<String, dynamic> payload) {
+    final slug = payload['slug']?.toString() ?? _products.first.slug;
+    final product = _products.firstWhere((item) => item.slug == slug, orElse: () => _products.first);
+    final listingIds = (payload['listingIds'] as List?)?.whereType<String>().toList() ?? <String>[];
+    final priceHistory = (payload['priceHistory'] as List?)
+            ?.whereType<Map>()
+            .map(
+              (item) => PricePoint(
+                date: DateTime.parse(item['date'].toString()),
+                average: item['average'] as int,
+                lowest: item['lowest'] as int,
+              ),
+            )
+            .toList() ??
+        const <PricePoint>[];
+    final similarProductSlugs =
+        (payload['similarProductSlugs'] as List?)?.whereType<String>().toList() ?? <String>[];
+
+    return ProductDetailData(
+      product: _buildProductCard(product),
+      listings: listingIds
+          .map((id) => _listings.firstWhere((item) => item.id == id, orElse: () => _listings.first))
+          .toList(),
+      priceHistory: priceHistory,
+      similarProducts: similarProductSlugs
+          .map((slug) => _buildProductCard(
+                _products.firstWhere((item) => item.slug == slug, orElse: () => _products.first),
+              ))
+          .toList(),
+      aiSummary: payload['aiSummary']?.toString() ?? demoProductSummary(slug),
+      confidenceScore: (payload['confidenceScore'] as num?)?.toDouble() ?? product.confidenceScore,
+      riskScore: (payload['riskScore'] as num?)?.toDouble() ?? product.riskScore,
+      marketSummary: demoMarketSummary,
+      sourceSummary: demoSourceSummary,
+    );
+  }
+
+  Map<String, dynamic> _encodeListingDetail(ListingDetailData detail) {
+    return {
+      'listingId': detail.listing.id,
+      'relatedListingIds': detail.relatedListings.map((item) => item.id).toList(),
+      'priceHistory': detail.priceHistory
+          .map((point) => {
+                'date': point.date.toIso8601String(),
+                'average': point.average,
+                'lowest': point.lowest,
+              })
+          .toList(),
+      'summary': detail.summary,
+      'confidenceScore': detail.confidenceScore,
+      'riskScore': detail.riskScore,
+    };
+  }
+
+  ListingDetailData _decodeListingDetail(Map<String, dynamic> payload) {
+    final listingId = payload['listingId']?.toString() ?? _listings.first.id;
+    final listing = _listings.firstWhere((item) => item.id == listingId, orElse: () => _listings.first);
+    final product = _products.firstWhere((item) => item.slug == listing.productSlug, orElse: () => _products.first);
+    final relatedListingIds =
+        (payload['relatedListingIds'] as List?)?.whereType<String>().toList() ?? <String>[];
+    final priceHistory = (payload['priceHistory'] as List?)
+            ?.whereType<Map>()
+            .map(
+              (item) => PricePoint(
+                date: DateTime.parse(item['date'].toString()),
+                average: item['average'] as int,
+                lowest: item['lowest'] as int,
+              ),
+            )
+            .toList() ??
+        const <PricePoint>[];
+
+    return ListingDetailData(
+      listing: listing,
+      product: _buildProductCard(product),
+      relatedListings: relatedListingIds
+          .map((id) => _listings.firstWhere((item) => item.id == id, orElse: () => _listings.first))
+          .toList(),
+      priceHistory: priceHistory,
+      summary: payload['summary']?.toString() ?? demoProductSummary(listing.productSlug),
+      confidenceScore: (payload['confidenceScore'] as num?)?.toDouble() ?? listing.confidenceScore,
+      riskScore: (payload['riskScore'] as num?)?.toDouble() ?? product.riskScore,
+      marketSummary: demoMarketSummary,
+      sourceSummary: demoSourceSummary,
+    );
+  }
+
+  Map<String, dynamic> _encodeMarketSummary(MarketSummary summary) => {
+        'activeProducts': summary.activeProducts,
+        'activeListings': summary.activeListings,
+        'alerts': summary.alerts,
+        'trend': summary.trend,
+      };
+
+  MarketSummary _decodeMarketSummary(Map<String, dynamic> payload) => MarketSummary(
+        activeProducts: payload['activeProducts'] as int? ?? 0,
+        activeListings: payload['activeListings'] as int? ?? 0,
+        alerts: payload['alerts'] as int? ?? 0,
+        trend: payload['trend']?.toString() ?? '',
+      );
+
+  Map<String, dynamic> _encodeSourceSummary(SourceSummary summary) => {
+        'source': summary.source,
+        'listings': summary.listings,
+        'state': summary.state,
+      };
+
+  SourceSummary _decodeSourceSummary(Map<String, dynamic> payload) => SourceSummary(
+        source: payload['source']?.toString() ?? '',
+        listings: payload['listings'] as int? ?? 0,
+        state: payload['state']?.toString() ?? '',
+      );
+
   String get _remoteBaseUrl => const String.fromEnvironment(
         'TWOELBUL_API_BASE_URL',
         defaultValue: '',
       );
 
   bool get _canUseRemoteSuggestions => _remoteBaseUrl.isNotEmpty;
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
 
   Future<void> _ensureReady() async {
     if (!_ready) {

@@ -2,16 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/data/mock_catalog_repository.dart';
 import '../../core/models.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../compare/compare_widgets.dart';
 import '../feature_providers.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  String? _lastPrefetchedHeroSlug;
+
+  Future<void> _refreshFeed() async {
+    final repo = ref.read(catalogRepositoryProvider);
+    await repo.refreshHomeFeed();
+    ref.invalidate(homeFeedProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final feed = ref.watch(homeFeedProvider);
 
     return Scaffold(
@@ -25,9 +39,23 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(homeFeedProvider),
+        onRefresh: _refreshFeed,
         child: feed.when(
           data: (data) {
+            if (_lastPrefetchedHeroSlug != data.heroProduct.slug) {
+              _lastPrefetchedHeroSlug = data.heroProduct.slug;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                prefetchImageUrls(
+                  context,
+                  [
+                    data.heroProduct.imageUrl,
+                    ...data.trendingProducts.map((item) => item.imageUrl),
+                    ...data.latestListings.map((item) => item.imageUrl),
+                  ],
+                );
+              });
+            }
             return LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 760;
@@ -202,7 +230,7 @@ class HomeScreen extends ConsumerWidget {
             title: 'Veri yüklenemedi',
             subtitle: 'Ana ekran hazırlanırken bir sorun oluştu.',
             action: FilledButton(
-              onPressed: () => ref.invalidate(homeFeedProvider),
+              onPressed: _refreshFeed,
               child: const Text('Yeniden dene'),
             ),
           ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/widgets/app_widgets.dart';
 import '../compare/compare_widgets.dart';
 import '../feature_providers.dart';
 
@@ -22,7 +23,12 @@ class AppShell extends ConsumerWidget {
     final compare = ref.watch(compareListingsProvider);
 
     return Scaffold(
-      body: navigationShell,
+      body: Column(
+        children: [
+          const OfflineBanner(compact: true),
+          Expanded(child: navigationShell),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Column(

@@ -19,6 +19,10 @@ final notificationsProvider = FutureProvider<List<NotificationRecord>>((ref) {
   return ref.read(catalogRepositoryProvider).loadNotifications();
 });
 
+final offlineModeProvider = StreamProvider<bool>((ref) {
+  return ref.read(catalogRepositoryProvider).offlineModeChanges;
+});
+
 final recentSearchesProvider = FutureProvider<List<String>>((ref) {
   return ref.read(catalogRepositoryProvider).loadRecentSearches();
 });

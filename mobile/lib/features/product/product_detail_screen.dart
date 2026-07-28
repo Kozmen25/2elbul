@@ -19,6 +19,8 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
+  String? _lastPrefetchedKey;
+
   @override
   void initState() {
     super.initState();
@@ -27,13 +29,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     });
   }
 
+  Future<void> _refreshProduct() async {
+    final repo = ref.read(catalogRepositoryProvider);
+    await repo.refreshProductDetail(widget.slug);
+    ref.invalidate(productDetailProvider(widget.slug));
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = ref.watch(productDetailProvider(widget.slug));
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ürün detay'),
+        title: const Text('ÃœrÃ¼n detay'),
         actions: [
           IconButton(
             onPressed: () => context.push('/auth'),
@@ -42,12 +50,33 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(productDetailProvider(widget.slug)),
+        onRefresh: _refreshProduct,
         child: detail.when(
           data: (data) {
+            final prefetchedKey = [
+              data.product.slug,
+              data.listings.map((item) => item.imageUrl).join('|'),
+              data.similarProducts.map((item) => item.imageUrl).join('|'),
+            ].join('::');
+            if (_lastPrefetchedKey != prefetchedKey) {
+              _lastPrefetchedKey = prefetchedKey;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                prefetchImageUrls(
+                  context,
+                  [
+                    data.product.imageUrl,
+                    ...data.listings.map((item) => item.imageUrl),
+                    ...data.similarProducts.map((item) => item.imageUrl),
+                  ],
+                );
+              });
+            }
+
             return CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
+                const SliverToBoxAdapter(child: OfflineBanner(compact: true)),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   sliver: SliverToBoxAdapter(
@@ -84,7 +113,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             _StatBadge(text: formatMoney(data.product.averagePrice)),
                             _StatBadge(text: '${data.listings.length} ilan'),
                             _StatBadge(
-                              text: 'Güven ${data.confidenceScore.round()}',
+                              text: 'GÃ¼ven ${data.confidenceScore.round()}',
                               tone: Colors.green,
                             ),
                             _StatBadge(
@@ -101,8 +130,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                   sliver: SliverToBoxAdapter(
                     child: SectionHeader(
-                      title: 'Fiyat geçmişi',
-                      subtitle: 'Günlük ortalama ve en düşük fiyatlar.',
+                      title: 'Fiyat geÃ§miÅŸi',
+                      subtitle: 'GÃ¼nlÃ¼k ortalama ve en dÃ¼ÅŸÃ¼k fiyatlar.',
                     ),
                   ),
                 ),
@@ -116,8 +145,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                   sliver: SliverToBoxAdapter(
                     child: SectionHeader(
-                      title: 'İlanlar',
-                      subtitle: 'En ucuz ve en güncel ilanlar.',
+                      title: 'Ä°lanlar',
+                      subtitle: 'En ucuz ve en gÃ¼ncel ilanlar.',
                     ),
                   ),
                 ),
@@ -140,8 +169,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
                   sliver: SliverToBoxAdapter(
                     child: SectionHeader(
-                      title: 'Benzer ürünler',
-                      subtitle: 'Alternatifleri hızlıca karşılaştır.',
+                      title: 'Benzer Ã¼rÃ¼nler',
+                      subtitle: 'Alternatifleri hÄ±zlÄ±ca karÅŸÄ±laÅŸtÄ±r.',
                     ),
                   ),
                 ),
@@ -173,21 +202,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             );
           },
           loading: () => ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: const [
+            physics: AlwaysScrollableScrollPhysics(),
+            children: [
+              OfflineBanner(compact: true),
               SizedBox(height: 220),
               Center(child: CircularProgressIndicator()),
             ],
           ),
-          error: (error, stack) => ListView(
+          error: (_, _) => ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(20),
             children: [
+              const OfflineBanner(compact: true),
+              const SizedBox(height: 16),
               EmptyState(
-                title: 'Ürün yüklenemedi',
-                subtitle: 'Ürün detayları hazırlanırken bir sorun oluştu.',
+                title: 'ÃœrÃ¼n yÃ¼klenemedi',
+                subtitle: 'ÃœrÃ¼n detaylarÄ± hazÄ±rlanÄ±rken bir sorun oluÅŸtu.',
                 action: FilledButton(
-                  onPressed: () => ref.invalidate(productDetailProvider(widget.slug)),
+                  onPressed: _refreshProduct,
                   child: const Text('Yeniden dene'),
                 ),
               ),
@@ -235,7 +267,7 @@ class _PriceChart extends StatelessWidget {
     if (points.isEmpty) {
       return const EmptyState(
         title: 'Yeterli veri yok',
-        subtitle: 'Fiyat grafiği için daha fazla geçmiş veri gerekiyor.',
+        subtitle: 'Fiyat grafiÄŸi iÃ§in daha fazla geÃ§miÅŸ veri gerekiyor.',
       );
     }
 
