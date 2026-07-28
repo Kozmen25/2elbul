@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAdminEmail } from "@/lib/admin";
+import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { isRecord } from "@/lib/records";
 
 export const dynamic = "force-dynamic";
@@ -96,37 +95,6 @@ export async function POST(request: NextRequest) {
     },
     { status: ok ? 200 : 502 },
   );
-}
-
-async function verifyAdmin() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = (await supabase?.auth.getUser()) ?? {
-    data: { user: null },
-    error: null,
-  };
-
-  if (error) {
-    console.error("Admin bot task auth failed:", error);
-  }
-
-  if (!user) {
-    return NextResponse.json(
-      { ok: false, error: "Bu işlem için giriş yapmalısınız." },
-      { status: 401 },
-    );
-  }
-
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json(
-      { ok: false, error: "Bu işlem için admin yetkisi gerekli." },
-      { status: 403 },
-    );
-  }
-
-  return null;
 }
 
 function isBotTask(value: unknown): value is BotTask {

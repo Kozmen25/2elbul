@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { RecoveryMetricsService } from "@/lib/recovery";
-import { isAdminEmail } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,30 +32,4 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, summary });
-}
-
-async function verifyAdmin() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = (await supabase?.auth.getUser()) ?? {
-    data: { user: null },
-    error: null,
-  };
-
-  if (error) console.error("[RecoveryMetrics] admin auth error:", error);
-  if (!user) {
-    return NextResponse.json(
-      { ok: false, error: "Bu işlem için giriş yapmalısınız." },
-      { status: 401 },
-    );
-  }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json(
-      { ok: false, error: "Bu işlem için admin yetkisi gerekli." },
-      { status: 403 },
-    );
-  }
-  return null;
 }

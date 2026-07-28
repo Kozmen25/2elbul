@@ -12,6 +12,7 @@ type CronTaskResult = {
 };
 
 const TASKS = [
+  { task: "retry-dlq", path: "/api/cron/retry-dlq" },
   { task: "run-sources", path: "/api/cron/run-sources" },
   { task: "process-search-queue", path: "/api/cron/process-search-queue" },
   { task: "check-price-alerts", path: "/api/cron/check-price-alerts" },

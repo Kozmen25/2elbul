@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { isAdminEmail } from "@/lib/admin";
+import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { dryRunProductMatch } from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,35 +46,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
-
-async function verifyAdmin() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = (await supabase?.auth.getUser()) ?? {
-    data: { user: null },
-    error: null,
-  };
-
-  if (error) {
-    console.error("Product matcher admin auth failed:", error);
-  }
-
-  if (!user) {
-    return NextResponse.json(
-      { ok: false, error: "Bu işlem için giriş yapmalısınız." },
-      { status: 401 },
-    );
-  }
-
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json(
-      { ok: false, error: "Bu işlem için admin yetkisi gerekli." },
-      { status: 403 },
-    );
-  }
-
-  return null;
 }
