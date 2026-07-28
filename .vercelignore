@@ -1,5 +1,6 @@
 .next
 node_modules
+mobile
 .npm-cache
 *.tsbuildinfo
 .env*
