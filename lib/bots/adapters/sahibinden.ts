@@ -1,6 +1,7 @@
 import "server-only";
 
 import { load, type CheerioAPI, type Cheerio } from "cheerio";
+import { deduplicateByUrl } from "@/lib/bots/deduplicate";
 import {
   absoluteUrl,
   cleanText,
@@ -308,10 +309,4 @@ export function parseSahibindenProductPage(
     image_urls: imageUrls,
     status: "pending",
   };
-}
-
-function deduplicateByUrl(listings: BotAdapterListing[]) {
-  return [
-    ...new Map(listings.map((listing) => [listing.url, listing])).values(),
-  ];
 }

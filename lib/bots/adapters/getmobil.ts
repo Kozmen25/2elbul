@@ -1,4 +1,5 @@
 import { load, type CheerioAPI } from "cheerio";
+import { deduplicateByUrl } from "@/lib/bots/deduplicate";
 import {
   absoluteUrl,
   cleanText,
@@ -345,8 +346,4 @@ function deriveProductName(title: string) {
     .replace(/\s+-\s+\d+\s*(?:GB|TB)\b.*$/i, "")
     .replace(/\biPhone\b/i, "iPhone")
     .trim();
-}
-
-function deduplicateByUrl(listings: BotAdapterListing[]) {
-  return [...new Map(listings.map((listing) => [listing.url, listing])).values()];
 }

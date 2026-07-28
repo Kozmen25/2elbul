@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "crypto";
 import { load, type CheerioAPI } from "cheerio";
+import { deduplicateByUrl } from "@/lib/bots/deduplicate";
 import {
   absoluteUrl,
   cleanText,
@@ -476,8 +477,4 @@ function isAllowedHost(value: string, hosts: string[]) {
 
 function createExternalId(url: string) {
   return createHash("sha1").update(url.trim().toLowerCase()).digest("hex");
-}
-
-function deduplicateByUrl(listings: BotAdapterListing[]) {
-  return [...new Map(listings.map((listing) => [listing.url, listing])).values()];
 }
