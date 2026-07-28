@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateProductKey } from "./signals";
 import type { BatchMatchCandidate } from "./types";
-
-const SCAN_PAGE_SIZE = 1000;
 
 export async function batchFindExistingMatchedProducts(
   supabase: SupabaseClient,
@@ -54,11 +51,10 @@ export async function batchFindExistingMatchedProducts(
     resultMap.set(name, product);
   }
 
-  // Phase 2: Key-based fallback for unmatched names via paginated full scan
+  // Phase 2: Key-based match via indexed normalized_key query
   const needsKeyMatch = candidates.filter((c) => !exactByName.has(c.canonicalName));
   if (needsKeyMatch.length === 0) return resultMap;
 
-  const keySet = new Set(needsKeyMatch.map((c) => c.canonicalKey));
   const keyToNames = new Map<string, string[]>();
   for (const c of needsKeyMatch) {
     const names = keyToNames.get(c.canonicalKey) ?? [];
@@ -66,23 +62,20 @@ export async function batchFindExistingMatchedProducts(
     keyToNames.set(c.canonicalKey, names);
   }
 
-  const seenKeys = new Set<string>();
-  let offset = 0;
-  let hasMore = true;
+  const uniqueKeys = [...new Set(needsKeyMatch.map((c) => c.canonicalKey))];
 
-  while (hasMore) {
-    const { data: products, error: scanError } = await supabase
-      .from("products")
-      .select("id, name, category")
-      .order("id", { ascending: true })
-      .range(offset, offset + SCAN_PAGE_SIZE - 1);
+  const { data: keyProducts, error: keyError } = await supabase
+    .from("products")
+    .select("id, name, category, normalized_key")
+    .in("normalized_key", uniqueKeys);
 
-    if (scanError) throw scanError;
-    if (!products || products.length === 0) break;
+  if (keyError) throw keyError;
 
-    for (const product of products) {
-      const pKey = generateProductKey(product.name);
-      if (keySet.has(pKey) && !seenKeys.has(pKey)) {
+  if (keyProducts) {
+    const seenKeys = new Set<string>();
+    for (const product of keyProducts) {
+      const pKey = product.normalized_key;
+      if (pKey && !seenKeys.has(pKey)) {
         seenKeys.add(pKey);
         const matched = {
           id: product.id,
@@ -95,9 +88,6 @@ export async function batchFindExistingMatchedProducts(
         }
       }
     }
-
-    hasMore = products.length === SCAN_PAGE_SIZE;
-    offset += SCAN_PAGE_SIZE;
   }
 
   return resultMap;

@@ -65,6 +65,7 @@ const realScrapeSourceSlugs = new Set([
   "teknosa-yenilenmis",
   "mediamarkt-yenilenmis",
   "yenilenmis-market",
+  "sahibinden",
 ]);
 
 export function SourceManager({

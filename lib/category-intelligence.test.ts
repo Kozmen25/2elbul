@@ -121,6 +121,24 @@ describe("category route registry", () => {
     expect(findCategoryRoute("yedek-parca")?.slug).toBe("yedek-parca");
   });
 
+  it("resolves common Turkish aliases to canonical slugs", () => {
+    expect(findCategoryRoute("cep-telefonu")?.slug).toBe("telefon");
+    expect(findCategoryRoute("cep-telefon")?.slug).toBe("telefon");
+    expect(findCategoryRoute("akilli-telefon")?.slug).toBe("telefon");
+    expect(findCategoryRoute("dizustu")?.slug).toBe("bilgisayar");
+    expect(findCategoryRoute("playstation")?.slug).toBe("konsol");
+    expect(findCategoryRoute("araba")?.slug).toBe("arac");
+    expect(findCategoryRoute("televizyon")?.slug).toBe("tv-ses");
+    expect(findCategoryRoute("konut")?.slug).toBe("emlak");
+  });
+
+  it("normalizes aliases consistently for URLs", () => {
+    expect(normalizeCategorySlug("cep-telefonu")).toBe("telefon");
+    expect(normalizeCategorySlug("Cep Telefonu")).toBe("telefon");
+    expect(normalizeCategorySlug("TV")).toBe("tv-ses");
+    expect(normalizeCategorySlug("dizüstü bilgisayar")).toBe("bilgisayar");
+  });
+
   it("returns null for unknown categories so the page can 404", () => {
     expect(findCategoryRoute("bilinmeyen-kategori")).toBeNull();
     expect(findCategoryRoute("")).toBeNull();

@@ -24,28 +24,6 @@ export function createComparisonInput(
   };
 }
 
-export function extractStorageFromTitle(title: string): string | null {
-  const match = title.match(/(\d{2,4})\s*(?:gb|tb)/i);
-  if (!match) return null;
-  const value = match[1];
-  return title.toLowerCase().includes('tb') ? `${value}tb` : `${value}gb`;
-}
-
-export function extractRamFromTitle(title: string): string | null {
-  const match = title.match(/(\d{1,3})\s*(?:gb)?\s*ram/i);
-  return match ? `${match[1]}gb` : null;
-}
-
-export function extractPriceFromTitle(title: string): number | null {
-  const match = title.match(/(\d+(?:[.,]\d{2})?)(?:\s*₺|try|tl)?/i);
-  if (!match) return null;
-
-  const cleanPrice = match[1].replace(/,/, '.');
-  const price = parseFloat(cleanPrice);
-
-  return isFinite(price) && price > 0 ? price : null;
-}
-
 export function normalizeCondition(condition: string | null | undefined): string | null {
   if (!condition) return null;
 

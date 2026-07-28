@@ -403,14 +403,63 @@ const CATEGORY_CATALOG_PAGE_SIZE = 1000;
 const CATEGORY_LISTING_BATCH_SIZE = 100;
 const SEARCH_LIMIT = 1000;
 
+/**
+ * Common Turkish URL variants that should resolve to canonical category slugs.
+ * Keys are already normalized (lowercased, diacritics removed, hyphenated).
+ */
+const CATEGORY_ALIASES: Record<string, string> = {
+  "cep-telefonu": "telefon",
+  "cep-telefon": "telefon",
+  "akilli-telefon": "telefon",
+  "dizustu": "bilgisayar",
+  "dizustu-bilgisayar": "bilgisayar",
+  "pc": "bilgisayar",
+  "oyun-bilgisayari": "bilgisayar",
+  "playstation": "konsol",
+  "oyun-konsolu": "konsol",
+  "televizyon": "tv-ses",
+  "tv": "tv-ses",
+  "otomobil": "arac",
+  "araba": "arac",
+  "konut": "emlak",
+  "daire": "emlak",
+};
+
 export function findCategoryRoute(slug: string): CategoryRoute | null {
   const normalized = normalizeCategorySlug(slug);
   if (!normalized) return null;
-  return CATEGORY_ROUTES.find((route) => route.slug === normalized) ?? null;
+  const direct = CATEGORY_ROUTES.find((route) => route.slug === normalized);
+  if (direct) return direct;
+  const canonical = CATEGORY_ALIASES[normalized];
+  if (canonical) {
+    return CATEGORY_ROUTES.find((route) => route.slug === canonical) ?? null;
+  }
+  return null;
 }
 
 export function normalizeCategorySlug(input: string): string {
-  return createProductSlug(input);
+  const slug = createProductSlug(input);
+  return CATEGORY_ALIASES[slug] ?? slug;
+}
+
+/**
+ * Returns the canonical slug for a given input slug.
+ * If the input is already a canonical slug, returns the same value.
+ * If the input is an alias, returns the canonical equivalent.
+ * Use this in pages to decide whether to redirect alias URLs.
+ */
+export function resolveCanonicalSlug(input: string): string {
+  const normalized = createProductSlug(input);
+  const aliasTarget = CATEGORY_ALIASES[normalized];
+  return aliasTarget ?? normalized;
+}
+
+/**
+ * Returns true if the given slug is a known alias (not canonical).
+ */
+export function isCategoryAlias(input: string): boolean {
+  const normalized = createProductSlug(input);
+  return normalized in CATEGORY_ALIASES;
 }
 
 export function matchProductToRoute(

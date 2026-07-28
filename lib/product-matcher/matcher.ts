@@ -97,6 +97,7 @@ export async function findOrCreateMatchedProduct({
 
   const insertPayload: Record<string, unknown> = {
     name: state.canonicalName,
+    normalized_key: state.canonicalKey,
   };
   const productCategory = category || state.signals.category;
   if (productCategory) insertPayload.category = productCategory;
@@ -202,7 +203,10 @@ export async function batchFindOrCreateMatchedProducts(
     } else {
       results.push(null);
       unmatchedIndices.push(i);
-      const payload: Record<string, unknown> = { name: state.canonicalName };
+      const payload: Record<string, unknown> = {
+        name: state.canonicalName,
+        normalized_key: state.canonicalKey,
+      };
       const category = inputs[i].category || state.signals.category;
       if (category) payload.category = category;
       unmatchedPayloads.push(payload);
@@ -211,17 +215,29 @@ export async function batchFindOrCreateMatchedProducts(
 
   if (unmatchedIndices.length === 0) return results;
 
+  // Deduplicate by canonicalName to prevent creating duplicate rows
+  // for the same product appearing multiple times in a single batch
+  const seenNames = new Set<string>();
+  const dedupedPayloads: { payload: Record<string, unknown>; originalIndex: number }[] = [];
+  for (let j = 0; j < unmatchedIndices.length; j++) {
+    const i = unmatchedIndices[j];
+    const name = states[i].canonicalName;
+    if (seenNames.has(name)) continue;
+    seenNames.add(name);
+    dedupedPayloads.push({ payload: unmatchedPayloads[j], originalIndex: i });
+  }
+
   const { data: createdProducts, error: insertError } = await supabase
     .from("products")
-    .insert(unmatchedPayloads)
+    .insert(dedupedPayloads.map((d) => d.payload))
     .select("id, name");
 
   if (insertError && isDuplicateError(insertError)) {
-    const unmatchedNames = unmatchedIndices.map((i) => states[i].canonicalName);
+    const dedupedNames = dedupedPayloads.map((d) => states[d.originalIndex].canonicalName);
     const { data: retryProducts, error: retryError } = await supabase
       .from("products")
       .select("id, name")
-      .in("name", unmatchedNames);
+      .in("name", dedupedNames);
     if (retryError) throw retryError;
 
     const retryByName = new Map<string, { id: string | number; name: string }>();
@@ -234,8 +250,8 @@ export async function batchFindOrCreateMatchedProducts(
       }
     }
 
-    for (let j = 0; j < unmatchedIndices.length; j++) {
-      const i = unmatchedIndices[j];
+    for (const d of dedupedPayloads) {
+      const i = d.originalIndex;
       const { state, confidence } = confidenceResults[i];
       const product = retryByName.get(state.canonicalName);
       if (product) {
@@ -251,8 +267,8 @@ export async function batchFindOrCreateMatchedProducts(
   } else if (insertError) {
     throw insertError;
   } else if (createdProducts) {
-    for (let j = 0; j < unmatchedIndices.length; j++) {
-      const i = unmatchedIndices[j];
+    for (let j = 0; j < dedupedPayloads.length; j++) {
+      const i = dedupedPayloads[j].originalIndex;
       const { state, confidence } = confidenceResults[i];
       const cp = createdProducts[j];
       if (cp) {

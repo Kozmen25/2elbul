@@ -7,28 +7,31 @@ type StubProduct = {
   id: number;
   name: string;
   category?: string | null;
+  normalized_key?: string | null;
 };
 
 function createStub(products: StubProduct[]) {
-  // Track the last from() call's chain separately per call
+  // Assign computed normalized_key for products that don't have one
+  const dbProducts = products.map((p) => ({
+    ...p,
+    normalized_key: p.normalized_key ?? generateProductKey(p.name),
+  }));
+
   const from = vi.fn((_table: string) => {
-    let mode: "exact" | "scan" | null = null;
+    let mode: "exact" | "key" | null = null;
     let exactNames: string[] = [];
-    let scanOffset = 0;
-    let scanLimit = 0;
+    let keyValues: string[] = [];
 
     const chain = {
       select: vi.fn(() => chain),
-      in: vi.fn((_field: string, values: string[]) => {
-        mode = "exact";
-        exactNames = values;
-        return chain;
-      }),
-      order: vi.fn(() => chain),
-      range: vi.fn((start: number, end: number) => {
-        mode = "scan";
-        scanOffset = start;
-        scanLimit = end - start + 1;
+      in: vi.fn((field: string, values: string[]) => {
+        if (field === "name") {
+          mode = "exact";
+          exactNames = values;
+        } else if (field === "normalized_key") {
+          mode = "key";
+          keyValues = values;
+        }
         return chain;
       }),
       eq: vi.fn(() => chain),
@@ -39,11 +42,12 @@ function createStub(products: StubProduct[]) {
         let result: StubProduct[];
         if (mode === "exact") {
           const nameSet = new Set(exactNames);
-          result = products.filter((p) => nameSet.has(p.name));
-        } else if (mode === "scan") {
-          result = products.slice(scanOffset, scanOffset + scanLimit);
+          result = dbProducts.filter((p) => nameSet.has(p.name));
+        } else if (mode === "key") {
+          const keySet = new Set(keyValues);
+          result = dbProducts.filter((p) => p.normalized_key && keySet.has(p.normalized_key));
         } else {
-          result = products;
+          result = dbProducts;
         }
         return Promise.resolve({ data: result, error: null }).then(onFulfilled);
       }),
@@ -115,11 +119,12 @@ describe("batchFindExistingMatchedProducts", () => {
     expect(result.get("NonExistent")).toBeNull();
   });
 
-  it("paginates across multiple pages to find key match", async () => {
+  it("finds key match via indexed normalized_key query across large dataset", async () => {
     const products: StubProduct[] = Array.from({ length: 1500 }, (_, i) => ({
       id: i + 1,
       name: `Generic ${i + 1}`,
       category: null,
+      normalized_key: `generic-${i + 1}`,
     }));
     products.push({ id: 1501, name: "iPhone 15", category: "Telefon" });
 
@@ -163,7 +168,7 @@ describe("batchFindExistingMatchedProducts", () => {
     expect(result.get("iPhone 15")?.id).toBe(1);
   });
 
-  it("does not call scan when all names are exact-matched", async () => {
+  it("does not call key query when all names are exact-matched", async () => {
     const { supabase, from } = createStub([{ id: 1, name: "iPhone 15" }]);
     const key = generateProductKey("iPhone 15");
     await batchFindExistingMatchedProducts(supabase, [
@@ -171,8 +176,8 @@ describe("batchFindExistingMatchedProducts", () => {
     ]);
 
     const chain = from.mock.results[0].value;
-    expect(chain.order.mock.calls.length).toBe(0);
-    expect(chain.range.mock.calls.length).toBe(0);
+    const fieldNames = chain.in.mock.calls.map((c: string[]) => c[0]);
+    expect(fieldNames).toEqual(["name"]);
   });
 
   it("backward compatible: findExistingMatchedProduct returns same result", async () => {

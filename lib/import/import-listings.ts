@@ -5,9 +5,11 @@ import type {
   RawImportListing,
 } from "@/lib/import/types";
 import {
+  batchFindOrCreateMatchedProducts,
   findOrCreateMatchedProduct,
-  groupListingDuplicates,
+  groupListingDuplicatesByKey,
   summarizeDuplicateGroups,
+  type BatchMatcherInput,
 } from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGlobalContext } from "@/lib/taxonomy/context";
@@ -57,7 +59,7 @@ export async function importListings(
     );
 
   if (normalizedListings.length > 0) {
-    const duplicateGroups = groupListingDuplicates(
+    const duplicateGroups = groupListingDuplicatesByKey(
       normalizedListings.map((entry) => ({
         id: entry.listing.externalId || `item-${entry.index}`,
         title: entry.listing.title,
@@ -80,17 +82,35 @@ export async function importListings(
     }
   }
 
-  for (const { index, listing } of normalizedListings) {
-    try {
-      const matchedProduct = await findOrCreateMatchedProduct({
-        supabase,
-        title: listing.title,
-        productName: listing.productName,
-        category: listing.category,
-        source,
-        resolver,
-      });
+  // Phase 1: Batch-resolve all product matches
+  const inputs: BatchMatcherInput[] = normalizedListings.map(({ listing }) => ({
+    title: listing.title,
+    productName: listing.productName,
+    category: listing.category,
+    source,
+  }));
 
+  const matchedProducts = await batchFindOrCreateMatchedProducts(
+    supabase,
+    inputs,
+    resolver,
+  );
+
+  // Phase 2: Upsert each listing with its matched product
+  for (let i = 0; i < normalizedListings.length; i++) {
+    const { index, listing } = normalizedListings[i];
+    const matchedProduct = matchedProducts[i];
+
+    if (!matchedProduct) {
+      result.failed += 1;
+      result.errors.push({
+        index,
+        message: "Ürün eşleştirilemedi",
+      });
+      continue;
+    }
+
+    try {
       const { error: listingError } = await supabase.from("listings").upsert(
         {
           product_id: matchedProduct.id,
@@ -99,6 +119,7 @@ export async function importListings(
           price: listing.price,
           city: listing.city,
           source: listing.source,
+          source_id: listing.sourceId,
           url: listing.url,
           condition: listing.condition,
           image_url: listing.imageUrl,

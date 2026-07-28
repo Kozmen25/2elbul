@@ -145,6 +145,7 @@ function normalizeCommon(
     price: readPrice(payload),
     city: readString(payload, aliases.city, "city"),
     source,
+    sourceId: null,
     url: readUrl(payload, source),
     condition: normalizeCondition(payload),
     imageUrl: imageUrls[0] ?? null,

@@ -24,6 +24,7 @@ export type NormalizedImportListing = {
   price: number;
   city: string;
   source: ImportSource;
+  sourceId: number | null;
   url: string;
   condition: ListingCondition;
   imageUrl: string | null;

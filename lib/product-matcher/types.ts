@@ -3,15 +3,8 @@ import type { DuplicateMatch, DuplicateGroup } from "@/lib/duplicate-engine/type
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ICategoryResolver } from "@/lib/taxonomy/integration";
 
-export type ProductSignals = {
-  brand: string | null;
-  model: string | null;
-  storage: string | null;
-  ram: string | null;
-  color: string | null;
-  category: string | null;
-  normalizedKey: string;
-};
+import type { ProductSignals } from "@/lib/normalization";
+export type { ProductSignals };
 
 export type MatchedProduct = {
   id: string | number;
@@ -38,6 +31,7 @@ export type ComparisonListing = {
   title: string;
   price: number;
   source: string;
+  sourceId?: number;
   condition?: string;
 };
 

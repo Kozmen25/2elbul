@@ -14,6 +14,7 @@ import {
   calculateConfidence,
   toConfidenceMetadata,
 } from '../confidence-engine';
+import { getCanonicalSourceRegistry } from "@/lib/unified-source-engine/adapters";
 
 export function createDuplicateFingerprint(
   title: string,
@@ -183,6 +184,18 @@ function resolveSourceReliability(
   sourceId1: number | null | undefined,
   sourceId2: number | null | undefined,
 ) {
+  const registry = getCanonicalSourceRegistry();
+  const rel1 = sourceId1 != null ? registry?.getReliability(sourceId1) : null;
+  const rel2 = sourceId2 != null ? registry?.getReliability(sourceId2) : null;
+
+  if (rel1 != null && rel2 != null) {
+    const count = resolveSourceCount(sourceId1, sourceId2);
+    return count >= 2 ? Math.round((rel1 + rel2) / 2) : rel1;
+  }
+
+  if (rel1 != null) return rel1;
+  if (rel2 != null) return rel2;
+
   const count = resolveSourceCount(sourceId1, sourceId2);
   return count >= 2 ? 70 : 55;
 }

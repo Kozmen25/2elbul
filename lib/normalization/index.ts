@@ -1,4 +1,4 @@
-export type { NormalizationOptions } from './engine';
+export type { NormalizationOptions, ProductSignals } from './engine';
 export {
   normalizeProductTitle,
   normalizeSearchText,
@@ -15,4 +15,6 @@ export {
   getTokens,
   createSearchFingerprint,
   isSimilarAfterNormalization,
+  extractProductSignals,
+  generateProductKey,
 } from './engine';

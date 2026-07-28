@@ -40,12 +40,14 @@ type TableChain = {
 const {
   createSupabaseAdminClientMock,
   findOrCreateMatchedProductMock,
+  batchFindOrCreateMatchedProductsMock,
   getGlobalContextMock,
   recordListingPriceHistoryMock,
   requireAdminUserMock,
 } = vi.hoisted(() => ({
   createSupabaseAdminClientMock: vi.fn(),
   findOrCreateMatchedProductMock: vi.fn(),
+  batchFindOrCreateMatchedProductsMock: vi.fn(),
   getGlobalContextMock: vi.fn(),
   recordListingPriceHistoryMock: vi.fn(),
   requireAdminUserMock: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock("@/lib/product-matcher", async () => {
   return {
     ...actual,
     findOrCreateMatchedProduct: findOrCreateMatchedProductMock,
+    batchFindOrCreateMatchedProducts: batchFindOrCreateMatchedProductsMock,
   };
 });
 
@@ -83,6 +86,7 @@ describe("double product creation guard", () => {
   beforeEach(() => {
     createSupabaseAdminClientMock.mockReset();
     findOrCreateMatchedProductMock.mockReset();
+    batchFindOrCreateMatchedProductsMock.mockReset();
     getGlobalContextMock.mockReset();
     recordListingPriceHistoryMock.mockReset();
     requireAdminUserMock.mockReset();
@@ -94,6 +98,10 @@ describe("double product creation guard", () => {
     recordListingPriceHistoryMock.mockResolvedValue(undefined);
     findOrCreateMatchedProductMock.mockImplementation(async () =>
       matchedProduct(101),
+    );
+    batchFindOrCreateMatchedProductsMock.mockImplementation(
+      async (_supabase: unknown, inputs: unknown[]) =>
+        inputs.map((_, i) => matchedProduct(101 + i)),
     );
   });
 
@@ -117,7 +125,7 @@ describe("double product creation guard", () => {
 
       expect(result.imported).toBe(1);
       expect(hasDirectProductWrite(stub.calls)).toBe(false);
-      expect(findOrCreateMatchedProductMock).toHaveBeenCalledTimes(1);
+      expect(batchFindOrCreateMatchedProductsMock).toHaveBeenCalledTimes(1);
     });
 
     it("passes the matched product id into listing upsert", async () => {
@@ -132,7 +140,7 @@ describe("double product creation guard", () => {
       createSupabaseAdminClientMock.mockReturnValue(
         stub.supabase as unknown as SupabaseClient,
       );
-      findOrCreateMatchedProductMock.mockResolvedValueOnce(matchedProduct(401));
+      batchFindOrCreateMatchedProductsMock.mockResolvedValueOnce([matchedProduct(401)]);
 
       await importListings("EasyCep", [makeImportRecord()]);
 
@@ -156,9 +164,10 @@ describe("double product creation guard", () => {
       createSupabaseAdminClientMock.mockReturnValue(
         stub.supabase as unknown as SupabaseClient,
       );
-      findOrCreateMatchedProductMock
-        .mockResolvedValueOnce(matchedProduct(11))
-        .mockResolvedValueOnce(matchedProduct(12));
+      batchFindOrCreateMatchedProductsMock.mockResolvedValue([
+        matchedProduct(11),
+        matchedProduct(12),
+      ]);
 
       const result = await importListings("EasyCep", [
         makeImportRecord({
@@ -177,7 +186,7 @@ describe("double product creation guard", () => {
 
       expect(result.imported).toBe(2);
       expect(hasDirectProductWrite(stub.calls)).toBe(false);
-      expect(findOrCreateMatchedProductMock).toHaveBeenCalledTimes(2);
+      expect(batchFindOrCreateMatchedProductsMock).toHaveBeenCalledTimes(1);
     });
 
     it("forwards listing title and product name to the matcher", async () => {
@@ -195,12 +204,16 @@ describe("double product creation guard", () => {
 
       await importListings("EasyCep", [makeImportRecord()]);
 
-      expect(findOrCreateMatchedProductMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "iPhone 15 Pro Max 256GB",
-          productName: "iPhone 15 Pro Max",
-          source: "EasyCep",
-        }),
+      expect(batchFindOrCreateMatchedProductsMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([
+          expect.objectContaining({
+            title: "iPhone 15 Pro Max 256GB",
+            productName: "iPhone 15 Pro Max",
+            source: "EasyCep",
+          }),
+        ]),
+        expect.anything(),
       );
     });
   });
@@ -329,9 +342,8 @@ describe("double product creation guard", () => {
         },
       });
 
-      findOrCreateMatchedProductMock
-        .mockResolvedValueOnce(matchedProduct(501))
-        .mockResolvedValueOnce(matchedProduct(502));
+      batchFindOrCreateMatchedProductsMock
+        .mockResolvedValueOnce([matchedProduct(501), matchedProduct(502)]);
 
       const result = await syncListingsForSource(
         stub.supabase as unknown as SupabaseClient,
@@ -377,9 +389,8 @@ describe("double product creation guard", () => {
         rpcResult,
       });
 
-      findOrCreateMatchedProductMock
-        .mockResolvedValueOnce(matchedProduct(901))
-        .mockResolvedValueOnce(matchedProduct(902));
+      batchFindOrCreateMatchedProductsMock
+        .mockResolvedValueOnce([matchedProduct(901), matchedProduct(902)]);
 
       const result = await syncListingsForSource(
         stub.supabase as unknown as SupabaseClient,
@@ -433,8 +444,9 @@ describe("double product creation guard", () => {
         },
       });
 
-      findOrCreateMatchedProductMock.mockResolvedValueOnce(matchedProduct(701));
-      findOrCreateMatchedProductMock.mockResolvedValueOnce(matchedProduct(701));
+      batchFindOrCreateMatchedProductsMock
+        .mockResolvedValueOnce([matchedProduct(701)])
+        .mockResolvedValueOnce([matchedProduct(701)]);
 
       const result = await syncListingsForSource(
         stub.supabase as unknown as SupabaseClient,
@@ -450,7 +462,7 @@ describe("double product creation guard", () => {
       );
 
       expect(stub.rpc).toHaveBeenCalledTimes(2);
-      expect(findOrCreateMatchedProductMock).toHaveBeenCalledTimes(2);
+      expect(batchFindOrCreateMatchedProductsMock).toHaveBeenCalledTimes(2);
       expect(result.imported).toBe(1);
       expect(result.errorCount).toBe(0);
       expect(result.duplicateSummary).not.toBeNull();
@@ -478,7 +490,7 @@ describe("double product creation guard", () => {
         },
       });
 
-      findOrCreateMatchedProductMock.mockResolvedValueOnce(matchedProduct(601));
+      batchFindOrCreateMatchedProductsMock.mockResolvedValueOnce([matchedProduct(601)]);
 
       const result = await insertListingsLegacy(
         stub.supabase as unknown as SupabaseClient,

@@ -16,5 +16,5 @@ export { normalizeProductTitle } from "./helpers";
 export { extractProductSignals, generateProductKey } from "./signals";
 export { batchFindOrCreateMatchedProducts, dryRunProductMatch, findOrCreateMatchedProduct } from "./matcher";
 export { batchFindExistingMatchedProducts, findExistingMatchedProduct } from "./repository";
-export { detectListingDuplicates, groupListingDuplicates } from "./duplicate";
+export { detectListingDuplicates, groupListingDuplicates, groupListingDuplicatesByKey } from "./duplicate";
 export { summarizeDuplicateGroups } from "./summary";

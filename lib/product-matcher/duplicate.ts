@@ -9,6 +9,8 @@ import type {
   GroupedListingDuplicates,
   ListingDuplicateDetectionResult,
 } from "./types";
+import type { ProductSignals } from "@/lib/normalization";
+import { extractProductSignals } from "@/lib/normalization";
 
 export function detectListingDuplicates(
   reference: ComparisonListing,
@@ -17,7 +19,7 @@ export function detectListingDuplicates(
 ): ListingDuplicateDetectionResult {
   const refInput = createComparisonInput(reference.title, {
     price: reference.price,
-    sourceId: 1,
+    sourceId: reference.sourceId,
     condition: reference.condition,
   });
 
@@ -26,7 +28,7 @@ export function detectListingDuplicates(
   for (const candidate of candidates) {
     const candInput = createComparisonInput(candidate.title, {
       price: candidate.price,
-      sourceId: 2,
+      sourceId: candidate.sourceId,
       condition: candidate.condition,
     });
 
@@ -69,7 +71,7 @@ export function groupListingDuplicates(
   const inputs = listings.map((l) => ({
     ...createComparisonInput(l.title, {
       price: l.price,
-      sourceId: 1,
+      sourceId: l.sourceId,
       condition: l.condition,
     }),
     id: l.id,
@@ -81,5 +83,141 @@ export function groupListingDuplicates(
     groups,
     count: groups.length,
     matchedCount: groups.filter((g) => g.duplicates.length > 0).length,
+  };
+}
+
+export function groupListingDuplicatesByKey(
+  listings: ComparisonListing[],
+  threshold: number = 70,
+): GroupedListingDuplicates & { comparisonsBefore: number; comparisonsAfter: number } {
+  const startTime = performance.now();
+
+  // Cache extractProductSignals results to avoid double computation per listing
+  const signalsCache = new Map<string, ProductSignals>();
+  function getSignals(title: string): ProductSignals {
+    const cached = signalsCache.get(title);
+    if (cached) return cached;
+    const signals = extractProductSignals(title);
+    signalsCache.set(title, signals);
+    return signals;
+  }
+
+  // Total comparisons if we ran flat O(n²) on all listings
+  const n = listings.length;
+  const comparisonsBefore = (n * (n - 1)) / 2;
+
+  // Phase 1: partition by brand
+  const brandMap = new Map<string, ComparisonListing[]>();
+  const nullBrand: ComparisonListing[] = [];
+
+  for (const listing of listings) {
+    const signals = getSignals(listing.title);
+    const brand = signals.brand;
+    if (brand) {
+      const bucket = brandMap.get(brand);
+      if (bucket) {
+        bucket.push(listing);
+      } else {
+        brandMap.set(brand, [listing]);
+      }
+    } else {
+      nullBrand.push(listing);
+    }
+  }
+
+  // Phase 2: within each brand, partition by normalized_key
+  const allGroups: Array<{ brand: string; key: string; items: ComparisonListing[] }> = [];
+  const nullKeyWithinBrand: ComparisonListing[] = [];
+
+  for (const [brand, brandListings] of brandMap) {
+    const keyMap = new Map<string, ComparisonListing[]>();
+
+    for (const listing of brandListings) {
+      const signals = getSignals(listing.title);
+      const nk = signals.normalizedKey;
+
+      if (nk && nk !== brand && nk !== listing.title.toLowerCase().replace(/\s+/g, "-")) {
+        const bucket = keyMap.get(nk);
+        if (bucket) {
+          bucket.push(listing);
+        } else {
+          keyMap.set(nk, [listing]);
+        }
+      } else {
+        nullKeyWithinBrand.push(listing);
+      }
+    }
+
+    for (const [key, items] of keyMap) {
+      allGroups.push({ brand, key, items });
+    }
+  }
+
+  // Phase 3: run the duplicate engine within each normalized_key group (brand-matched items)
+  const brandInputs: Array<{ id: string | number } & ReturnType<typeof createComparisonInput>> = [];
+  let totalComparisons = 0;
+
+  for (const group of allGroups) {
+    const g = group.items.length;
+    for (const listing of group.items) {
+      brandInputs.push({
+        ...createComparisonInput(listing.title, {
+          price: listing.price,
+          sourceId: listing.sourceId,
+          condition: listing.condition,
+        }),
+        id: listing.id,
+      });
+    }
+    totalComparisons += (g * (g - 1)) / 2;
+  }
+
+  const brandGroups = brandInputs.length > 0 ? groupDuplicatesEngine(brandInputs, threshold) : [];
+
+  // Phase 4: run duplicate engine separately for null-key-within-brand items
+  // Prevents O(n²) cross-group comparisons between null-key items and brand-matched groups
+  const nullKeyInputs = nullKeyWithinBrand.map((listing) => ({
+    ...createComparisonInput(listing.title, {
+      price: listing.price,
+      sourceId: listing.sourceId,
+      condition: listing.condition,
+    }),
+    id: listing.id,
+  }));
+  const g2 = nullKeyInputs.length;
+  totalComparisons += (g2 * (g2 - 1)) / 2;
+  const nullKeyGroups = nullKeyInputs.length > 0 ? groupDuplicatesEngine(nullKeyInputs, threshold) : [];
+
+  // Phase 5: run duplicate engine separately for truly brandless items
+  // Prevents O(n²) cross-group comparisons between null-brand items and all brand-matched groups
+  const nullBrandInputs = nullBrand.map((listing) => ({
+    ...createComparisonInput(listing.title, {
+      price: listing.price,
+      sourceId: listing.sourceId,
+      condition: listing.condition,
+    }),
+    id: listing.id,
+  }));
+  const g3 = nullBrandInputs.length;
+  totalComparisons += (g3 * (g3 - 1)) / 2;
+  const nullBrandGroups = nullBrandInputs.length > 0 ? groupDuplicatesEngine(nullBrandInputs, threshold) : [];
+
+  const groups = [...brandGroups, ...nullKeyGroups, ...nullBrandGroups];
+
+  const comparisonsAfter = totalComparisons;
+  const elapsed = performance.now() - startTime;
+
+  console.log(
+    `[Duplicate ByKey] ${listings.length} listings → ${brandMap.size} brands + ${nullBrand.length} unbranded, ` +
+    `${allGroups.length} product key groups. Comparisons: ${comparisonsBefore} → ${comparisonsAfter} (${comparisonsBefore > 0 ? Math.round((1 - comparisonsAfter / comparisonsBefore) * 100) : 0}% reduction). ` +
+    `${elapsed.toFixed(1)}ms`
+  );
+
+  return {
+    groups,
+    count: groups.length,
+    matchedCount: groups.filter((g) => g.duplicates.length > 0).length,
+    comparisonsBefore,
+    comparisonsAfter,
   };
 }
