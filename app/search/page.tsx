@@ -162,15 +162,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         .filter((product) => !isPublicDemoProductName(String(product.name)))
         .map((product) => product.id);
       const productListingsResult = matchingProductIds.length
-        ? (() => {
+        ? await (async () => {
             const cacheKey = cacheKeyFrom({ type: "product-listings", ids: matchingProductIds.sort() });
             const cached = cacheGet<ListingRow[]>(cacheKey);
             if (cached) return { data: cached, error: null };
-            return searchPublishedListingsByProduct(supabase, matchingProductIds)
-              .then((result) => {
-                if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
-                return result;
-              });
+            const result = await searchPublishedListingsByProduct(supabase, matchingProductIds);
+            if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
+            return result;
           })()
         : { data: [], error: null };
 
@@ -198,18 +196,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           ...new Set(rows.map((row) => String(row.product_id))),
         ];
         const productsResult = productIds.length
-          ? (() => {
+          ? await (async () => {
               const cacheKey = cacheKeyFrom({ type: "product-names", ids: productIds });
               const cached = cacheGet<{ id: string | number; name: string }[]>(cacheKey);
               if (cached) return { data: cached, error: null };
-              return supabase
+              const result = await supabase
                 .from("products")
                 .select("id, name")
-                .in("id", productIds)
-                .then((result) => {
-                  if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
-                  return result;
-                });
+                .in("id", productIds);
+              if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
+              return result;
             })()
           : { data: [], error: null };
 
