@@ -6,3 +6,11 @@ out
 .env*
 !.env.example
 npm-debug.log*
+.claude/
+*.tmp
+*.html
+mobile/.dart_tool/
+mobile/.flutter-plugins*
+mobile/.idea/
+mobile/build/
+mobile/flutter_*.log
