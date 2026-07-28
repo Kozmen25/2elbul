@@ -15,8 +15,10 @@ import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertsList } from "@/components/price-alerts-list";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import { SavedSearchesList } from "@/components/saved-searches-list";
+import { getSavedSearches } from "@/app/saved-searches/actions";
 import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
+import { isMissingStatusColumn } from "@/lib/listing-status";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const metadata: Metadata = {
@@ -44,7 +46,7 @@ export default async function AccountPage() {
     redirect("/giris?next=/hesabim");
   }
 
-  const [favoritesResult, alertsResult, listingsResult] = await Promise.all([
+  const [favoritesResult, alertsResult, listingsResult, savedSearchesResult] = await Promise.all([
     supabase
       .from("favorites")
       .select("listing_id", { count: "exact", head: true })
@@ -56,6 +58,7 @@ export default async function AccountPage() {
       .neq("status", "cancelled")
       .order("created_at", { ascending: false }),
     fetchUserListings(supabase, data.user.id),
+    getSavedSearches(),
   ]);
 
   if (favoritesResult.error) {
@@ -85,6 +88,7 @@ export default async function AccountPage() {
     status: String(alert.status ?? "active"),
     createdAt: String(alert.created_at),
   }));
+  const savedSearches = savedSearchesResult.ok ? savedSearchesResult.data : [];
 
   return (
     <section className="min-h-[calc(100vh-145px)] bg-[#fafaf8] py-10 sm:py-14">
@@ -232,6 +236,17 @@ export default async function AccountPage() {
             Ürün sayfasından hedef fiyat belirleyerek yeni alarm ekleyebilirsiniz.
           </p>
           <PriceAlertsList alerts={priceAlerts} />
+        </section>
+
+        <section className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-9">
+          <p className="text-sm font-bold text-[#ff6b00]">Kaydedilmiş Aramalar</p>
+          <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
+            Takip ettiğim aramalar
+          </h2>
+          <p className="mt-2 text-sm text-black/45">
+            Yeni ilanlar geldikçe bildirim alacaksınız.
+          </p>
+          <SavedSearchesList searches={savedSearches} />
         </section>
       </div>
     </section>

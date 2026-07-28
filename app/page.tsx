@@ -36,16 +36,16 @@ export const dynamic = "force-dynamic";
 const homeUrl = getAbsoluteUrl("/");
 
 export const metadata: Metadata = {
-  title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
+  title: "İkinci el ürünlerin gerçek piyasa fiyatını karşılaştır | 2ElBul",
   description:
-    "Telefon, bilgisayar, konsol ve daha fazlasi icin ikinci el ilanlari tek yerde karsilastir; ortalama fiyati, en ucuz ilani ve fiyat gecmisini gor.",
+    "Telefon, bilgisayar, konsol ve daha fazlası için ikinci el ilanları tek yerde karşılaştır; ortalama fiyatı, en ucuz ilanı ve fiyat geçmişini gör.",
   alternates: {
     canonical: homeUrl,
   },
   openGraph: {
-    title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
+    title: "İkinci el ürünlerin gerçek piyasa fiyatını karşılaştır | 2ElBul",
     description:
-      "2ElBul ile ikinci el ilanlari karsilastir, ortalama fiyati, en ucuz ilani, fiyat gecmisini ve guven skorunu gor.",
+      "2ElBul ile ikinci el ilanlarını karşılaştır, ortalama fiyatı, en ucuz ilanı, fiyat geçmişini ve güven skorunu gör.",
     url: homeUrl,
     siteName: "2ElBul",
     locale: "tr_TR",
@@ -53,21 +53,26 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Ikinci el urunlerin gercek piyasa fiyatini karsilastir | 2ElBul",
+    title: "İkinci el ürünlerin gerçek piyasa fiyatını karşılaştır | 2ElBul",
     description:
-      "Ikinci el piyasasini tek yerde karsilastir; fiyat analizini, en ucuz ilanlari ve fiyat gecmisini gor.",
+      "İkinci el piyasasını tek yerde karşılaştır; fiyat analizini, en ucuz ilanları ve fiyat geçmişini gör.",
   },
 };
 
-const quickCategories = [
-  { label: "Telefon", query: "telefon", icon: Smartphone },
-  { label: "Bilgisayar", query: "bilgisayar", icon: Laptop },
-  { label: "Konsol", query: "oyun konsolu", icon: Gamepad2 },
-  { label: "TV / Ses", query: "tv", icon: Tv },
-  { label: "Araç", query: "araba", icon: Car },
-  { label: "Emlak", query: "emlak", icon: HomeIcon },
-  { label: "Yedek Parça", query: "yedek parça", icon: Store },
-  { label: "Ev / Yaşam", query: "mobilya", icon: FolderSearch2 },
+const quickCategories: {
+  label: string;
+  query: string;
+  slug?: string;
+  icon: React.ComponentType<{ size?: number }>;
+}[] = [
+  { label: "Telefon", query: "telefon", slug: "telefon", icon: Smartphone },
+  { label: "Bilgisayar", query: "bilgisayar", slug: "bilgisayar", icon: Laptop },
+  { label: "Konsol", query: "oyun konsolu", slug: "konsol", icon: Gamepad2 },
+  { label: "TV / Ses", query: "tv", slug: "tv-ses", icon: Tv },
+  { label: "Araç", query: "araba", slug: "arac", icon: Car },
+  { label: "Emlak", query: "emlak", slug: "emlak", icon: HomeIcon },
+  { label: "Yedek Parça", query: "yedek parça", slug: "yedek-parca", icon: Store },
+  { label: "Ev / Yaşam", query: "mobilya", slug: "ev-yasam", icon: FolderSearch2 },
   { label: "Fiyatı düşenler", query: "fiyatı düşen", icon: TrendingDown },
   { label: "Fırsatlar", query: "fırsat", icon: BadgePercent },
   { label: "Yakınımdaki", query: "yakınımdaki", icon: MapPin },
@@ -270,10 +275,10 @@ export default async function Home() {
             compact
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-            {quickCategories.slice(0, 8).map(({ label, query, icon: Icon }) => (
+            {quickCategories.slice(0, 8).map(({ label, query, slug, icon: Icon }) => (
               <Link
                 key={label}
-                href={`/search?q=${encodeURIComponent(query)}`}
+                href={slug ? `/category/${slug}` : `/search?q=${encodeURIComponent(query)}`}
                 className="group rounded-3xl border border-black/8 bg-[#fafaf8] p-4 text-center transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:bg-white hover:shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
               >
                 <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-[#ff6b00] shadow-sm transition group-hover:bg-[#ff6b00] group-hover:text-white">
@@ -681,6 +686,7 @@ function CompactListingCard({
           imageUrl={listing.imageUrl}
           productName={listing.productName}
           alt={listing.title}
+          source={listing.source}
         />
         <div className="mt-4 flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-xs font-black text-[#d95700]">
@@ -735,6 +741,7 @@ function OpportunityCard({ listing }: { listing: PriceOpportunity }) {
           imageUrl={listing.imageUrl}
           productName={listing.productName}
           alt={listing.title}
+          source={listing.source}
         />
         <div className="mt-4 flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-xs font-black text-green-800">

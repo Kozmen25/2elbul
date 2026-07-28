@@ -152,9 +152,9 @@ const baseCityData = {
       label: "Şimdi al",
       description: "Fiyat avantajı güçlü, güven yüksek.",
     },
-    reasons: ["Piyasanın altında", "Confidence yüksek"],
+    reasons: ["Piyasanın altında", "Güven yüksek"],
     warningSignals: ["Bekleme sinyali düşük"],
-    positiveSignals: ["Piyasanın altında", "Confidence yüksek"],
+    positiveSignals: ["Piyasanın altında", "Güven yüksek"],
     scoreGeneratedAt: "2026-07-05T10:00:00.000Z",
     scoreVersion: "opportunity-score-v1",
     dataFreshness: "fresh",
@@ -427,7 +427,7 @@ describe("city page render", () => {
     expect(html).toContain("En düşük fiyat");
     expect(html).toContain("Medyan fiyat");
     expect(html).toContain("Kaynak sayısı");
-    expect(html).toContain("Confidence");
+    expect(html).toContain("Güven");
     expect(html).toContain("Risk seviyesi");
     expect(html).toContain("Son güncelleme");
   });
@@ -530,7 +530,7 @@ describe("city page render", () => {
 
     expect(html).toContain("Market Intelligence özeti");
     expect(html).toContain("3 farklı kaynak");
-    expect(html).toContain("Confidence Özeti");
+    expect(html).toContain("Güven Özeti");
   });
 
   it("throws notFound for unknown cities", async () => {

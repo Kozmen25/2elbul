@@ -108,7 +108,7 @@ describe("search-results decision mapping", () => {
     ["all", "Tümü"],
     ["strong-opportunities", "Güçlü Fırsatlar"],
     ["low-risk", "Risk Düşük"],
-    ["high-confidence", "Confidence Yüksek"],
+    ["high-confidence", "Güven Yüksek"],
     ["newly-added", "Yeni Eklenenler"],
     ["falling-price", "Fiyatı Düşenler"],
     ["refurbished", "Yenilenmiş"],

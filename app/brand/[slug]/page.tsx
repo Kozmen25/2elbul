@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { notFound } from "next/navigation";
 import {
   ArrowUpRight,
@@ -16,7 +17,10 @@ import type {
 } from "@/lib/brand-intelligence";
 import { getBrandPageData } from "@/lib/brand-intelligence";
 import {
-  formatMarketConfidenceLevel,
+  TrustBadge,
+  confidenceToTrustLevel,
+} from "@/lib/trust-badge";
+import {
   formatMarketIntelligenceSources,
   formatMarketIntelligenceTimestamp,
 } from "@/app/product/[slug]/market-intelligence-panel";
@@ -117,16 +121,12 @@ export default async function BrandPage({ params }: BrandPageProps) {
       ))}
 
       <div className="container-shell min-w-0">
-        <nav
-          aria-label="breadcrumb"
-          className="flex flex-wrap items-center gap-2 text-xs font-bold text-black/45"
-        >
-          <Link href="/" className="transition hover:text-[#d95700]">
-            Ana Sayfa
-          </Link>
-          <ChevronRight size={12} />
-          <span>{brandName}</span>
-        </nav>
+        <Breadcrumbs
+          items={[
+            { label: "Ana Sayfa", href: "/" },
+            { label: brandName },
+          ]}
+        />
 
         <section className="mt-4 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8 lg:p-10">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:items-end">
@@ -209,10 +209,20 @@ export default async function BrandPage({ params }: BrandPageProps) {
               label="Kaynak sayısı"
               value={marketIntelligence.marketSummary.sourceCount.toLocaleString("tr-TR")}
             />
-            <StatCard
-              label="Confidence"
-              value={formatMarketConfidenceLevel(marketIntelligence.confidenceLevel)}
-            />
+            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
+                Güven
+              </p>
+              <div className="mt-2">
+                <TrustBadge
+                  level={confidenceToTrustLevel(
+                    marketIntelligence.confidenceLevel,
+                    marketIntelligence.sampleSize,
+                  )}
+                  size="md"
+                />
+              </div>
+            </div>
             <StatCard
               label="Risk seviyesi"
               value={formatOpportunityLevel(opportunityAnalysis.riskLevel)}
@@ -373,15 +383,12 @@ export default async function BrandPage({ params }: BrandPageProps) {
             <SectionTitle
               icon={BadgeCheck}
               eyebrow="Güven notları"
-              title="Confidence Özeti"
+              title="Güven Özeti"
             />
             <div className="mt-6 grid gap-3">
+              <TrustBadge level={confidenceToTrustLevel(marketIntelligence.confidenceLevel, marketIntelligence.sampleSize)} size="md" />
               <StatCard
-                label="Confidence düzeyi"
-                value={formatMarketConfidenceLevel(marketIntelligence.confidenceLevel)}
-              />
-              <StatCard
-                label="Confidence nedeni"
+                label="Güven nedeni"
                 value={marketIntelligence.confidenceReasons[0] ?? "Henüz yeterli veri yok"}
                 accent
               />
@@ -480,7 +487,7 @@ function PopularProductCard({ item }: { item: MarketPulseItem }) {
       <div className="mt-5 grid grid-cols-2 gap-3">
         <MiniMetric label="Ortalama fiyat" value={formatPrice(item.averagePrice)} />
         <MiniMetric label="En düşük fiyat" value={formatPrice(item.lowestPrice)} accent />
-        <MiniMetric label="Confidence" value={`%${item.buyScore}`} />
+        <MiniMetric label="Güven" value={`%${item.buyScore}`} />
         <MiniMetric
           label="Trend"
           value={formatTrend(item.trendDirection, item.trendChangePercent)}
@@ -508,10 +515,8 @@ function LatestListingCard({ listing }: { listing: BrandListingRecord }) {
           </h2>
         </div>
         {listing.confidenceLevel ? (
-          <span className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-[11px] font-black text-black/55">
-            {formatMarketConfidenceLevel(listing.confidenceLevel)}
-          </span>
-        ) : null}
+            <TrustBadge level={confidenceToTrustLevel(listing.confidenceLevel)} />
+          ) : null}
       </div>
 
       <p className="mt-4 text-2xl font-black tracking-[-0.05em] text-[#ff6b00]">

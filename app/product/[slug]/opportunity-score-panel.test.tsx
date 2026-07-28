@@ -110,13 +110,13 @@ const baseOpportunityAnalysis: OpportunityAnalysis = {
   },
   reasons: [
     "Piyasanın %12 altında",
-    "Confidence yüksek",
+    "Güven yüksek",
     "52 ilan analiz edildi",
   ],
   warningSignals: ["Bekleme sinyali güçlü"],
   positiveSignals: [
     "Piyasanın %12 altında",
-    "Confidence yüksek",
+    "Güven yüksek",
     "52 ilan analiz edildi",
     "3 farklı kaynak doğruladı",
   ],

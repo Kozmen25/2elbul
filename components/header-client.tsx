@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Bell,
   Home,
   BarChart3,
   Heart,
@@ -17,8 +18,15 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/auth/actions";
 import { BrandLogo } from "@/components/brand-logo";
+import { NotificationDropdown } from "@/components/notification-dropdown";
 
-export function HeaderClient({ userEmail }: { userEmail: string | null }) {
+export function HeaderClient({
+  userEmail,
+  unreadCount = 0,
+}: {
+  userEmail: string | null;
+  unreadCount?: number;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
@@ -59,6 +67,7 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
               >
                 <Heart size={17} /> Favoriler
               </Link>
+              <NotificationDropdown initialUnreadCount={unreadCount} />
               <Link
                 href="/hesabim"
                 className="flex items-center gap-2 rounded-xl border border-black/10 px-2.5 py-2 transition hover:border-[#ff6b00]/30"
@@ -103,6 +112,11 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
                 href="/favoriler"
                 label="Favoriler"
                 icon={<Heart size={18} />}
+              />
+              <MobileIconLink
+                href="/bildirimler"
+                label="Bildirimler"
+                icon={<NotificationBellIcon count={unreadCount} />}
               />
               <MobileIconLink
                 href="/hesabim"
@@ -187,6 +201,17 @@ export function HeaderClient({ userEmail }: { userEmail: string | null }) {
                   <Heart size={18} /> Favoriler
                 </Link>
                 <Link
+                  href="/bildirimler"
+                  className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-black/4"
+                >
+                  <Bell size={18} /> Bildirimler
+                  {unreadCount > 0 && (
+                    <span className="ml-auto grid size-5 place-items-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
+                <Link
                   href="/hesabim"
                   className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold hover:bg-black/4"
                 >
@@ -242,5 +267,18 @@ function MobileIconLink({
     >
       {icon}
     </Link>
+  );
+}
+
+function NotificationBellIcon({ count }: { count: number }) {
+  return (
+    <span className="relative">
+      <Bell size={18} />
+      {count > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 grid size-4 place-items-center rounded-full bg-red-500 text-[8px] font-bold leading-none text-white">
+          {count > 9 ? "9+" : count}
+        </span>
+      )}
+    </span>
   );
 }

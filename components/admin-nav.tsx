@@ -10,9 +10,11 @@ import {
   ClipboardCheck,
   DatabaseZap,
   Globe2,
+  HeartPulse,
   LayoutDashboard,
   Menu,
   PackageSearch,
+  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -29,6 +31,13 @@ const groups = [
   {
     title: "Genel",
     links: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    title: "İzleme",
+    links: [
+      { href: "/admin/monitoring", label: "İzleme Merkezi", icon: Activity },
+      { href: "/admin/recovery", label: "Kurtarma", icon: HeartPulse },
+    ],
   },
   {
     title: "Botlar",

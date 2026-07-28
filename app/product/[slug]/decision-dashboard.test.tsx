@@ -133,13 +133,13 @@ const marketIntelligence: ProductDetailMarketIntelligence = {
     },
     reasons: [
       "Piyasanın %12 altında",
-      "Confidence yüksek",
+      "Güven yüksek",
       "52 ilan analiz edildi",
     ],
     warningSignals: ["Bekleme sinyali düşük"],
     positiveSignals: [
       "Piyasanın %12 altında",
-      "Confidence yüksek",
+      "Güven yüksek",
       "52 ilan analiz edildi",
       "3 farklı kaynak doğruladı",
     ],
@@ -296,8 +296,8 @@ describe("DecisionDashboardHero", () => {
 
     expect(html).toContain("Güçlü fırsat mı?");
     expect(html).toContain("Risk:");
-    expect(html).toContain("Confidence skoru");
-    expect(html).toContain("Confidence seviyesi");
+    expect(html).toContain("Güven skoru");
+    expect(html).toContain("Güven seviyesi");
   });
 
   it("shows the key price metrics on the first screen", () => {

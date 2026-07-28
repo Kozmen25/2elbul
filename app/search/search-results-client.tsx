@@ -2,6 +2,7 @@
 
 import {
   ArrowUpRight,
+  Bell,
   CalendarDays,
   ChevronDown,
   MapPin,
@@ -17,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { CompareButton } from "@/components/compare-button";
+import { SafeShoppingBanner } from "@/components/safe-shopping-banner";
 import {
   calculateProductIntelligence,
   type ProductIntelligence,
@@ -35,7 +37,7 @@ import {
   calculatePriceAdvantagePercent,
   formatOpportunityLevel,
 } from "@/lib/opportunity-engine/helpers";
-import { LISTING_CONDITIONS, type Listing } from "@/lib/listings";
+import { LISTING_CONDITIONS, type Listing, type ListingSource } from "@/lib/listings";
 import {
   analyzeListingPrice,
   type ProductPriceStats,
@@ -46,7 +48,8 @@ import { groupListingDuplicates, summarizeDuplicateGroups } from "@/lib/product-
 import { formatCurrencyTRY, formatDateTR, formatNumberTR } from "@/lib/formatters";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { toConfidenceResult } from "@/lib/market-intelligence/helpers";
-import { recordSearch } from "./actions";
+import { TrustBadge, confidenceToTrustLevel } from "@/lib/trust-badge";
+import { recordSearch, createSavedSearch } from "./actions";
 
 type SortOption = "ai-recommended" | "best-opportunity" | "most-reliable" | "lowest-risk" | "newest" | "price-asc" | "most-listings" | "confidence";
 type ViewOption = "products" | "listings" | "both";
@@ -71,6 +74,8 @@ type ProductSummary = {
   marketIntelligence: MarketIntelligence;
   opportunityAnalysis: OpportunityAnalysis;
   priceAdvantagePercent: number | null;
+  primaryImageUrl: string | null;
+  primarySource: ListingSource | null;
 };
 
 type SearchSuggestion = {
@@ -105,6 +110,8 @@ const formatDate = (date: string) =>
     month: "long",
     year: "numeric",
   });
+
+const PAGE_SIZE = 20;
 
 export function SearchResultsClient({
   query,
@@ -144,6 +151,10 @@ export function SearchResultsClient({
     shouldQueueSearchDemand ? searchDemandMessage : "",
   );
   const [suggestedSearches, setSuggestedSearches] = useState<SearchSuggestion[]>([]);
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get("page"));
+    return Number.isFinite(p) && p >= 1 ? p : 1;
+  });
 
   useEffect(() => {
     if (!query) return;
@@ -166,6 +177,7 @@ export function SearchResultsClient({
     if (sort !== "ai-recommended") params.set("sort", sort);
     if (view !== "products") params.set("view", view);
     if (signal !== "all") params.set("signal", signal);
+    if (page > 1) params.set("page", String(page));
 
     const nextUrl = `${pathname}${params.toString() ? `?${params}` : ""}`;
     const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
@@ -185,6 +197,7 @@ export function SearchResultsClient({
     signal,
     source,
     view,
+    page,
   ]);
 
   useEffect(() => {
@@ -310,6 +323,11 @@ export function SearchResultsClient({
     };
   }, [initialListings.length, query]);
 
+  // Reset page to 1 when any filter/sort/signal/query changes
+  useEffect(() => {
+    setPage(1);
+  }, [city, source, condition, minimumPrice, maximumPrice, sort, signal, query]);
+
   const cities = useMemo(
     () => [...new Set(initialListings.map((listing) => listing.city))].sort(),
     [initialListings],
@@ -377,6 +395,16 @@ export function SearchResultsClient({
     [filteredListings, productRankById, sort, visibleProductIds],
   );
   const prices = visibleListings.map((listing) => listing.price);
+  const totalProductPages = Math.max(1, Math.ceil(sortedProductSummaries.length / PAGE_SIZE));
+  const paginatedProductSummaries = sortedProductSummaries.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+  const totalListingPages = Math.max(1, Math.ceil(visibleListings.length / PAGE_SIZE));
+  const paginatedVisibleListings = visibleListings.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
   const featuredProduct =
     sortedProductSummaries.find(
       (product) => product.marketIntelligence.sampleSize >= 3,
@@ -449,6 +477,9 @@ export function SearchResultsClient({
             {searchIntentLabel}
           </p>
         ) : null}
+        {query && isAuthenticated ? (
+          <SaveSearchButton query={query} />
+        ) : null}
       </div>
 
       {loadError ? (
@@ -481,6 +512,8 @@ export function SearchResultsClient({
             marketRange={marketRange}
             searchIntentLabel={searchIntentLabel}
           />
+
+          {query && <SafeShoppingBanner />}
 
           <QuickFilterBar signal={signal} onChange={setSignal} />
 
@@ -607,7 +640,16 @@ export function SearchResultsClient({
           </div>
 
           {view !== "listings" ? (
-            <ProductComparisonSection products={sortedProductSummaries} />
+            <ProductComparisonSection products={paginatedProductSummaries} />
+          ) : null}
+          {view !== "listings" && totalProductPages > 1 ? (
+            <PaginationBar
+              page={page}
+              totalPages={totalProductPages}
+              totalItems={sortedProductSummaries.length}
+              itemLabel="ürün"
+              onPageChange={setPage}
+            />
           ) : null}
 
           {view !== "products" ? (
@@ -640,7 +682,7 @@ export function SearchResultsClient({
 
           {visibleListings.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {visibleListings.map((listing) => (
+              {paginatedVisibleListings.map((listing) => (
                 <article
                   key={listing.id}
                   className="flex min-w-0 flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
@@ -745,6 +787,15 @@ export function SearchResultsClient({
               </button>
             </div>
           )}
+          {visibleListings.length > 0 && totalListingPages > 1 ? (
+            <PaginationBar
+              page={page}
+              totalPages={totalListingPages}
+              totalItems={visibleListings.length}
+              itemLabel="ilan"
+              onPageChange={setPage}
+            />
+          ) : null}
             </>
           ) : null}
         </>
@@ -963,11 +1014,11 @@ function SearchSummary({
                     featuredProduct.opportunityAnalysis.recommendation.action,
                   )}
                 />
-                <DecisionPill
-                  label={`Confidence ${formatConfidenceLevelLabel(
+                <TrustBadge
+                  level={confidenceToTrustLevel(
                     featuredProduct.marketIntelligence.confidenceLevel,
-                  )}`}
-                  tone="info"
+                  )}
+                  size="md"
                 />
                 <DecisionPill
                   label={`Risk ${formatOpportunityLevel(
@@ -1085,6 +1136,16 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
                 key={product.productId}
                 className="min-w-0 rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
               >
+                <div className="mb-4">
+                  <ListingImage
+                    imageUrl={product.primaryImageUrl}
+                    productName={product.productName}
+                    alt={product.productName}
+                    source={product.primarySource}
+                    listingCount={product.listingCount}
+                    listingUrl={`/product/${product.slug}`}
+                  />
+                </div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="break-words text-lg font-black leading-6">
@@ -1109,15 +1170,11 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
                     >
                       {product.opportunityAnalysis.recommendation.label}
                     </span>
-                    <span
-                      className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${getConfidenceBadgeClassName(
-                        product.marketIntelligence.confidenceLevel,
-                      )}`}
-                    >
-                      Confidence {formatConfidenceLevelLabel(
+                    <TrustBadge
+                      level={confidenceToTrustLevel(
                         product.marketIntelligence.confidenceLevel,
                       )}
-                    </span>
+                    />
                     <span
                       className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${getRiskBadgeClassName(
                         product.opportunityAnalysis.riskLevel,
@@ -1276,7 +1333,7 @@ export function buildSearchDecisionSummary(product: ProductSummary | null) {
   ).toLowerCase();
   const riskPhrase = formatOpportunityLevel(product.opportunityAnalysis.riskLevel).toLowerCase();
 
-  return `${pricePhrase}. Confidence ${confidencePhrase}. Risk ${riskPhrase}.`;
+  return `${pricePhrase}. Güven ${confidencePhrase}. Risk ${riskPhrase}.`;
 }
 
 function getRecommendationTone(
@@ -1305,16 +1362,6 @@ function getRecommendationBadgeClassName(
   if (action === "wait") return "border-amber-200 bg-amber-50 text-amber-800";
   if (action === "avoid") return "border-red-200 bg-red-50 text-red-800";
   return "border-slate-200 bg-slate-50 text-slate-700";
-}
-
-function getConfidenceBadgeClassName(
-  level: MarketIntelligence["confidenceLevel"],
-) {
-  if (level === "very-high") return "border-green-200 bg-green-50 text-green-800";
-  if (level === "high") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (level === "medium") return "border-sky-200 bg-sky-50 text-sky-800";
-  if (level === "low") return "border-amber-200 bg-amber-50 text-amber-800";
-  return "border-red-200 bg-red-50 text-red-800";
 }
 
 function getRiskBadgeClassName(level: OpportunityAnalysis["riskLevel"]) {
@@ -1354,7 +1401,7 @@ function getSortLabel(sort: SortOption) {
 export function getSignalLabel(signal: QuickFilterOption) {
   if (signal === "strong-opportunities") return "Güçlü Fırsatlar";
   if (signal === "low-risk") return "Risk Düşük";
-  if (signal === "high-confidence") return "Confidence Yüksek";
+  if (signal === "high-confidence") return "Güven Yüksek";
   if (signal === "newly-added") return "Yeni Eklenenler";
   if (signal === "falling-price") return "Fiyatı Düşenler";
   if (signal === "refurbished") return "Yenilenmiş";
@@ -1784,6 +1831,11 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
       latestListingAt: newestAt,
     });
 
+    const sortedByPrice = [...productListings].sort(
+      (a, b) => a.price - b.price,
+    );
+    const bestImageListing = sortedByPrice.find((l) => l.imageUrl?.trim());
+
     return {
       productId,
       productName,
@@ -1801,6 +1853,8 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
         marketIntelligence.priceAnalysis.averagePrice,
         marketIntelligence.priceAnalysis.minPrice,
       ),
+      primaryImageUrl: bestImageListing?.imageUrl ?? null,
+      primarySource: bestImageListing?.source ?? null,
     };
   });
 }
@@ -1921,4 +1975,125 @@ function getViewLabel(view: ViewOption) {
   if (view === "products") return "Ürün karşılaştırması";
   if (view === "listings") return "İlan listesi";
   return "İkisi birlikte";
+}
+
+type PaginationBarProps = {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  itemLabel: string;
+  onPageChange: (page: number) => void;
+};
+
+function PaginationBar({
+  page,
+  totalPages,
+  totalItems,
+  itemLabel,
+  onPageChange,
+}: PaginationBarProps) {
+  const startItem = Math.min((page - 1) * PAGE_SIZE + 1, totalItems);
+  const endItem = Math.min(page * PAGE_SIZE, totalItems);
+
+  const pages = useMemo(() => buildPageNumbers(page, totalPages), [page, totalPages]);
+
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+      <p className="text-sm text-black/50">
+        {startItem}–{endItem} / {totalItems} {itemLabel}
+      </p>
+      <nav className="flex items-center gap-1" aria-label="Sayfalama">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="flex size-9 items-center justify-center rounded-lg text-sm font-bold transition hover:bg-black/5 disabled:pointer-events-none disabled:opacity-30"
+          aria-label="Önceki sayfa"
+        >
+          ‹
+        </button>
+        {pages.map((p, i) =>
+          p === "..." ? (
+            <span key={`ellipsis-${i}`} className="flex size-9 items-center justify-center text-sm text-black/30">
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              className={`flex size-9 items-center justify-center rounded-lg text-sm font-bold transition ${
+                p === page
+                  ? "bg-[#ff6b00] text-white"
+                  : "hover:bg-black/5"
+              }`}
+              aria-current={p === page ? "page" : undefined}
+            >
+              {p}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="flex size-9 items-center justify-center rounded-lg text-sm font-bold transition hover:bg-black/5 disabled:pointer-events-none disabled:opacity-30"
+          aria-label="Sonraki sayfa"
+        >
+          ›
+        </button>
+      </nav>
+    </div>
+  );
+}
+
+function buildPageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const pages: (number | "...")[] = [];
+
+  if (current <= 4) {
+    pages.push(1, 2, 3, 4, 5, "...", total);
+  } else if (current >= total - 3) {
+    pages.push(1, "...", total - 4, total - 3, total - 2, total - 1, total);
+  } else {
+    pages.push(1, "...", current - 1, current, current + 1, "...", total);
+  }
+
+  return pages;
+}
+
+function SaveSearchButton({ query }: { query: string }) {
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={async () => {
+          setSaving(true);
+          setMessage(null);
+          const result = await createSavedSearch({
+            query,
+            frequency: "instant",
+          });
+          setMessage(result.message);
+          setSaving(false);
+        }}
+        className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6b00]/20 bg-[#fff7f1] px-4 py-2 text-sm font-bold text-[#d95700] transition hover:bg-[#ff6b00]/10 disabled:opacity-50"
+      >
+        <Bell size={16} />
+        {saving ? "Kaydediliyor..." : "Bu Aramayı Kaydet"}
+      </button>
+      {message && (
+        <p className="mt-2 text-sm font-medium text-green-700">{message}</p>
+      )}
+    </div>
+  );
 }

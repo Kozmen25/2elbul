@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
@@ -6,7 +6,11 @@ import { MaintenanceGate } from "@/components/maintenance-gate";
 import { CompareBar } from "@/components/compare-bar";
 import { CompareProvider } from "@/components/compare-context";
 import { getSiteGeneralSettings } from "@/lib/site-settings";
-import { getMetadataBase } from "@/lib/site-url";
+import { getMetadataBase, getAbsoluteUrl } from "@/lib/site-url";
+
+export const viewport: Viewport = {
+  themeColor: "#ff6b00",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const general = await getSiteGeneralSettings();
@@ -22,6 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
         { url: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png" },
       ],
       apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+      other: [{ rel: "manifest", url: "/manifest.json" }],
     },
     openGraph: {
       title: `${general.siteName} | İkinci Elin Doğru Fiyatı`,
@@ -50,6 +55,38 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </main>
           <Footer />
           <CompareBar />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "Organization",
+                name: "2ElBul",
+                url: getAbsoluteUrl("/"),
+                logo: getAbsoluteUrl("/android-chrome-512x512.png"),
+                sameAs: [],
+              }).replace(/</g, "\\u003c"),
+            }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "WebSite",
+                name: "2ElBul",
+                url: getAbsoluteUrl("/"),
+                potentialAction: {
+                  "@type": "SearchAction",
+                  target: {
+                    "@type": "EntryPoint",
+                    urlTemplate: getAbsoluteUrl("/search?q={search_term_string}"),
+                  },
+                  "query-input": "required name=search_term_string",
+                },
+              }).replace(/</g, "\\u003c"),
+            }}
+          />
         </CompareProvider>
       </body>
     </html>

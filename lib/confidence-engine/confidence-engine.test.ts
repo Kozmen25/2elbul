@@ -1,3 +1,6 @@
+import { vi } from "vitest";
+vi.mock("server-only", () => ({}));
+
 import { describe, expect, it } from "vitest";
 import { calculateDuplicateScoreForInputs } from "../duplicate-engine/engine";
 import {

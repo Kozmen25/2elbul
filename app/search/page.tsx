@@ -1,4 +1,5 @@
 import { SearchBar } from "@/components/search-bar";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import type {
   Listing,
   ListingCondition,
@@ -10,13 +11,52 @@ import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-
 import { resolveSearchIntent, scoreSearchResult } from "@/lib/search-intent";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getMetadataBase, getAbsoluteUrl } from "@/lib/site-url";
 import { SearchResultsClient } from "./search-results-client";
+import type { Metadata } from "next";
+import { cacheGet, cacheSet, cacheKeyFrom } from "@/lib/cache";
 
 type SearchPageProps = {
   searchParams: Promise<{
     q?: string | string[];
+    page?: string;
   }>;
 };
+
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const query = (
+    Array.isArray(params.q) ? params.q[0] ?? "" : params.q ?? ""
+  ).trim();
+
+  if (!query) {
+    return {
+      title: "İkinci el ilanlarında ara | 2ElBul",
+      description: "Telefon, bilgisayar, konsol ve daha fazlası için ikinci el piyasasında arama yapın.",
+      robots: { index: false, follow: true },
+      metadataBase: getMetadataBase(),
+    };
+  }
+
+  const searchTitle = `${query} fiyatları — ikinci el piyasası | 2ElBul`;
+  return {
+    title: searchTitle,
+    description: `${query} için ikinci el piyasa fiyatlarını karşılaştırın, en ucuz ilanları bulun, ortalama fiyatı ve fiyat geçmişini görün.`,
+    alternates: { canonical: getAbsoluteUrl(`/search?q=${encodeURIComponent(query)}`) },
+    metadataBase: getMetadataBase(),
+    openGraph: {
+      title: searchTitle,
+      description: `${query} ikinci el fiyatlarını tek yerde karşılaştırın.`,
+      locale: "tr_TR",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: searchTitle,
+      description: `${query} ikinci el fiyatlarını tek yerde karşılaştırın.`,
+    },
+  };
+}
 
 const listingColumns =
   "id, product_id, title, price, city, source, url, condition, image_url, created_at";
@@ -61,17 +101,31 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     const searchTerms = intent.terms.slice(0, 48);
     const [matchingProductsResults, titleListingsResults] = await Promise.all([
       Promise.all(
-        searchTerms.map((term) =>
-          supabase
+        searchTerms.map((term) => {
+          const cacheKey = cacheKeyFrom({ type: "product-search", term: term.term });
+          const cached = cacheGet<{ id: string | number; name: string }[]>(cacheKey);
+          if (cached) return { data: cached, error: null };
+          return supabase
             .from("products")
             .select("id, name")
-            .ilike("name", `%${term.term}%`),
-        ),
+            .ilike("name", `%${term.term}%`)
+            .then((result) => {
+              if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
+              return result;
+            });
+        }),
       ),
       Promise.all(
-        searchTerms.map((term) =>
-          searchPublishedListingsByTitle(supabase, `%${term.term}%`),
-        ),
+        searchTerms.map((term) => {
+          const cacheKey = cacheKeyFrom({ type: "listing-title-search", term: term.term });
+          const cached = cacheGet<{ id: string | number; title: string; product_id: string | number; price: string | number; city: string; source: ListingSource; url: string; condition: ListingCondition; image_url: string | null; created_at: string }[]>(cacheKey);
+          if (cached) return { data: cached, error: null };
+          return searchPublishedListingsByTitle(supabase, `%${term.term}%`)
+            .then((result) => {
+              if (!result.error) cacheSet(cacheKey, result.data ?? [], 15_000);
+              return result;
+            });
+        }),
       ),
     ]);
     const productSearchError = matchingProductsResults.find((result) => result.error)
@@ -108,10 +162,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         .filter((product) => !isPublicDemoProductName(String(product.name)))
         .map((product) => product.id);
       const productListingsResult = matchingProductIds.length
-        ? await searchPublishedListingsByProduct(
-            supabase,
-            matchingProductIds,
-          )
+        ? (() => {
+            const cacheKey = cacheKeyFrom({ type: "product-listings", ids: matchingProductIds.sort() });
+            const cached = cacheGet<ListingRow[]>(cacheKey);
+            if (cached) return { data: cached, error: null };
+            return searchPublishedListingsByProduct(supabase, matchingProductIds)
+              .then((result) => {
+                if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
+                return result;
+              });
+          })()
         : { data: [], error: null };
 
       if (productListingsResult.error) {
@@ -138,10 +198,19 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           ...new Set(rows.map((row) => String(row.product_id))),
         ];
         const productsResult = productIds.length
-          ? await supabase
-              .from("products")
-              .select("id, name")
-              .in("id", productIds)
+          ? (() => {
+              const cacheKey = cacheKeyFrom({ type: "product-names", ids: productIds });
+              const cached = cacheGet<{ id: string | number; name: string }[]>(cacheKey);
+              if (cached) return { data: cached, error: null };
+              return supabase
+                .from("products")
+                .select("id, name")
+                .in("id", productIds)
+                .then((result) => {
+                  if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
+                  return result;
+                });
+            })()
           : { data: [], error: null };
 
         if (productsResult.error) {
@@ -220,6 +289,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     <>
       <section className="border-b border-black/8 bg-[#fafaf8] py-8 sm:py-10">
         <div className="container-shell">
+          {query && (
+            <div className="mx-auto w-full max-w-4xl mb-6">
+              <Breadcrumbs
+                items={[
+                  { label: "Ana Sayfa", href: "/" },
+                  { label: `"${query}" araması` },
+                ]}
+              />
+            </div>
+          )}
           <div className="mx-auto w-full max-w-4xl">
             <SearchBar
               compact

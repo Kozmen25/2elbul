@@ -14,10 +14,13 @@ import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ListingImage } from "@/components/listing-image";
 import { CompareButton } from "@/components/compare-button";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { SafeShoppingBanner } from "@/components/safe-shopping-banner";
 import { PriceAlertForm } from "@/components/price-alert-form";
 import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { Listing } from "@/lib/listings";
 import { calculateMarketStats } from "@/lib/price-insights";
+import { createProductSlug } from "@/lib/product-slug";
 import {
   analyzeListingPrice,
   buildProductPriceStats,
@@ -37,8 +40,12 @@ import { getAbsoluteUrl } from "@/lib/site-url";
 import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
+  TrustBadge,
+  TrustMeter,
+  confidenceToTrustLevel,
+} from "@/lib/trust-badge";
+import {
   MarketIntelligencePanel,
-  formatMarketConfidenceLevel,
   formatMarketIntelligenceSources,
   formatMarketIntelligenceTimestamp,
 } from "./market-intelligence-panel";
@@ -101,7 +108,7 @@ export async function generateMetadata({
       type: "website",
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description,
     },
@@ -238,6 +245,18 @@ export default async function ProductPage({ params }: ProductPageProps) {
         }}
       />
       <div className="container-shell min-w-0">
+        <Breadcrumbs
+          items={[
+            { label: "Ana Sayfa", href: "/" },
+            ...(product.category
+              ? [{ label: product.category, href: `/category/${createProductSlug(product.category)}` }]
+              : []),
+            ...(marketIntelligence.scope.brand
+              ? [{ label: marketIntelligence.scope.brand, href: `/brand/${createProductSlug(marketIntelligence.scope.brand)}` }]
+              : []),
+            { label: product.name },
+          ]}
+        />
         <div className="max-w-4xl">
         <p className="text-sm font-bold text-[#ff6b00]">
             Karar odaklı ürün analizi
@@ -307,6 +326,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
           loginNext={loginNext}
           emptyMessage="Piyasanın çok altında şüpheli ilan bulunmadı."
         />
+
+        <div className="mt-8">
+          <SafeShoppingBanner />
+        </div>
 
         <ProductListingSection
           eyebrow="Fiyat avantajı"
@@ -493,11 +516,12 @@ export function DecisionDashboardHero({
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <StatCard
-              label="Confidence skoru"
-              value={`${marketIntelligence.confidenceScore ?? 0}/100`}
-              accent
-            />
+            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4 sm:p-5">
+              <TrustMeter
+                score={marketIntelligence.confidenceScore ?? 0}
+                level={marketIntelligence.confidenceLevel}
+              />
+            </div>
             <StatCard
               label="Örneklem"
               value={`${marketIntelligence.sampleSize}`}
@@ -599,11 +623,20 @@ export function DecisionDashboardHero({
                   : "—"
               }
             />
-            <StatCard
-              label="Confidence seviyesi"
-              value={formatMarketConfidenceLevel(marketIntelligence.confidenceLevel)}
-              accent
-            />
+            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4 sm:p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
+                Güven seviyesi
+              </p>
+              <div className="mt-2">
+                <TrustBadge
+                  level={confidenceToTrustLevel(
+                    marketIntelligence.confidenceLevel,
+                    marketIntelligence.sampleSize,
+                  )}
+                  size="md"
+                />
+              </div>
+            </div>
           </div>
 
           {hasInsufficientData ? (
@@ -1082,6 +1115,7 @@ export function BestDealCard({
           imageUrl={listing.imageUrl}
           productName={listing.productName}
           alt={listing.title}
+          source={listing.source}
         />
       </div>
       <h3 className="mt-4 break-words text-lg font-black leading-6">
@@ -1185,6 +1219,7 @@ function ListingCard({
   isAuthenticated,
   loginNext,
   matchKey,
+  trustLevel,
 }: {
   listing: Listing;
   priceStats: ProductPriceStats | null;
@@ -1192,6 +1227,7 @@ function ListingCard({
   isAuthenticated: boolean;
   loginNext: string;
   matchKey?: string;
+  trustLevel?: ReturnType<typeof confidenceToTrustLevel>;
 }) {
   const priceAnalysis = analyzeListingPrice(listing.price, priceStats);
 
@@ -1212,6 +1248,9 @@ function ListingCard({
         >
           {listing.condition}
         </span>
+        {trustLevel && (
+          <TrustBadge level={trustLevel} />
+        )}
         <div className="flex items-center gap-2">
           <CompareButton
             listingId={listing.id}

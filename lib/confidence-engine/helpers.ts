@@ -8,8 +8,12 @@ import type {
   ProductSignalsLike,
 } from "./types";
 import { clampScore } from "./scoring";
+import { getCanonicalSourceRegistry } from "@/lib/unified-source-engine/adapters";
 
-const SOURCE_RELIABILITY_RULES: Array<{ pattern: RegExp; score: number }> = [
+const FALLBACK_SOURCE_RELIABILITY_RULES: Array<{
+  pattern: RegExp;
+  score: number;
+}> = [
   { pattern: /easycep/i, score: 92 },
   { pattern: /getmobil/i, score: 90 },
   { pattern: /yenilenmi/i, score: 87 },
@@ -411,7 +415,12 @@ function resolveSourceReliabilityValue(
 }
 
 function resolveSourceReliabilityFromName(name: string) {
-  const rule = SOURCE_RELIABILITY_RULES.find((entry) => entry.pattern.test(name));
+  const registry = getCanonicalSourceRegistry();
+  const source = registry?.getByName(name);
+  if (source?.reliabilityScore != null) return source.reliabilityScore;
+  const rule = FALLBACK_SOURCE_RELIABILITY_RULES.find((entry) =>
+    entry.pattern.test(name),
+  );
   return rule?.score ?? 65;
 }
 
