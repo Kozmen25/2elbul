@@ -1,5 +1,6 @@
 import "server-only";
 
+import { withRecoveryPolicy } from "@/lib/recovery";
 import {
   EASYCEP_PHONE_CATEGORY_URL,
   fetchEasyCepListings,
@@ -22,7 +23,7 @@ import { parseGetmobilProductPage } from "@/lib/bots/adapters/getmobil";
 import { createGetmobilStandardAdapter } from "@/lib/bots/adapters/getmobil-adapter";
 import { parseSahibindenProductPage } from "@/lib/bots/adapters/sahibinden";
 import { createStandardSourceAdapter } from "@/lib/bots/adapters/types";
-import { getUnifiedSourceRegistry } from "@/lib/unified-source-engine/adapters";
+import { getCanonicalSourceRegistry, getUnifiedSourceRegistry } from "@/lib/unified-source-engine/adapters";
 import { isBotAdapterListing } from "@/lib/bots/types";
 import type {
   BotAdapterListing,
@@ -34,32 +35,56 @@ const SCRAPE_FETCHERS: Record<
   string,
   (scrapeUrl: string, limit: number) => Promise<BotAdapterListing[]>
 > = {
-  easycep: (scrapeUrl, limit) =>
-    fetchEasyCepListings(scrapeUrl || EASYCEP_PHONE_CATEGORY_URL, limit),
-  getmobil: (scrapeUrl, limit) =>
-    fetchGetmobilListings(scrapeUrl || GETMOBIL_PHONE_CATEGORY_URL, limit),
-  "hepsiburada-yenilenmis": (scrapeUrl, limit) =>
-    fetchHepsiburadaRenewedListings(
-      scrapeUrl || HEPSIBURADA_RENEWED_CATEGORY_URL,
-      limit,
-    ),
-  "teknosa-yenilenmis": (scrapeUrl, limit) =>
-    fetchTeknosaRenewedListings(scrapeUrl || TEKNOSA_RENEWED_CATEGORY_URL, limit),
-  "mediamarkt-yenilenmis": (scrapeUrl, limit) =>
-    fetchMediaMarktRenewedListings(
-      scrapeUrl || MEDIAMARKT_RENEWED_CATEGORY_URL,
-      limit,
-    ),
-  "yenilenmis-market": (scrapeUrl, limit) =>
-    fetchYenilenmisMarketListings(
-      scrapeUrl || YENILENMIS_MARKET_CATEGORY_URL,
-      limit,
-    ),
-  sahibinden: (scrapeUrl, limit) =>
-    fetchSahibindenListings(
-      scrapeUrl || SAHIBINDEN_PHONE_CATEGORY_URL,
-      limit,
-    ),
+  easycep: withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchEasyCepListings(scrapeUrl || EASYCEP_PHONE_CATEGORY_URL, limit),
+    "easycep",
+  ),
+  getmobil: withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchGetmobilListings(scrapeUrl || GETMOBIL_PHONE_CATEGORY_URL, limit),
+    "getmobil",
+  ),
+  "hepsiburada-yenilenmis": withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchHepsiburadaRenewedListings(
+        scrapeUrl || HEPSIBURADA_RENEWED_CATEGORY_URL,
+        limit,
+      ),
+    "hepsiburada-yenilenmis",
+  ),
+  "teknosa-yenilenmis": withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchTeknosaRenewedListings(
+        scrapeUrl || TEKNOSA_RENEWED_CATEGORY_URL,
+        limit,
+      ),
+    "teknosa-yenilenmis",
+  ),
+  "mediamarkt-yenilenmis": withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchMediaMarktRenewedListings(
+        scrapeUrl || MEDIAMARKT_RENEWED_CATEGORY_URL,
+        limit,
+      ),
+    "mediamarkt-yenilenmis",
+  ),
+  "yenilenmis-market": withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchYenilenmisMarketListings(
+        scrapeUrl || YENILENMIS_MARKET_CATEGORY_URL,
+        limit,
+      ),
+    "yenilenmis-market",
+  ),
+  sahibinden: withRecoveryPolicy(
+    (scrapeUrl, limit) =>
+      fetchSahibindenListings(
+        scrapeUrl || SAHIBINDEN_PHONE_CATEGORY_URL,
+        limit,
+      ),
+    "sahibinden",
+  ),
 };
 
 export const SCRAPE_READY_SLUGS = Object.keys(SCRAPE_FETCHERS);
@@ -108,12 +133,18 @@ export function getSourceConnector(
 }
 
 export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
+  const canonical = getCanonicalSourceRegistry();
+  const source = canonical ? canonical.getBySlug(config.sourceSlug) : null;
+  const enrichedConfig: SourceIntegrationConfig = source
+    ? { ...config, sourceId: source.sourceId, sourceName: source.sourceName }
+    : config;
+
   const registry = getUnifiedSourceRegistry();
-  const unifiedAdapter = registry.get(config.sourceSlug);
+  const unifiedAdapter = registry.get(enrichedConfig.sourceSlug);
 
   if (unifiedAdapter) {
     return createStandardSourceAdapter({
-      config,
+      config: enrichedConfig,
       enabled: true,
       fetchListings: async () =>
         (await unifiedAdapter.fetch({ limit: config.productLimit || 10 })).filter(
@@ -122,18 +153,18 @@ export function getStandardSourceAdapter(config: SourceIntegrationConfig) {
     });
   }
 
-  if (config.sourceSlug === "easycep") {
-    return createEasyCepStandardAdapter(config);
+  if (enrichedConfig.sourceSlug === "easycep") {
+    return createEasyCepStandardAdapter(enrichedConfig);
   }
-  if (config.sourceSlug === "getmobil") {
-    return createGetmobilStandardAdapter(config);
+  if (enrichedConfig.sourceSlug === "getmobil") {
+    return createGetmobilStandardAdapter(enrichedConfig);
   }
 
-  const connector = getSourceConnector(config);
+  const connector = getSourceConnector(enrichedConfig);
   return createStandardSourceAdapter({
-    config,
+    config: enrichedConfig,
     enabled: connector.supportedModes.includes("scrape"),
-    fetchListings: () => connector.fetchListings(config),
+    fetchListings: () => connector.fetchListings(enrichedConfig),
   });
 }
 

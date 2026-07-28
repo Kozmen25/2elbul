@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchGetmobilListings, GETMOBIL_PHONE_CATEGORY_URL } from "@/lib/bots/adapters/getmobil";
+import { fetchGetmobilListings, GETMOBIL_CATEGORY_URLS } from "@/lib/bots/adapters/getmobil";
 import { isBotAdapterListing } from "@/lib/bots/types";
 import type {
   NormalizedListing,
@@ -31,18 +31,25 @@ export function createGetmobilUnifiedAdapter(
     sourceName: options.sourceName,
     sourceSlug: options.sourceSlug,
 
-    async fetch({ limit = 80, query } = {}) {
+    async fetch({ limit = 100, query } = {}) {
       try {
-        const listings = await fetchGetmobilListings(GETMOBIL_PHONE_CATEGORY_URL, limit);
+        const allListings: import("@/lib/bots/types").BotAdapterListing[] = [];
+        const perCategoryLimit = Math.max(Math.ceil(limit / Object.keys(GETMOBIL_CATEGORY_URLS).length), 1);
+
+        for (const [categoryUrl] of Object.entries(GETMOBIL_CATEGORY_URLS)) {
+          const listings = await fetchGetmobilListings(categoryUrl, perCategoryLimit);
+          allListings.push(...listings);
+        }
+
         if (query) {
           const normalized = normalizeSearchText(query);
-          return listings.filter((listing) =>
+          return allListings.filter((listing) =>
             normalizeSearchText(`${listing.product_name} ${listing.title}`).includes(
               normalized,
             ),
           );
         }
-        return listings;
+        return allListings.slice(0, limit);
       } catch (error) {
         console.error("Getmobil fetch error:", error);
         return [];
@@ -69,6 +76,7 @@ export function createGetmobilUnifiedAdapter(
         location: listing.city || "Türkiye",
         condition: listing.condition || "Yenilenmiş",
         listedAt: listing.listed_at || null,
+        category: listing.category || undefined,
         rawData: {
           adapter: "getmobil",
           original: raw,

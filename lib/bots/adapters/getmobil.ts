@@ -1,5 +1,3 @@
-import "server-only";
-
 import { load, type CheerioAPI } from "cheerio";
 import {
   absoluteUrl,
@@ -11,12 +9,26 @@ import {
   normalizeCondition,
   normalizePrice,
   safeFetchHtml,
+  sleep,
   type HtmlRootLike,
 } from "@/lib/bots/html-utils";
 import type { BotAdapterListing } from "@/lib/bots/types";
 
 export const GETMOBIL_PHONE_CATEGORY_URL =
   "https://getmobil.com/satin-al/cep-telefonu/";
+export const GETMOBIL_WATCH_CATEGORY_URL =
+  "https://getmobil.com/satin-al/akilli-saat-ve-bileklik/akilli-saat/";
+export const GETMOBIL_COMPUTER_CATEGORY_URL =
+  "https://getmobil.com/satin-al/bilgisayar-tablet/";
+export const GETMOBIL_ACCESSORY_CATEGORY_URL =
+  "https://getmobil.com/satin-al/aksesuar/";
+
+export const GETMOBIL_CATEGORY_URLS: Record<string, string> = {
+  [GETMOBIL_PHONE_CATEGORY_URL]: "Cep Telefonu",
+  [GETMOBIL_WATCH_CATEGORY_URL]: "Akıllı Saat",
+  [GETMOBIL_COMPUTER_CATEGORY_URL]: "Bilgisayar ve Tablet",
+  [GETMOBIL_ACCESSORY_CATEGORY_URL]: "Aksesuar",
+};
 
 type JsonLdProduct = {
   "@type"?: string;
@@ -39,28 +51,57 @@ export async function fetchGetmobilListings(
   categoryUrl = GETMOBIL_PHONE_CATEGORY_URL,
   limit = 10,
 ) {
+  const category = GETMOBIL_CATEGORY_URLS[categoryUrl] ?? null;
+  // Fetch page 1 first
   const response = await safeFetchHtml(categoryUrl);
-  return parseGetmobilCategoryHtml(
+  const allListings = parseGetmobilCategoryHtml(
     response.html,
     response.finalUrl,
     Math.min(Math.max(limit, 1), 1000),
+    category,
   );
+
+  // Try subsequent pages — iterate until limit or no more pages
+  const maxPages = 20;
+  const delayBetweenPages = 1500;
+  for (let page = 2; page <= maxPages; page++) {
+    await sleep(delayBetweenPages);
+    const pageUrl = `${categoryUrl}?sayfa=${page}`;
+    try {
+      const pageResponse = await safeFetchHtml(pageUrl);
+      const pageListings = parseGetmobilCategoryHtml(
+        pageResponse.html,
+        pageResponse.finalUrl,
+        limit,
+      );
+      if (pageListings.length === 0) break;
+      allListings.push(...pageListings);
+      if (allListings.length >= limit) break;
+    } catch {
+      break;
+    }
+  }
+
+  // Dedup across all pages before returning
+  return deduplicateByUrl(allListings).slice(0, limit);
 }
 
 export function parseGetmobilCategoryHtml(
   html: string,
   pageUrl: string,
   limit = 10,
+  category: string | null = null,
 ): BotAdapterListing[] {
   const $ = load(html);
   const maxItems = Math.min(Math.max(limit, 1), 1000);
-  const listings = parseJsonLdProducts($, pageUrl, maxItems);
+  const listings = parseJsonLdProducts($, pageUrl, maxItems, category);
   return listings.slice(0, maxItems);
 }
 
 export function parseGetmobilProductPage(
   root: HtmlRootLike,
   pageUrl: string,
+  category: string | null = null,
 ): BotAdapterListing {
   const productName = elementText(root, [
     "h1",
@@ -117,10 +158,11 @@ export function parseGetmobilProductPage(
     image_url: imageUrls[0] ?? null,
     image_urls: imageUrls,
     status: "pending",
+    category,
   };
 }
 
-function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
+function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number, category: string | null = null) {
   const listings: BotAdapterListing[] = [];
 
   $("script[type='application/ld+json']").each((_, element) => {
@@ -144,7 +186,7 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
           ) {
             continue;
           }
-          const listing = toGetmobilListing(product, pageUrl);
+          const listing = toGetmobilListing(product, pageUrl, category);
           if (listing) listings.push(listing);
         }
       }
@@ -184,15 +226,15 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
     ) {
       return;
     }
-    listings.push(
-      createListing(title, price, url, [imageUrl, ...metaImages]),
-    );
+	    listings.push(
+	      createListing(title, price, url, [imageUrl, ...metaImages], category),
+	    );
   });
 
   return deduplicateByUrl(listings);
 }
 
-function toGetmobilListing(product: JsonLdProduct, pageUrl: string) {
+function toGetmobilListing(product: JsonLdProduct, pageUrl: string, category: string | null = null) {
   const variant = product.hasVariant?.find((item) => {
     const price = normalizePrice(item.offers?.price);
     const url = absoluteUrl(pageUrl, item.url || item.offers?.url);
@@ -223,7 +265,7 @@ function toGetmobilListing(product: JsonLdProduct, pageUrl: string) {
     return null;
   }
 
-  return createListing(title, price, url, imageUrls);
+  return createListing(title, price, url, imageUrls, category);
 }
 
 function createListing(
@@ -231,6 +273,7 @@ function createListing(
   price: number,
   url: string,
   imageUrls: string[],
+  category: string | null = null,
 ): BotAdapterListing {
   return {
     product_name: deriveProductName(title),
@@ -243,6 +286,7 @@ function createListing(
     image_url: imageUrls[0] ?? null,
     image_urls: imageUrls,
     status: "pending",
+    category,
   };
 }
 

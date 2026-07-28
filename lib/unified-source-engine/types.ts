@@ -15,6 +15,7 @@ export interface NormalizedListing {
   location: string | null;
   condition: string;
   listedAt: string | null;
+  category?: string;
   rawData: Record<string, unknown> | null;
 }
 

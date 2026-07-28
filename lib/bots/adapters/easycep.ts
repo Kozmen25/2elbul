@@ -1,5 +1,3 @@
-import "server-only";
-
 import { load, type CheerioAPI } from "cheerio";
 import {
   absoluteUrl,
@@ -17,6 +15,19 @@ import type { BotAdapterListing } from "@/lib/bots/types";
 
 export const EASYCEP_PHONE_CATEGORY_URL =
   "https://easycep.com/kategori/cep-telefonu-1";
+export const EASYCEP_ACCESSORY_CATEGORY_URL =
+  "https://easycep.com/kategori/aksesuar-279";
+export const EASYCEP_WATCH_CATEGORY_URL =
+  "https://easycep.com/kategori/akilli-saat-277";
+export const EASYCEP_COMPUTER_CATEGORY_URL =
+  "https://easycep.com/kategori/bilgisayar-278";
+
+export const EASYCEP_CATEGORY_URLS: Record<string, string> = {
+  [EASYCEP_PHONE_CATEGORY_URL]: "Cep Telefonu",
+  [EASYCEP_ACCESSORY_CATEGORY_URL]: "Aksesuar",
+  [EASYCEP_WATCH_CATEGORY_URL]: "Akıllı Saat",
+  [EASYCEP_COMPUTER_CATEGORY_URL]: "Bilgisayar",
+};
 
 type JsonLdProduct = {
   "@type"?: string;
@@ -29,15 +40,22 @@ type JsonLdProduct = {
   };
 };
 
+type JsonLdListItem = {
+  "@type"?: string;
+  item?: JsonLdProduct;
+};
+
 export async function fetchEasyCepListings(
   categoryUrl = EASYCEP_PHONE_CATEGORY_URL,
   limit = 10,
 ) {
+  const category = EASYCEP_CATEGORY_URLS[categoryUrl] ?? null;
   const response = await safeFetchHtml(categoryUrl);
   return parseEasyCepCategoryHtml(
     response.html,
     response.finalUrl,
     Math.min(Math.max(limit, 1), 1000),
+    category,
   );
 }
 
@@ -45,16 +63,18 @@ export function parseEasyCepCategoryHtml(
   html: string,
   pageUrl: string,
   limit = 10,
+  category: string | null = null,
 ): BotAdapterListing[] {
   const $ = load(html);
   const maxItems = Math.min(Math.max(limit, 1), 1000);
-  const listings = parseJsonLdProducts($, pageUrl, maxItems);
+  const listings = parseJsonLdProducts($, pageUrl, maxItems, category);
   return listings.slice(0, maxItems);
 }
 
 export function parseEasyCepProductPage(
   root: HtmlRootLike,
   pageUrl: string,
+  category: string | null = null,
 ): BotAdapterListing {
   const productName = elementText(root, [
     "h1",
@@ -110,10 +130,11 @@ export function parseEasyCepProductPage(
     image_url: imageUrls[0] ?? null,
     image_urls: imageUrls,
     status: "pending",
+    category,
   };
 }
 
-function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
+function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number, category: string | null = null) {
   const listings: BotAdapterListing[] = [];
 
   $("script[type='application/ld+json']").each((_, element) => {
@@ -121,15 +142,18 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
     try {
       const data = JSON.parse($(element).text()) as {
         "@type"?: string;
-        itemListElement?: JsonLdProduct[];
+        itemListElement?: JsonLdListItem[];
       };
       if (data["@type"] !== "ItemList" || !Array.isArray(data.itemListElement)) {
         return;
       }
 
       for (const item of data.itemListElement) {
-        if (listings.length >= limit || item["@type"] !== "Product") break;
-        const listing = toEasyCepListing(item, pageUrl);
+        if (listings.length >= limit) break;
+        // Handle both direct Product items and ListItem wrappers
+        const product = item["@type"] === "ListItem" ? item.item : item;
+        if (!product || product["@type"] !== "Product") continue;
+        const listing = toEasyCepListing(product, pageUrl, category);
         if (listing) listings.push(listing);
       }
     } catch {
@@ -161,20 +185,20 @@ function parseJsonLdProducts($: CheerioAPI, pageUrl: string, limit: number) {
     );
     if (!title || !url || !Number.isFinite(price)) return;
     listings.push(
-      createListing(title, price, url, imageUrl ? [imageUrl] : metaImages),
+      createListing(title, price, url, imageUrl ? [imageUrl] : metaImages, category),
     );
   });
 
   return deduplicateByUrl(listings);
 }
 
-function toEasyCepListing(product: JsonLdProduct, pageUrl: string) {
+function toEasyCepListing(product: JsonLdProduct, pageUrl: string, category: string | null = null) {
   const title = cleanText(product.name);
   const price = normalizePrice(product.offers?.price);
   const url = absoluteUrl(pageUrl, product.url || product.offers?.url);
   if (!title || !url || !Number.isFinite(price)) return null;
 
-  return createListing(title, price, url, normalizeImages(product.image, pageUrl));
+  return createListing(title, price, url, normalizeImages(product.image, pageUrl), category);
 }
 
 function createListing(
@@ -182,6 +206,7 @@ function createListing(
   price: number,
   url: string,
   imageUrls: string[],
+  category: string | null = null,
 ): BotAdapterListing {
   return {
     product_name: deriveProductName(title),
@@ -194,6 +219,7 @@ function createListing(
     image_url: imageUrls[0] ?? null,
     image_urls: imageUrls,
     status: "pending",
+    category,
   };
 }
 

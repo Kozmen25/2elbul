@@ -6,7 +6,7 @@ import {
 import type { BotAdapterListing, SourceIntegrationConfig } from "@/lib/bots/types";
 
 const config: SourceIntegrationConfig = {
-  sourceId: 2,
+  sourceId: 5,
   sourceName: "Getmobil",
   sourceSlug: "getmobil",
   apiUrl: null,
@@ -43,7 +43,7 @@ describe("Getmobil standard adapter", () => {
       price: 31999,
       currency: "TRY",
       url: "https://getmobil.com/satin-al/iphone-14",
-      source_id: 2,
+      source_id: 5,
       source_name: "Getmobil",
       location: "Türkiye",
       condition: "Yenilenmiş",

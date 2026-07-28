@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasValidSecret } from "@/lib/auth/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +15,7 @@ const TASKS = [
   { task: "run-sources", path: "/api/cron/run-sources" },
   { task: "process-search-queue", path: "/api/cron/process-search-queue" },
   { task: "check-price-alerts", path: "/api/cron/check-price-alerts" },
+  { task: "check-saved-searches", path: "/api/cron/check-saved-searches" },
 ] as const;
 
 export async function GET(request: NextRequest) {
@@ -71,21 +73,6 @@ export async function GET(request: NextRequest) {
       results,
     },
     { status: ok ? 200 : 207 },
-  );
-}
-
-function hasValidSecret(request: NextRequest, secret: string) {
-  const headerSecret =
-    request.headers.get("x-cron-secret") ||
-    request.headers.get("x-vercel-cron-secret");
-  const authHeader = request.headers.get("authorization");
-  const bearerSecret = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : "";
-  const querySecret = request.nextUrl.searchParams.get("secret");
-
-  return [headerSecret, bearerSecret, querySecret].some(
-    (value) => value === secret,
   );
 }
 

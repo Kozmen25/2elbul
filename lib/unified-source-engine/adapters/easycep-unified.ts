@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   fetchEasyCepListings,
-  EASYCEP_PHONE_CATEGORY_URL,
+  EASYCEP_CATEGORY_URLS,
 } from "@/lib/bots/adapters/easycep";
 import { isBotAdapterListing } from "@/lib/bots/types";
 import type {
@@ -33,18 +33,25 @@ export function createEasyCepUnifiedAdapter(
     sourceName: options.sourceName,
     sourceSlug: options.sourceSlug,
 
-    async fetch({ limit = 60, query } = {}) {
+    async fetch({ limit = 80, query } = {}) {
       try {
-        const listings = await fetchEasyCepListings(EASYCEP_PHONE_CATEGORY_URL, limit);
+        const allListings: import("@/lib/bots/types").BotAdapterListing[] = [];
+        const perCategoryLimit = Math.max(Math.ceil(limit / Object.keys(EASYCEP_CATEGORY_URLS).length), 1);
+
+        for (const [categoryUrl] of Object.entries(EASYCEP_CATEGORY_URLS)) {
+          const listings = await fetchEasyCepListings(categoryUrl, perCategoryLimit);
+          allListings.push(...listings);
+        }
+
         if (query) {
           const normalized = normalizeSearchText(query);
-          return listings.filter((listing) =>
+          return allListings.filter((listing) =>
             normalizeSearchText(`${listing.product_name} ${listing.title}`).includes(
               normalized,
             ),
           );
         }
-        return listings;
+        return allListings.slice(0, limit);
       } catch (error) {
         console.error("EasyCep fetch error:", error);
         return [];
@@ -71,6 +78,7 @@ export function createEasyCepUnifiedAdapter(
         location: listing.city || "Türkiye",
         condition: listing.condition || "Yenilenmiş",
         listedAt: listing.listed_at || null,
+        category: listing.category || undefined,
         rawData: {
           adapter: "easycep",
           original: raw,

@@ -22,6 +22,7 @@ export type BotAdapterListing = {
   old_price?: number | null;
   city: string;
   source: string;
+  sourceId?: number;
   url: string;
   condition: string;
   description?: string | null;

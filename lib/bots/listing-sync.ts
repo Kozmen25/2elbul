@@ -5,9 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotAdapterListing } from "@/lib/bots/types";
 import { isRecord } from "@/lib/records";
 import {
-  findOrCreateMatchedProduct,
-  groupListingDuplicates,
+  batchFindOrCreateMatchedProducts,
+  groupListingDuplicatesByKey,
   summarizeDuplicateGroups,
+  type BatchMatcherInput,
   type DuplicateBatchSummary,
 } from "@/lib/product-matcher";
 import { recordListingPriceHistory } from "@/lib/price-history";
@@ -108,7 +109,7 @@ export async function syncListingsForSource(
       continue;
     }
 
-    payload.push(buildRpcListingPayload(listing, productId));
+    payload.push(buildRpcListingPayload(listing, productId, sourceId));
   }
 
   if (!payload.length) {
@@ -139,7 +140,7 @@ export async function syncListingsForSource(
   }
 
   if (rpcResult.error) {
-    const legacy = await insertListingsLegacy(supabase, listings);
+    const legacy = await insertListingsLegacy(supabase, listings, sourceId);
     return {
       imported: legacy.imported,
       updated: legacy.updated,
@@ -179,6 +180,7 @@ export async function syncListingsForSource(
 export async function insertListingsLegacy(
   supabase: SupabaseClient,
   listings: BotAdapterListing[],
+  sourceId?: number,
 ): Promise<ListingSyncResult> {
   let imported = 0;
   let skipped = 0;
@@ -214,7 +216,7 @@ export async function insertListingsLegacy(
 
     const { data: createdListing, error: listingInsertError } = await supabase
       .from("listings")
-      .insert(buildLegacyListingPayload(listing, productId))
+      .insert(buildLegacyListingPayload(listing, productId, sourceId ?? listing.sourceId ?? 1))
       .select("id")
       .single();
 
@@ -282,7 +284,7 @@ async function loadProductIdsForListings(
 }
 
 function buildDuplicateSummary(listings: BotAdapterListing[]) {
-  const duplicateGroups = groupListingDuplicates(
+  const duplicateGroups = groupListingDuplicatesByKey(
     listings.map(toDuplicateListingInput),
     70,
   );
@@ -323,6 +325,7 @@ function resolveListingExternalId(listing: BotAdapterListing) {
 function buildListingPayloadBase(
   listing: BotAdapterListing,
   productId: string | number,
+  sourceId: number,
 ) {
   return {
     product_id: productId,
@@ -330,6 +333,7 @@ function buildListingPayloadBase(
     price: listing.price,
     city: listing.city,
     source: listing.source,
+    source_id: listing.sourceId ?? sourceId,
     url: listing.url,
     condition: listing.condition,
     image_url: resolveListingImageUrl(listing),
@@ -339,9 +343,10 @@ function buildListingPayloadBase(
 function buildRpcListingPayload(
   listing: BotAdapterListing,
   productId: string | number,
+  sourceId: number,
 ) {
   return {
-    ...buildListingPayloadBase(listing, productId),
+    ...buildListingPayloadBase(listing, productId, sourceId),
     external_id: resolveListingExternalId(listing),
     description: listing.description ?? null,
     old_price: listing.old_price ?? null,
@@ -362,9 +367,10 @@ function buildRpcListingPayload(
 function buildLegacyListingPayload(
   listing: BotAdapterListing,
   productId: string | number,
+  sourceId: number,
 ) {
   return {
-    ...buildListingPayloadBase(listing, productId),
+    ...buildListingPayloadBase(listing, productId, sourceId),
     status: normalizeSyncStatus(listing.status),
   };
 }
@@ -376,23 +382,29 @@ async function resolveMatchedProductIds(
   errors: string[],
 ) {
   const matchedIds = new Set<string>();
-  for (const listing of listings) {
-    try {
-      const product = await findOrCreateMatchedProduct({
-        supabase,
-        title: listing.title,
-        productName: listing.product_name,
-        category: listing.category,
-        source: listing.source,
-      });
+
+  const inputs: BatchMatcherInput[] = listings.map((listing) => ({
+    title: listing.title,
+    productName: listing.product_name,
+    category: listing.category,
+    source: listing.source,
+  }));
+
+  const products = await batchFindOrCreateMatchedProducts(supabase, inputs);
+
+  for (let i = 0; i < listings.length; i++) {
+    const listing = listings[i];
+    const product = products[i];
+
+    if (product) {
       productIds.set(listing.product_name, product.id);
       matchedIds.add(String(product.id));
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Ürün eşleştirilemedi.";
-      console.error("Listing sync product match failed:", error);
+    } else {
+      const message = `Ürün eşleştirilemedi: ${listing.product_name}`;
+      console.error("Listing sync product match failed for:", listing.product_name);
       errors.push(`${listing.product_name}: ${message}`);
     }
   }
+
   return matchedIds.size;
 }

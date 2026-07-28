@@ -11,6 +11,7 @@ import {
   safeFetchHtml,
   type HtmlRootLike,
 } from "@/lib/bots/html-utils";
+import { fetchViaAntiBotProxy } from "@/lib/bots/anti-bot-proxy";
 import type { BotAdapterListing } from "@/lib/bots/types";
 
 export const SAHIBINDEN_PHONE_CATEGORY_URL =
@@ -33,23 +34,36 @@ export async function fetchSahibindenListings(
   categoryUrl = SAHIBINDEN_PHONE_CATEGORY_URL,
   limit = 10,
 ) {
-  const response = await safeFetchHtml(categoryUrl, {
-    source: "sahibinden",
-    retries: 2,
-    retryDelayMs: 1000,
-  });
+  const useProxy = Boolean(process.env.SCRAPINGFISH_API_KEY?.trim());
 
-  if (isCloudflareBlocked(response.html)) {
-    throw new Error(
-      "Sahibinden Cloudflare koruması nedeniyle erişilemiyor. HTML fixture ile test edin.",
-    );
+  let html: string;
+  let finalUrl: string;
+
+  if (useProxy) {
+    const result = await fetchViaAntiBotProxy(categoryUrl, {
+      timeoutMs: 30_000,
+    });
+    html = result.html;
+    finalUrl = result.finalUrl;
+  } else {
+    const response = await safeFetchHtml(categoryUrl, {
+      source: "sahibinden",
+      retries: 2,
+      retryDelayMs: 1000,
+    });
+
+    if (isCloudflareBlocked(response.html)) {
+      throw new Error(
+        "Sahibinden Cloudflare koruması nedeniyle erişilemiyor. " +
+          "Çözmek için .env.local dosyasına SCRAPINGFISH_API_KEY ekleyin.",
+      );
+    }
+
+    html = response.html;
+    finalUrl = response.finalUrl;
   }
 
-  return parseSahibindenCategoryHtml(
-    response.html,
-    response.finalUrl,
-    Math.min(Math.max(limit, 1), 1000),
-  );
+  return parseSahibindenCategoryHtml(html, finalUrl, Math.min(Math.max(limit, 1), 1000));
 }
 
 export function parseSahibindenCategoryHtml(
@@ -276,6 +290,11 @@ export function parseSahibindenProductPage(
     pageUrl,
   );
 
+  // Extract external_id from URL path
+  // Sahibinden listing URLs contain a numeric listing ID, e.g., .../1423456789/detay
+  const pathMatch = canonicalUrl.match(/\/(\d{6,})(?:\/detay)?\/?$/);
+  const externalId = pathMatch?.[1];
+
   return {
     product_name: title,
     title,
@@ -283,6 +302,7 @@ export function parseSahibindenProductPage(
     city: city || "Türkiye",
     source: "Sahibinden",
     url: canonicalUrl,
+    external_id: externalId || undefined,
     condition: "İkinci El",
     image_url: imageUrls[0] ?? null,
     image_urls: imageUrls,

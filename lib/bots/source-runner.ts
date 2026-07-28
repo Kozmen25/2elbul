@@ -12,6 +12,7 @@ import {
 } from "@/lib/bots/listing-sync";
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
 import type { BotAdapterListing } from "@/lib/bots/types";
+import { RecoveryMetricsService } from "@/lib/recovery";
 
 export type SourceRunRecord = {
   id: number;
@@ -121,7 +122,16 @@ export async function runSourceScrapeBot(
       cronSchedule: "",
       productLimit: limit,
     });
-    const adapterResult = await adapter.sync();
+    const timeoutMs = 120_000;
+    const adapterResult = await Promise.race([
+      adapter.sync(),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Sync timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        ),
+      ),
+    ]);
     durationMs = adapterResult.duration_ms;
     const adapterSkipped = adapterResult.skipped;
     errorCount += adapterResult.errors.length;
@@ -155,6 +165,24 @@ export async function runSourceScrapeBot(
     finalStatus = "failed";
     errorCount = 1;
     errors.push(getErrorMessage(error));
+
+    // Retry & Recovery: başarısız çalıştırma metriği
+    const metrics = new RecoveryMetricsService(supabase);
+    metrics.record({
+      source_id: source.id,
+      source_slug: source.slug,
+      metric_type: "recovery_failure",
+      metadata: { error: getErrorMessage(error).slice(0, 500) },
+    });
+  }
+
+  if (finalStatus === "success") {
+    const metrics = new RecoveryMetricsService(supabase);
+    metrics.record({
+      source_id: source.id,
+      source_slug: source.slug,
+      metric_type: "recovery_success",
+    });
   }
 
   const finishedAt = new Date().toISOString();

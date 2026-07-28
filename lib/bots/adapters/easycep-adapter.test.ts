@@ -6,7 +6,7 @@ import {
 import type { BotAdapterListing, SourceIntegrationConfig } from "@/lib/bots/types";
 
 const config: SourceIntegrationConfig = {
-  sourceId: 1,
+  sourceId: 4,
   sourceName: "EasyCep",
   sourceSlug: "easycep",
   apiUrl: null,
@@ -43,7 +43,7 @@ describe("EasyCep standard adapter", () => {
       price: 22999,
       currency: "TRY",
       url: "https://easycep.com/iphone-13",
-      source_id: 1,
+      source_id: 4,
       source_name: "EasyCep",
       location: "Türkiye",
       condition: "Yenilenmiş",

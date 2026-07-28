@@ -3,6 +3,7 @@ import { createProductSlug } from "@/lib/product-slug";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import { cacheGet, cacheSet, cacheKeyFrom } from "@/lib/cache";
 
 type ProductRow = {
   id: string | number;
@@ -49,6 +50,10 @@ export async function GET(request: Request) {
 }
 
 async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
+  const cacheKey = cacheKeyFrom({ type: "matching-suggestions", query });
+  const cached = cacheGet<Suggestion[]>(cacheKey);
+  if (cached) return cached;
+
   const supabase = createSupabaseClient();
   if (!supabase) return [];
 
@@ -99,10 +104,16 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
     return [];
   }
 
-  return toSuggestions((data ?? []) as ProductRow[], counts, query);
+  const result = toSuggestions((data ?? []) as ProductRow[], counts, query);
+  cacheSet(cacheKey, result, 30_000);
+  return result;
 }
 
 async function getPopularSuggestions(): Promise<Suggestion[]> {
+  const cacheKey = cacheKeyFrom({ type: "popular-suggestions" });
+  const cached = cacheGet<Suggestion[]>(cacheKey);
+  if (cached) return cached;
+
   const supabase = createSupabaseClient();
   if (!supabase) return [];
 

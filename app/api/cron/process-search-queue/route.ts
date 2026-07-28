@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getInstantSearchAdapters } from "@/lib/source-adapters";
 import {
-  findOrCreateMatchedProduct,
+  batchFindOrCreateMatchedProducts,
   groupListingDuplicates,
   summarizeDuplicateGroups,
+  type BatchMatcherInput,
   type DuplicateBatchSummary,
 } from "@/lib/product-matcher";
 import { recordListingPriceHistory } from "@/lib/price-history";
@@ -15,6 +16,8 @@ import type {
   NormalizedListing,
   UnifiedSourceAdapter,
 } from "@/lib/unified-source-engine";
+import { DeadLetterQueue, classifyError } from "@/lib/recovery";
+import { hasValidSecret } from "@/lib/auth/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -225,6 +228,31 @@ export async function GET(request: NextRequest) {
         })
         .eq("id", job.demand_id);
 
+      // Retry & Recovery: max deneme aşıldıysa DLQ'ya ekle
+      if (!shouldRetry) {
+        const dlq = new DeadLetterQueue(supabase);
+        const category = classifyError(jobError);
+        await dlq.insert({
+          source_id: job.source_id,
+          source_slug: getJobSource(job, sourceMap).slug,
+          queue_type: "search_queue",
+          retry_count: nextAttempts,
+          max_retries: Number(job.max_attempts ?? 3),
+          last_error: message.slice(0, 1000),
+          error_category: category,
+          payload: {
+            job_id: job.id,
+            demand_id: job.demand_id,
+            query: job.query,
+            normalized_query: job.normalized_query,
+          },
+          status: "pending",
+          next_retry_at: null,
+          resolved_at: null,
+          notes: null,
+        });
+      }
+
       failed += 1;
       results.push({
         id: job.id,
@@ -384,8 +412,31 @@ async function importAdapterListings(
     );
   }
 
-  for (const listing of listings) {
-    const productId = await ensureProduct(supabase, listing, job.query);
+  // Phase 1: Batch-resolve all product matches
+  const inputs: BatchMatcherInput[] = listings.map((listing) => ({
+    title: listing.title,
+    productName:
+      listing.model ??
+      getNestedRecordString(listing.rawData, "original", "product_name") ??
+      job.query,
+    category: listing.category,
+    source: listing.sourceName,
+  }));
+
+  const products = await batchFindOrCreateMatchedProducts(supabase, inputs);
+
+  // Phase 2: Per-listing operations (upsert + price history)
+  for (let i = 0; i < listings.length; i++) {
+    const listing = listings[i];
+    const product = products[i];
+
+    if (!product) {
+      console.error("Process queue: product match failed for", listing.title);
+      skipped += 1;
+      continue;
+    }
+
+    const productId = Number(product.id);
     matchedProductIds.add(String(productId));
     const externalId = ensureExternalId(job, source, listing);
     const existing = await findExistingListing(supabase, listing, externalId);
@@ -435,24 +486,6 @@ async function importAdapterListings(
     matchedProducts: matchedProductIds.size,
     duplicateSummary,
   };
-}
-
-async function ensureProduct(
-  supabase: SupabaseClient,
-  listing: SearchQueueListing,
-  query: string,
-) {
-  const product = await findOrCreateMatchedProduct({
-    supabase,
-    title: listing.title || query,
-    productName:
-      listing.model ??
-      getNestedRecordString(listing.rawData, "original", "product_name") ??
-      query,
-    category: listing.category,
-    source: listing.sourceName,
-  });
-  return Number(product.id);
 }
 
 async function ensureProductLegacy(
@@ -642,21 +675,6 @@ function ensureExternalId(
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 180);
-}
-
-function hasValidSecret(request: NextRequest, secret: string) {
-  const headerSecret =
-    request.headers.get("x-cron-secret") ||
-    request.headers.get("x-vercel-cron-secret");
-  const authHeader = request.headers.get("authorization");
-  const bearerSecret = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : "";
-  const querySecret = request.nextUrl.searchParams.get("secret");
-
-  return [headerSecret, bearerSecret, querySecret].some(
-    (value) => value === secret,
-  );
 }
 
 function getMissingSchemaColumn(error: unknown) {

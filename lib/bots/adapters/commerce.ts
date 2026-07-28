@@ -12,6 +12,7 @@ import {
   sleep,
   validateImageUrls,
 } from "@/lib/bots/html-utils";
+import { fetchViaAntiBotProxy } from "@/lib/bots/anti-bot-proxy";
 import type { BotAdapterListing } from "@/lib/bots/types";
 
 type CommerceAdapterConfig = {
@@ -50,15 +51,31 @@ export async function fetchCommerceListings(
   limit: number,
   config: CommerceAdapterConfig,
 ) {
-  const response = await safeFetchHtml(categoryUrl, {
-    timeoutMs: 15_000,
-    retries: 2,
-    retryDelayMs: 900,
-  });
+  const useProxy = Boolean(process.env.SCRAPINGFISH_API_KEY?.trim());
+
+  let html: string;
+  let finalUrl: string;
+
+  if (useProxy) {
+    const result = await fetchViaAntiBotProxy(categoryUrl, {
+      timeoutMs: 30_000,
+    });
+    html = result.html;
+    finalUrl = result.finalUrl;
+  } else {
+    const response = await safeFetchHtml(categoryUrl, {
+      timeoutMs: 15_000,
+      retries: 2,
+      retryDelayMs: 900,
+    });
+    html = response.html;
+    finalUrl = response.finalUrl;
+  }
+
   await sleep(250);
   return parseCommerceHtml(
-    response.html,
-    response.finalUrl,
+    html,
+    finalUrl,
     Math.min(Math.max(limit, 1), 1000),
     config,
   );

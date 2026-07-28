@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getInstantSearchAdapters } from "@/lib/source-adapters";
 import {
-  findOrCreateMatchedProduct,
+  batchFindOrCreateMatchedProducts,
   groupListingDuplicates,
   summarizeDuplicateGroups,
+  type BatchMatcherInput,
   type DuplicateBatchSummary,
 } from "@/lib/product-matcher";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
@@ -17,12 +18,14 @@ import type {
 } from "@/lib/unified-source-engine";
 import { getGlobalContext } from "@/lib/taxonomy/context";
 import type { createCategoryResolver } from "@/lib/taxonomy/integration";
+import { verifySearchRequest } from "@/lib/auth/search-auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const RATE_LIMIT_MS = 60_000;
-const recentRuns = new Map<string, number>();
+const RATE_LIMIT = 10; // max requests per query per window
+const RATE_WINDOW_MS = 60_000;
 
 type QueueJob = {
   id: string;
@@ -46,6 +49,14 @@ type SearchQueueListing = NormalizedListing & {
 };
 
 export async function POST(request: NextRequest) {
+  const auth = verifySearchRequest(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: 401 },
+    );
+  }
+
   const body = (await request.json().catch(() => null)) as {
     query?: unknown;
   } | null;
@@ -59,15 +70,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const lastRun = recentRuns.get(normalizedQuery) ?? 0;
-  if (Date.now() - lastRun < RATE_LIMIT_MS) {
+  const rlKey = `${getClientIp(request)}:${normalizedQuery}`;
+  const rateCheck = checkRateLimit(rlKey, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!rateCheck.allowed) {
     return NextResponse.json({
       ok: true,
       rateLimited: true,
       message: "Bu arama için tarama kısa süre önce başlatıldı.",
     });
   }
-  recentRuns.set(normalizedQuery, Date.now());
 
   const supabase = createSupabaseAdminClient();
   if (!supabase) {
@@ -382,8 +393,34 @@ async function importListings(
     );
   }
 
-  for (const listing of listings) {
-    const productId = await ensureProduct(supabase, listing, job.query, resolver);
+  // Phase 1: Batch-resolve all product matches
+  const inputs: BatchMatcherInput[] = listings.map((listing) => ({
+    title: listing.title,
+    productName:
+      listing.model ??
+      getNestedRecordString(listing.rawData, "original", "product_name") ??
+      job.query,
+    category: listing.category,
+    source: listing.sourceName,
+  }));
+
+  const products = await batchFindOrCreateMatchedProducts(
+    supabase,
+    inputs,
+    resolver,
+  );
+
+  // Phase 2: Per-listing operations (upsert)
+  for (let i = 0; i < listings.length; i++) {
+    const listing = listings[i];
+    const product = products[i];
+
+    if (!product) {
+      console.error("Instant bot: product match failed for", listing.title);
+      continue;
+    }
+
+    const productId = Number(product.id);
     matchedProductIds.add(String(productId));
     const externalId = listing.externalId || deterministicExternalId(job, listing);
     const existing = await findExistingListing(supabase, listing.sourceName, externalId);
@@ -410,26 +447,6 @@ async function importListings(
     matchedProducts: matchedProductIds.size,
     duplicateSummary,
   };
-}
-
-async function ensureProduct(
-  supabase: SupabaseClient,
-  listing: SearchQueueListing,
-  query: string,
-  resolver: ReturnType<typeof createCategoryResolver>,
-) {
-  const product = await findOrCreateMatchedProduct({
-    supabase,
-    title: listing.title || query,
-    productName:
-      listing.model ??
-      getNestedRecordString(listing.rawData, "original", "product_name") ??
-      query,
-    category: listing.category,
-    source: listing.sourceName,
-    resolver,
-  });
-  return Number(product.id);
 }
 
 async function ensureProductLegacy(supabase: SupabaseClient, query: string) {

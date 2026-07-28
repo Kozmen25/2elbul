@@ -1,6 +1,7 @@
 import type { ListingCondition } from "@/lib/listings";
 import type { CheerioAPI } from "cheerio";
 import { withRetry, HttpError, RetryMetrics } from "./retry";
+import { classifyError } from "@/lib/recovery";
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (compatible; 2ElBulBot/1.0; +https://2elbul.com)";
@@ -126,6 +127,15 @@ export async function safeFetchHtml(
           enriched.name = "AbortError";
           throw enriched;
         }
+
+        // Retry & Recovery: hata kategorisini logla
+        const category = classifyError(error);
+        console.warn(
+          `[safeFetchHtml] ${options.source ?? "bilinmeyen"} — ${category}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+
         throw error;
       } finally {
         clearTimeout(timeout);

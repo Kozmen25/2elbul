@@ -8,6 +8,7 @@ import {
   type SourceRunRecord,
   type SourceRunResult,
 } from "@/lib/bots/source-runner";
+import { initializeSourceAdapters } from "@/lib/unified-source-engine/adapters";
 import type {
   SourceEngineRunOptions,
   SourceEngineSkippedSource,
@@ -38,14 +39,36 @@ export async function runSourceEngine(
     }
   }
 
+  // Register unified adapters before running any source
+  try {
+    await initializeSourceAdapters(supabase);
+    console.log("[SourceEngine] Unified adapters initialized successfully");
+  } catch (err) {
+    console.warn("[SourceEngine] Failed to initialize unified adapters, falling back to legacy:", err);
+  }
+
+  const staggerDelayMs = Math.max(0, Number(process.env.SOURCE_STAGGER_DELAY_MS) || 0);
+
   const results: SourceRunResult[] = [];
-  for (const source of runnable) {
+  for (let i = 0; i < runnable.length; i++) {
+    const source = runnable[i];
+    const sourceStart = Date.now();
+
+    if (i > 0 && staggerDelayMs > 0) {
+      await new Promise((r) => setTimeout(r, staggerDelayMs));
+    }
+
     const result = await runSourceScrapeBot(supabase, source, {
       runType: options.mode === "scheduled" ? "scheduled" : "real_test",
       maxLimit: options.limit,
       forceStatus: options.mode === "debug" || options.mode === "real_test" ? "pending" : undefined,
       skipInactiveMarking: options.mode !== "scheduled" || Boolean(options.limit),
     });
+
+    console.log(
+      `[SourceEngine] ${source.name} (${source.slug}): ${result.status} — ${result.found} found, ${result.imported} imported, ${Date.now() - sourceStart}ms`,
+    );
+
     results.push(result);
   }
 

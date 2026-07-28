@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { hasValidSecret } from "@/lib/auth/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type PriceAlertRow = {
   id: string | number;
+  user_id: string;
   product_id: number | null;
   listing_id: number | null;
   target_price: number | string;
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("price_alerts")
-    .select("id, product_id, listing_id, target_price")
+    .select("id, user_id, product_id, listing_id, target_price")
     .eq("status", "active")
     .limit(500);
 
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
   let checked = 0;
   let triggered = 0;
   let failed = 0;
+  let notificationsCreated = 0;
   const now = new Date().toISOString();
 
   for (const alert of alerts) {
@@ -87,6 +90,23 @@ export async function GET(request: NextRequest) {
             last_checked_at: now,
           })
           .eq("id", alert.id);
+
+        const productName = await resolveProductName(supabase, alert.product_id);
+        await supabase.from("user_notifications").insert({
+          user_id: alert.user_id,
+          type: "price_alert",
+          title: "Fiyat Alarmı Tetiklendi",
+          body: `${productName} için fiyat alarmın tetiklendi! Hedef: ${targetPrice} TL, Güncel: ${currentPrice} TL`,
+          metadata: {
+            price_alert_id: alert.id,
+            product_id: alert.product_id,
+            listing_id: alert.listing_id,
+            target_price: targetPrice,
+            current_price: currentPrice,
+          },
+        });
+
+        notificationsCreated += 1;
         triggered += 1;
       } else {
         await supabase
@@ -102,12 +122,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // TODO: Tetiklenen alarmlar için e-posta veya uygulama içi bildirim gönderimi eklenecek.
   return NextResponse.json({
     ok: true,
     checked,
     triggered,
     failed,
+    notificationsCreated,
   });
 }
 
@@ -140,17 +160,16 @@ async function resolveCurrentPrice(
   return data?.price ? Number(data.price) : null;
 }
 
-function hasValidSecret(request: NextRequest, secret: string) {
-  const headerSecret =
-    request.headers.get("x-cron-secret") ||
-    request.headers.get("x-vercel-cron-secret");
-  const authHeader = request.headers.get("authorization");
-  const bearerSecret = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : "";
-  const querySecret = request.nextUrl.searchParams.get("secret");
-
-  return [headerSecret, bearerSecret, querySecret].some(
-    (value) => value === secret,
-  );
+async function resolveProductName(
+  supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  productId: number | null,
+) {
+  if (!productId) return "Ürün";
+  const { data, error } = await supabase
+    .from("products")
+    .select("name")
+    .eq("id", productId)
+    .maybeSingle();
+  if (error || !data) return "Ürün";
+  return String(data.name);
 }
