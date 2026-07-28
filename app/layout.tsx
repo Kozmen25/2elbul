@@ -7,6 +7,7 @@ import { CompareBar } from "@/components/compare-bar";
 import { CompareProvider } from "@/components/compare-context";
 import { getSiteGeneralSettings } from "@/lib/site-settings";
 import { getMetadataBase } from "@/lib/site-url";
+import { Analytics } from "@vercel/analytics/next";
 
 export async function generateMetadata(): Promise<Metadata> {
   const general = await getSiteGeneralSettings();
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <Footer />
           <CompareBar />
         </CompareProvider>
+        <Analytics />
       </body>
     </html>
   );
