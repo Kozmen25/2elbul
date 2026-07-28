@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const RATE_LIMIT_ANON = { limit: 10, windowMs: 60 * 60 * 1000 };
+const RATE_LIMIT_AUTH = { limit: 100, windowMs: 60 * 60 * 1000 };
 
 type SearchDemandBody = {
   query?: unknown;
@@ -24,6 +28,24 @@ export async function POST(request: Request) {
 
   const query = typeof body.query === "string" ? body.query.trim() : "";
   const resultCount = Number(body.resultCount ?? 0);
+
+  const ip = getClientIp(request);
+  const serverSupabase = await createSupabaseServerClient();
+  const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
+    data: { user: null },
+  };
+  const userId = authData.user?.id ?? null;
+  const isAuthenticated = !!userId;
+  const rl = isAuthenticated ? RATE_LIMIT_AUTH : RATE_LIMIT_ANON;
+  const rlKey = isAuthenticated ? `search-demand:${userId}` : `search-demand:${ip}`;
+  const rateCheck = checkRateLimit(rlKey, rl.limit, rl.windowMs);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { queued: false, error: "Çok fazla istek gönderdiniz. Lütfen bekleyin." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rateCheck.resetMs / 1000)) } },
+    );
+  }
+
   if (!query) {
     return NextResponse.json(
       { queued: false, error: "Arama sorgusu boş olamaz." },
@@ -59,11 +81,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const serverSupabase = await createSupabaseServerClient();
-  const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
-    data: { user: null },
-  };
-  const userId = authData.user?.id ?? null;
   const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 
   const existingResult = await supabase
