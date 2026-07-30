@@ -18,6 +18,7 @@ export type HomeListing = {
   condition: ListingCondition;
   imageUrl: string | null;
   createdAt: string;
+  category: string | null;
 };
 
 export type PopularProduct = {
@@ -273,6 +274,7 @@ export async function getHomeData(): Promise<HomeData> {
     { count: number; total: number; lowest: number }
   >();
   for (const listing of publicListings) {
+    if (listing.category === "Aksesuar") continue;
     const current = listedProductStats.get(listing.productName) ?? {
       count: 0,
       total: 0,
@@ -383,8 +385,11 @@ export async function getHomeData(): Promise<HomeData> {
   const priceOpportunities = [
     ...analyzedPriceOpportunities,
     ...fallbackOpportunities,
-  ].slice(0, 8);
+  ]
+    .filter((listing) => listing.category !== "Aksesuar")
+    .slice(0, 8);
   const priceDrops = publicListings
+    .filter((listing) => listing.category !== "Aksesuar")
     .filter(
       (listing) =>
         listing.previousPrice !== null &&
