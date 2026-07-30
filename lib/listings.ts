@@ -19,6 +19,29 @@ export type ListingCondition =
   | "Kullanılmış"
   | "Yenilenmiş";
 
+export type SellerType =
+  | "corporate"
+  | "individual"
+  | "store"
+  | "official"
+  | "marketplace"
+  | "unknown";
+
+export type WarrantyType =
+  | "apple_official"
+  | "distributor"
+  | "importer"
+  | "store"
+  | "no_warranty"
+  | "unknown";
+
+export type PriceQualityType =
+  | "good_deal"
+  | "fair_price"
+  | "overpriced"
+  | "suspicious"
+  | "unknown";
+
 export const LISTING_SOURCES: ListingSource[] = [
   "Sahibinden",
   "Letgo",
@@ -56,6 +79,11 @@ export type Listing = {
   imageUrl: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  sellerName?: string | null;
+  sellerType?: SellerType | null;
+  warranty?: string | null;
+  warrantyType?: WarrantyType | null;
+  priceQuality?: PriceQualityType | null;
 };
 
 export type ProductOption = {

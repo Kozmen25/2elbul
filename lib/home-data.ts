@@ -382,7 +382,7 @@ export async function getHomeData(): Promise<HomeData> {
         ),
       };
     });
-  const priceOpportunities = [
+  const priceOpportunities: PriceOpportunity[] = [
     ...analyzedPriceOpportunities,
     ...fallbackOpportunities,
   ]

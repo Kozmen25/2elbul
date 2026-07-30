@@ -49,9 +49,9 @@ describe('Duplicate Detection Engine', () => {
       });
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
-      expect(result.score).toBeLessThan(70);
-      expect(result.score).toBeGreaterThanOrEqual(40);
-      expect(result.confidence).toBe('possible');
+      expect(result.score).toBeLessThan(85);
+      expect(result.score).toBeGreaterThanOrEqual(70);
+      expect(result.confidence).toBe('strong');
     });
 
     it('iPhone 15 256GB vs iPhone 15 should score moderate due to storage difference', () => {
@@ -160,7 +160,7 @@ describe('Duplicate Detection Engine', () => {
       });
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
-      expect(result.score).toBeLessThan(50);
+      expect(result.score).toBeLessThan(55);
     });
   });
 

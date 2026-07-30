@@ -245,13 +245,13 @@ export function calculateDuplicateScore(
 
 export function aggregateScores(scores: DuplicateScore): number {
   const weights = {
-    normalization: 0.32,
+    normalization: 0.27,
     brand: 0.16,
     model: 0.16,
     storage: 0.11,
     ram: 0.05,
-    variant: 0.03,
-    condition: 0.03,
+    variant: 0.02,
+    condition: 0.10,
     price: 0.02,
     titleSimilarity: 0.01,
     sourceDiversity: 0.01,

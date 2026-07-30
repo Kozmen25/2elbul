@@ -15,9 +15,10 @@ export const CONFIDENCE_SIGNAL_WEIGHTS: Record<ConfidenceSignalName, number> = {
   duplicateScore: 0.13,
   priceConsistency: 0.05,
   titleSimilarity: 0.04,
-  sourceCount: 0.03,
+  sourceCount: 0.02,
   sourceReliability: 0.04,
-  categoryScore: 0.13,
+  categoryScore: 0.12,
+  conditionSourceConfidence: 0.05,
 };
 
 export const CONFIDENCE_LEVEL_THRESHOLDS = {
