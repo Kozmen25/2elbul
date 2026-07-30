@@ -1,4 +1,5 @@
 import type { ICategoryResolver } from "@/lib/taxonomy/integration";
+import type { ListingCondition } from "@/lib/listings";
 export interface NormalizationOptions {
   lowercase?: boolean;
   trim?: boolean;
@@ -629,4 +630,238 @@ export function detectCategory(normalized: string, brand: string | null) {
     return "Ekran Kartı";
   }
   return null;
+}
+
+// === Condition Inference ===
+
+export type ConditionKeywordEntry = {
+  value: ListingCondition;
+  confidence: number;
+};
+
+export type ConditionSignal = {
+  signal: "source" | "keyword" | "category" | "description";
+  value: ListingCondition;
+  weight: number;
+  confidence: number;
+};
+
+export type InferConditionResult = {
+  condition: ListingCondition;
+  confidence: number;
+  reason: string;
+  signals: ConditionSignal[];
+};
+
+const REFURBISHED_SOURCES = new Set([
+  "EasyCep", "Getmobil", "Yenilenmiş Market", "Teknosa Yenilenmiş",
+  "Hepsiburada Yenilenmiş", "MediaMarkt Yenilenmiş",
+]);
+
+const CONDITION_KEYWORD_MAP: Array<{
+  value: ListingCondition;
+  confidence: number;
+  patterns: string[];
+}> = [
+  {
+    value: "Sıfır", confidence: 90,
+    patterns: ["sifir", "acilmamis", "kutusu acilmamis"],
+  },
+  {
+    value: "Yeni gibi", confidence: 85,
+    patterns: ["yeni gibi", "sadece acildi", "az kullanilmis", "denemeli"],
+  },
+  {
+    value: "Çok iyi", confidence: 80,
+    patterns: ["cok iyi", "temiz", "hatasiz", "sorunsuz", "calisir durumda"],
+  },
+  {
+    value: "İyi", confidence: 70,
+    patterns: ["iyi", "saglam"],
+  },
+  {
+    value: "İkinci El", confidence: 95,
+    patterns: ["ikinci el", "2\\.el", "2 el", "2\\. el"],
+  },
+  {
+    value: "Kullanılmış", confidence: 80,
+    patterns: ["kullanilmis", "kullanilmis urun"],
+  },
+  {
+    value: "Yenilenmiş", confidence: 90,
+    patterns: ["yenilenmis", "refurbished"],
+  },
+];
+
+function getSourceCondition(source: string): { value: ListingCondition; confidence: number } | null {
+  const s = source?.trim();
+  if (REFURBISHED_SOURCES.has(s)) {
+    return { value: "Yenilenmiş" as ListingCondition, confidence: 85 };
+  }
+  return null;
+}
+
+function getCategoryModifier(category: string | undefined): number {
+  if (!category) return 1.0;
+  switch (category) {
+    case "Telefon": return 1.0;
+    case "Tablet": return 1.0;
+    case "Laptop": return 0.9;
+    case "Oyun Konsolu": return 0.9;
+    case "Ekran Kartı": return 0.85;
+    case "Aksesuar": return 0.7;
+    default: return 1.0;
+  }
+}
+
+function detectConditionKeywords(text: string): Array<{ value: ListingCondition; confidence: number }> {
+  if (!text) return [];
+  const normalized = normalizeProductTitle(text);
+  const matches: Array<{ value: ListingCondition; confidence: number }> = [];
+  const seen = new Set<ListingCondition>();
+
+  for (const entry of CONDITION_KEYWORD_MAP) {
+    if (seen.has(entry.value)) continue;
+    for (const raw of entry.patterns) {
+      const regex = new RegExp(`(?:^|\\s)${raw}(?=\\s|$)`, "i");
+      if (regex.test(normalized)) {
+        matches.push({ value: entry.value, confidence: entry.confidence });
+        seen.add(entry.value);
+        break;
+      }
+    }
+  }
+
+  return matches;
+}
+
+export function inferCondition(
+  title: string,
+  source?: string,
+  category?: string,
+  description?: string,
+): InferConditionResult {
+  const signals: ConditionSignal[] = [];
+
+  // 1. Source signal (weight: 0.40)
+  const sourceCondition = getSourceCondition(source ?? "");
+  if (sourceCondition) {
+    signals.push({
+      signal: "source",
+      value: sourceCondition.value,
+      weight: 0.40,
+      confidence: sourceCondition.confidence,
+    });
+  }
+
+  // 2. Keyword signal from title (weight: 0.35)
+  const keywordMatches = detectConditionKeywords(title ?? "");
+  const bestKeyword = keywordMatches.length > 0
+    ? keywordMatches.reduce((a, b) => a.confidence >= b.confidence ? a : b)
+    : null;
+  if (bestKeyword) {
+    signals.push({
+      signal: "keyword",
+      value: bestKeyword.value,
+      weight: 0.35,
+      confidence: bestKeyword.confidence,
+    });
+  }
+
+  // 3. Category modifier (weight: 0.15) — modulates keyword confidence
+  const categoryMod = getCategoryModifier(category);
+  if (categoryMod !== 1.0 && bestKeyword) {
+    signals.push({
+      signal: "category",
+      value: bestKeyword.value,
+      weight: 0.15,
+      confidence: Math.round(bestKeyword.confidence * categoryMod),
+    });
+  }
+
+  // 4. Description signal (weight: 0.10)
+  if (description) {
+    const descMatches = detectConditionKeywords(description);
+    const bestDesc = descMatches.length > 0
+      ? descMatches.reduce((a, b) => a.confidence >= b.confidence ? a : b)
+      : null;
+    if (bestDesc) {
+      signals.push({
+        signal: "description",
+        value: bestDesc.value,
+        weight: 0.10,
+        confidence: bestDesc.confidence,
+      });
+    }
+  }
+
+  // No signals at all → default
+  if (signals.length === 0) {
+    return {
+      condition: "İkinci El",
+      confidence: 50,
+      reason: "Sinyal yok, varsayılan",
+      signals: [],
+    };
+  }
+
+  // Fusion: group by condition value, compute weighted average confidence
+  const grouped = new Map<ListingCondition, { totalWeighted: number; totalWeight: number }>();
+  for (const s of signals) {
+    const g = grouped.get(s.value) ?? { totalWeighted: 0, totalWeight: 0 };
+    g.totalWeighted += s.weight * s.confidence;
+    g.totalWeight += s.weight;
+    grouped.set(s.value, g);
+  }
+
+  const ranked = [...grouped.entries()]
+    .map(([value, stats]) => ({
+      value,
+      avg: stats.totalWeight > 0 ? stats.totalWeighted / stats.totalWeight : 0,
+      weight: stats.totalWeight,
+    }))
+    .sort((a, b) => b.avg - a.avg);
+
+  const top = ranked[0];
+  const runnerUp = ranked[1];
+  const DISAGREEMENT = 15;
+
+  // Clear winner
+  if (!runnerUp || top.avg - runnerUp.avg >= DISAGREEMENT) {
+    return {
+      condition: top.value,
+      confidence: Math.round(Math.min(100, top.avg)),
+      reason: `${signals.length} sinyal birleşimi`,
+      signals,
+    };
+  }
+
+  // Disagreement: source signal wins with penalty
+  const srcSig = signals.find((s) => s.signal === "source");
+  if (srcSig) {
+    return {
+      condition: srcSig.value,
+      confidence: Math.max(40, srcSig.confidence - 20),
+      reason: `Kaynak öncelikli: ${srcSig.value}`,
+      signals,
+    };
+  }
+
+  // Disagreement: keyword wins if confident enough
+  if (bestKeyword && bestKeyword.confidence >= 70) {
+    return {
+      condition: bestKeyword.value,
+      confidence: bestKeyword.confidence,
+      reason: `Anahtar kelime öncelikli: ${bestKeyword.value}`,
+      signals,
+    };
+  }
+
+  // Default fallback
+  return {
+    condition: "İkinci El",
+    confidence: 50,
+    reason: "Kararsız sinyaller, varsayılan",
+    signals,
+  };
 }

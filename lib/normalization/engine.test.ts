@@ -15,6 +15,7 @@ import {
   isSimilarAfterNormalization,
   extractProductSignals,
   generateProductKey,
+  inferCondition,
 } from './engine';
 
 describe('Normalization Engine', () => {
@@ -708,6 +709,103 @@ describe('Normalization Engine', () => {
     it('should produce same result as extractProductSignals().normalizedKey', () => {
       const title = 'Samsung Galaxy S24 Ultra 256GB 12GB RAM';
       expect(generateProductKey(title)).toBe(extractProductSignals(title).normalizedKey);
+    });
+  });
+
+  describe('inferCondition', () => {
+    it('should detect "Sıfır" from title keyword', () => {
+      const result = inferCondition('iPhone 15 Pro Max Sıfır');
+      expect(result.condition).toBe('Sıfır');
+      expect(result.confidence).toBeGreaterThanOrEqual(85);
+    });
+
+    it('should detect "Yenilenmiş" from refurbished source', () => {
+      const result = inferCondition('iPhone 15 Pro Max 256GB', 'EasyCep');
+      expect(result.condition).toBe('Yenilenmiş');
+      expect(result.confidence).toBeGreaterThanOrEqual(65);
+    });
+
+    it('should detect "İkinci El" from title keyword', () => {
+      const result = inferCondition('iPhone 15 Pro Max İkinci El');
+      expect(result.condition).toBe('İkinci El');
+      expect(result.confidence).toBeGreaterThanOrEqual(85);
+    });
+
+    it('should return default "İkinci El" when no signals found', () => {
+      const result = inferCondition('iPhone 15 Pro Max');
+      expect(result.condition).toBe('İkinci El');
+      expect(result.confidence).toBe(50);
+      expect(result.reason).toContain('Sinyal yok');
+    });
+
+    it('should detect "Yeni gibi" keyword', () => {
+      const result = inferCondition('iPhone 15 Yeni Gibi');
+      expect(result.condition).toBe('Yeni gibi');
+      expect(result.confidence).toBeGreaterThanOrEqual(75);
+    });
+
+    it('should apply category modifier for accessories', () => {
+      const result = inferCondition('Sıfır Kılıf', undefined, 'Aksesuar');
+      expect(result.condition).toBe('Sıfır');
+      expect(result.confidence).toBeGreaterThanOrEqual(55);
+    });
+
+    it('should prioritize source signal in refurbished source conflict', () => {
+      const result = inferCondition('Sıfır iPhone 15 Pro Max', 'EasyCep');
+      // Source says Yenilenmiş, keyword says Sıfır → source wins with penalty
+      expect(result.condition).toBe('Yenilenmiş');
+      expect(result.confidence).toBeGreaterThanOrEqual(60);
+    });
+
+    it('should detect "Kullanılmış" from title', () => {
+      const result = inferCondition('iPhone 15 Kullanılmış');
+      expect(result.condition).toBe('Kullanılmış');
+      expect(result.confidence).toBeGreaterThanOrEqual(70);
+    });
+
+    it('should detect "Yenilenmiş" from refurbished keyword', () => {
+      const result = inferCondition('Yenilenmiş iPhone 15 Pro Max');
+      expect(result.condition).toBe('Yenilenmiş');
+      expect(result.confidence).toBeGreaterThanOrEqual(80);
+    });
+
+    it('should handle empty title gracefully', () => {
+      const result = inferCondition('');
+      expect(result.condition).toBe('İkinci El');
+      expect(result.confidence).toBe(50);
+    });
+
+    it('should return signals array with correct structure', () => {
+      const result = inferCondition('Sıfır iPhone 15', 'EasyCep');
+      expect(result.signals.length).toBeGreaterThanOrEqual(1);
+      expect(result.signals[0]).toHaveProperty('signal');
+      expect(result.signals[0]).toHaveProperty('value');
+      expect(result.signals[0]).toHaveProperty('weight');
+      expect(result.signals[0]).toHaveProperty('confidence');
+    });
+
+    it('should detect condition from description signal', () => {
+      const result = inferCondition('iPhone 15 Pro Max', undefined, undefined, 'Ürün çok iyi durumda');
+      expect(result.condition).toBe('Çok iyi');
+      expect(result.confidence).toBeGreaterThanOrEqual(65);
+    });
+
+    it('should return keyword win on neutral source + strong keyword', () => {
+      const result = inferCondition('Sıfır iPhone 15', undefined, undefined, undefined);
+      expect(result.condition).toBe('Sıfır');
+      expect(result.confidence).toBeGreaterThanOrEqual(80);
+    });
+
+    it('should detect "Çok iyi" from title', () => {
+      const result = inferCondition('Çok İyi Durumda iPhone 12');
+      expect(result.condition).toBe('Çok iyi');
+      expect(result.confidence).toBeGreaterThanOrEqual(70);
+    });
+
+    it('should detect "İyi" from title', () => {
+      const result = inferCondition('İyi Durumda Samsung Galaxy');
+      expect(result.condition).toBe('İyi');
+      expect(result.confidence).toBeGreaterThanOrEqual(60);
     });
   });
 });

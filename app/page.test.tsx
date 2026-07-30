@@ -291,6 +291,7 @@ function makeListing(overrides: Partial<HomeListing> = {}): HomeListing {
     condition: "İkinci El" as HomeListing["condition"],
     imageUrl: null,
     createdAt: "2026-07-05T08:15:00.000Z",
+    category: null,
     ...overrides,
   };
 }

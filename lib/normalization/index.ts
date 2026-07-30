@@ -1,4 +1,4 @@
-export type { NormalizationOptions, ProductSignals } from './engine';
+export type { NormalizationOptions, ProductSignals, InferConditionResult } from './engine';
 export {
   normalizeProductTitle,
   normalizeSearchText,
@@ -17,4 +17,5 @@ export {
   isSimilarAfterNormalization,
   extractProductSignals,
   generateProductKey,
+  inferCondition,
 } from './engine';
