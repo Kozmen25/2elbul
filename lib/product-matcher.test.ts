@@ -26,7 +26,7 @@ describe("product matcher", () => {
     ];
     const keys = titles.map(generateProductKey);
 
-    expect(new Set(keys)).toEqual(new Set(["apple-iphone-15-pro-max-256gb"]));
+    expect(new Set(keys)).toEqual(new Set(["telefon-apple-iphone-15-pro-max-256gb"]));
   });
 
   it("separates nearby but different iPhone products", () => {
@@ -51,7 +51,7 @@ describe("product matcher", () => {
     ];
     const keys = titles.map(generateProductKey);
 
-    expect(new Set(keys)).toEqual(new Set(["samsung-galaxy-s23-ultra-256gb"]));
+    expect(new Set(keys)).toEqual(new Set(["telefon-samsung-galaxy-s23-ultra-256gb"]));
   });
 
   it("extracts useful iPhone signals", () => {
@@ -60,7 +60,7 @@ describe("product matcher", () => {
       model: "iphone-15-pro-max",
       storage: "256gb",
       category: "Telefon",
-      normalizedKey: "apple-iphone-15-pro-max-256gb",
+      normalizedKey: "telefon-apple-iphone-15-pro-max-256gb",
     });
   });
 
@@ -70,7 +70,7 @@ describe("product matcher", () => {
       model: "galaxy-s23-ultra",
       storage: "256gb",
       category: "Telefon",
-      normalizedKey: "samsung-galaxy-s23-ultra-256gb",
+      normalizedKey: "telefon-samsung-galaxy-s23-ultra-256gb",
     });
   });
 

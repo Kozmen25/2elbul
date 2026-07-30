@@ -23,6 +23,7 @@ const realEstateRoute = findCategoryRoute("emlak")!;
 const partsRoute = findCategoryRoute("yedek-parca")!;
 const homeRoute = findCategoryRoute("ev-yasam")!;
 const tvRoute = findCategoryRoute("tv-ses")!;
+const accessoryRoute = findCategoryRoute("aksesuar")!;
 
 function makeMarketIntelligence(sampleSize = 12) {
   const listings = Array.from({ length: sampleSize }, (_, index) => {
@@ -98,10 +99,11 @@ const topOpportunity: MarketPulseItem = {
 };
 
 describe("category route registry", () => {
-  it("exposes all eight required category slugs", () => {
+  it("exposes all nine required category slugs", () => {
     const slugs = CATEGORY_ROUTES.map((route) => route.slug).sort();
     expect(slugs).toEqual(
       [
+        "aksesuar",
         "arac",
         "bilgisayar",
         "emlak",
@@ -130,6 +132,7 @@ describe("category route registry", () => {
     expect(findCategoryRoute("araba")?.slug).toBe("arac");
     expect(findCategoryRoute("televizyon")?.slug).toBe("tv-ses");
     expect(findCategoryRoute("konut")?.slug).toBe("emlak");
+    expect(findCategoryRoute("telefon-aksesuari")?.slug).toBe("aksesuar");
   });
 
   it("normalizes aliases consistently for URLs", () => {
@@ -189,6 +192,22 @@ describe("matchProductToRoute", () => {
 
   it("does not match tv-ses for unrelated long product names", () => {
     expect(matchProductToRoute("iPhone 13 128 GB", "Telefon", tvRoute)).toBe(false);
+  });
+
+  it("matches accessory products by name keywords", () => {
+    expect(matchProductToRoute("iPhone 13 Kılıf", "Aksesuar", accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("Samsung Şarj Aleti", null, accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("Powerbank 20000mAh", null, accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("Ekran Koruyucu iPhone", null, accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("USB C Kablo", null, accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("Telefon Tutucu Araba", null, accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("Batarya iPhone 11", null, accessoryRoute)).toBe(true);
+    expect(matchProductToRoute("Adaptör Hızlı Şarj", null, accessoryRoute)).toBe(true);
+  });
+
+  it("rejects phone products from accessory route via exclude keywords", () => {
+    expect(matchProductToRoute("iPhone 13 128 GB", "Telefon", accessoryRoute)).toBe(false);
+    expect(matchProductToRoute("Samsung Galaxy S23", "Telefon", accessoryRoute)).toBe(false);
   });
 });
 

@@ -207,7 +207,7 @@ export async function getProductDetail(
   if (!product || !supabase) return null;
   const productBrand = formatBrandDisplayName(extractBrand(product.name));
   const emptyIntelligence = calculateProductIntelligence({ listings: [] });
-  const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], []);
+  const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], [], product.category);
 
   const listingColumns = {
     base: "id, title, price, city, source, url, condition, image_url, created_at, confidence_score",
@@ -321,6 +321,7 @@ export async function getProductDetail(
     product.name,
     listings,
     priceHistory,
+    product.category,
   );
 
   return {
@@ -338,7 +339,7 @@ export async function getProductDetail(
       decisionInsight,
       duplicateSummary,
     }),
-    bestDeals: buildProductBestDeals(listings),
+    bestDeals: buildProductBestDeals(listings, product.category),
     relatedProducts: await getRelatedProducts(supabase, product),
   };
 }
@@ -464,6 +465,7 @@ export function buildProductDecisionInsight(
   productName: string,
   listings: Listing[],
   priceHistory: PriceHistoryRecord[],
+  category?: string | null,
 ): ProductDecisionInsight {
   const prices = listings
     .map((listing) => Number(listing.price))
@@ -557,7 +559,7 @@ export function buildProductDecisionInsight(
   };
 }
 
-export function buildProductBestDeals(listings: Listing[]): ProductBestDeal[] {
+export function buildProductBestDeals(listings: Listing[], category?: string | null): ProductBestDeal[] {
   const pricedListings = listings
     .filter((listing) => Number.isFinite(listing.price) && listing.price > 0)
     .sort((a, b) => a.price - b.price);

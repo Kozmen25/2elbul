@@ -155,6 +155,7 @@ export function buildDuplicateConfidenceInput({
       storageScore: signals.storage,
       ramScore: signals.ram,
       variantScore: signals.variant,
+      categoryScore: signals.categoryScore,
       duplicateScore,
       priceConsistency: signals.price,
       titleSimilarity: signals.titleSimilarity,

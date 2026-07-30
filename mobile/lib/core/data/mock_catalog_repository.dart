@@ -22,6 +22,7 @@ class MockCatalogRepository {
   static const _searchesBoxName = 'mobile_searches';
   static const _compareBoxName = 'mobile_compare';
   static const _alertsBoxName = 'mobile_alerts';
+  static const _notificationsBoxName = 'mobile_notifications';
   static const _cacheBoxName = 'mobile_cache';
   static const _cacheStateBoxName = 'mobile_cache_state';
   static const _sessionKey = 'mobile_session_email';
@@ -40,6 +41,7 @@ class MockCatalogRepository {
   late final Box<dynamic> _searchesBox;
   late final Box<dynamic> _compareBox;
   late final Box<dynamic> _alertsBox;
+  late final Box<dynamic> _notificationsBox;
   late final Box<dynamic> _cacheBox;
   late final Box<dynamic> _cacheStateBox;
 
@@ -58,7 +60,6 @@ class MockCatalogRepository {
 
   final List<ProductRecord> _products = demoProducts;
   final List<ListingRecord> _listings = demoListings;
-  final List<NotificationRecord> _notifications = demoNotifications;
   final Map<String, List<PricePoint>> _priceHistory = demoPriceHistory;
 
   AppPreferences get preferences => _preferences;
@@ -73,6 +74,7 @@ class MockCatalogRepository {
     _searchesBox = await Hive.openBox(_searchesBoxName);
     _compareBox = await Hive.openBox(_compareBoxName);
     _alertsBox = await Hive.openBox(_alertsBoxName);
+    _notificationsBox = await Hive.openBox(_notificationsBoxName);
     _cacheBox = await Hive.openBox(_cacheBoxName);
     _cacheStateBox = await Hive.openBox(_cacheStateBoxName);
 
@@ -96,6 +98,7 @@ class MockCatalogRepository {
     _offlineMode = _cacheStateBox.get('offlineMode') as bool? ?? false;
     final syncedAt = _cacheStateBox.get('lastSyncAt') as String?;
     _lastSyncAt = syncedAt == null ? null : DateTime.tryParse(syncedAt);
+    await _seedNotificationsIfEmpty();
     _emitOfflineMode(_offlineMode);
     _connectivityTimer?.cancel();
     _connectivityTimer = _remoteBaseUrl.isEmpty
@@ -310,7 +313,86 @@ class MockCatalogRepository {
 
   Future<List<NotificationRecord>> loadNotifications() async {
     await _ensureReady();
-    return _notifications;
+    return _readNotifications();
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    await _ensureReady();
+    final notifications = _readNotifications();
+    final updated = notifications
+        .map((item) => item.id == id ? _copyNotification(item, isRead: true) : item)
+        .toList();
+    await _writeNotifications(updated);
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    await _ensureReady();
+    final updated = _readNotifications()
+        .map((item) => _copyNotification(item, isRead: true))
+        .toList();
+    await _writeNotifications(updated);
+  }
+
+  Future<void> dismissNotification(String id) async {
+    await _ensureReady();
+    final updated = _readNotifications().where((item) => item.id != id).toList();
+    await _writeNotifications(updated);
+  }
+
+  Future<void> clearNotifications() async {
+    await _ensureReady();
+    await _notificationsBox.clear();
+  }
+
+  Future<void> _seedNotificationsIfEmpty() async {
+    if (_notificationsBox.isNotEmpty) return;
+    for (final notification in demoNotifications) {
+      await _notificationsBox.put(notification.id, _encodeNotification(notification));
+    }
+  }
+
+  List<NotificationRecord> _readNotifications() {
+    return _notificationsBox.values
+        .whereType<Map>()
+        .map((item) => _decodeNotification(Map<String, dynamic>.from(item)))
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  Future<void> _writeNotifications(List<NotificationRecord> items) async {
+    await _notificationsBox.clear();
+    for (final item in items) {
+      await _notificationsBox.put(item.id, _encodeNotification(item));
+    }
+  }
+
+  Map<String, dynamic> _encodeNotification(NotificationRecord record) => {
+        'id': record.id,
+        'title': record.title,
+        'body': record.body,
+        'timestamp': record.timestamp.toIso8601String(),
+        'kind': record.kind,
+        'isRead': record.isRead,
+      };
+
+  NotificationRecord _decodeNotification(Map<String, dynamic> payload) => NotificationRecord(
+        id: payload['id']?.toString() ?? payload['title']?.toString() ?? '',
+        title: payload['title']?.toString() ?? '',
+        body: payload['body']?.toString() ?? '',
+        timestamp: DateTime.tryParse(payload['timestamp']?.toString() ?? '') ?? DateTime.now(),
+        kind: payload['kind']?.toString() ?? 'notification',
+        isRead: payload['isRead'] as bool? ?? false,
+      );
+
+  NotificationRecord _copyNotification(NotificationRecord record, {bool? isRead}) {
+    return NotificationRecord(
+      id: record.id,
+      title: record.title,
+      body: record.body,
+      timestamp: record.timestamp,
+      kind: record.kind,
+      isRead: isRead ?? record.isRead,
+    );
   }
 
   Future<List<String>> suggestionsFor(String query) async {
@@ -1390,21 +1472,27 @@ final demoSourceSummary = <SourceSummary>[
 
 final demoNotifications = <NotificationRecord>[
   NotificationRecord(
+    id: 'notif-iphone-drop',
     title: 'iPhone 13 fiyat düştü',
     body: 'En iyi ilan 2.000 ₺ geriledi.',
     timestamp: DateTime(2026, 7, 24, 10, 0),
     kind: 'price-drop',
   ),
   NotificationRecord(
+    id: 'notif-macbook-new',
     title: 'Yeni ilan bulundu',
     body: 'MacBook Air M2 için 1 yeni ilan eklendi.',
     timestamp: DateTime(2026, 7, 24, 11, 40),
     kind: 'new-listing',
   ),
   NotificationRecord(
+    id: 'notif-xbox-alert',
     title: 'Alarm tetiklenmeye yakın',
     body: 'Xbox Series S hedef fiyatına yaklaştı.',
     timestamp: DateTime(2026, 7, 24, 13, 5),
+    kind: 'alert',
+  ),
+];
     kind: 'alert',
   ),
 ];
@@ -1421,3 +1509,4 @@ String demoProductSummary(String slug) {
       return 'Bu ürün için fiyatlar, kaynaklar ve ilan yoğunluğu üzerinden karar desteği oluşturuluyor.';
   }
 }
+

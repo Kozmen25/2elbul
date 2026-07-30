@@ -89,6 +89,7 @@ type SearchResultsClientProps = {
   query: string;
   initialListings: Listing[];
   productPriceStats: Record<string, ProductPriceStats>;
+  productCategories: Record<string, string | null>;
   loadError?: string;
   favoriteListingIds: string[];
   isAuthenticated: boolean;
@@ -117,6 +118,7 @@ export function SearchResultsClient({
   query,
   initialListings,
   productPriceStats,
+  productCategories,
   loadError = "",
   favoriteListingIds,
   isAuthenticated,
@@ -1815,7 +1817,7 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
         productName,
         slug,
         url: getAbsoluteUrl(`/product/${slug}`),
-        category: null,
+        category: productListings[0]?.category ?? null,
       },
       listings: marketIntelligenceListings,
       intelligence,

@@ -472,9 +472,9 @@ export function extractProductSignals(
   const category = resolver
     ? resolver.resolveSync(title).categoryLabel
     : detectCategory(normalized, brand);
-  const keyParts = [brand, model, storage, ram && category !== "Telefon" ? ram : null].filter(Boolean);
+  const keyParts = [category, brand, model, storage, ram && category !== "Telefon" ? ram : null].filter(Boolean);
   const normalizedKey = keyParts.length
-    ? keyParts.join("-").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    ? keyParts.join("-").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
     : normalized.replace(/\s+/g, "-");
 
   return {
@@ -580,7 +580,26 @@ function detectColor(tokens: string[]) {
   return tokens.find((token) => colors.includes(token)) ?? null;
 }
 
-function detectCategory(normalized: string, brand: string | null) {
+export function detectCategory(normalized: string, brand: string | null) {
+  // Accessory check FIRST — catches "iphone 15 kilif" before it matches Telefon
+  const accessoryKeywords = [
+    "kilif", "sarj", "kablo", "powerbank", "ekran koruyucu",
+    "adaptr", "tutucu", "kizak", "lens", "batarya", "hub",
+    "mause", "mouse", "klavye", "kulaklik", "saat",
+    "airpods", "şarj aleti", "sarj aleti",
+    "usb", "hdmi", "donusturucu", "aksesuar",
+    "kep", "selfie", "monopod", "tripod", "cephe",
+  ];
+  if (accessoryKeywords.some((kw) => normalized.includes(kw))) {
+    return "Aksesuar";
+  }
+  // Galaxy Buds / Buds+ / Buds2 / Buds Pro
+  if (normalized.includes("buds")) return "Aksesuar";
+  // Accessory brands — purely accessory makers, not phone brands
+  const accessoryBrands = ["omix", "anker", "logitech", "jbl"];
+  if (brand && accessoryBrands.includes(brand)) return "Aksesuar";
+
+  // Device detection follows
   if (
     brand === "apple" &&
     (normalized.includes("iphone") || isBareIphoneModel(normalized))
@@ -606,11 +625,6 @@ function detectCategory(normalized: string, brand: string | null) {
   }
   if (normalized.includes("rtx") || normalized.includes("ekran karti")) {
     return "Ekran Kartı";
-  }
-  // Aksesuar: Omix brand, watches, mice/keyboards, and generic peripherals
-  if (brand === "omix") return "Aksesuar";
-  if (normalized.includes("saat") || normalized.includes("mause") || normalized.includes("mouse") || normalized.includes("klavye") || normalized.includes("kulaklik")) {
-    return "Aksesuar";
   }
   return null;
 }

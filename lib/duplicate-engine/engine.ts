@@ -22,7 +22,8 @@ export function createDuplicateFingerprint(
   model?: string | null,
   storage?: string | null,
   ram?: string | null,
-  variant?: string | null
+  variant?: string | null,
+  category?: string | null
 ): DuplicateFingerprint {
   const normalized = normalizeSearchText(title);
   const tokens = new Set(getTokens(normalized));
@@ -33,6 +34,7 @@ export function createDuplicateFingerprint(
     storage: storage || null,
     ram: ram || null,
     variant: variant || null,
+    category: category || null,
     normalized,
     tokens,
   };

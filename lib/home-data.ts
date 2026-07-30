@@ -3,6 +3,7 @@ import { isMissingStatusColumn } from "@/lib/listing-status";
 import { buildMarketPulse, type MarketPulse } from "@/lib/market-pulse";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
+import { normalizeProductTitle, extractBrand, detectCategory } from "@/lib/normalization/engine";
 
 export type { MarketPulseItem } from "@/lib/market-pulse";
 
@@ -194,9 +195,17 @@ export async function getHomeData(): Promise<HomeData> {
       const price = Number(listing.price);
       if (!product || !Number.isFinite(price) || price <= 0) return null;
 
+      let category = product.category ?? null;
+      if (!category) {
+        const normalized = normalizeProductTitle(product.name);
+        const brand = extractBrand(normalized);
+        category = detectCategory(normalized, brand) ?? null;
+      }
+
       return {
         id: String(listing.id),
         productName: product.name,
+        category,
         title: listing.title,
         price,
         city: listing.city,
@@ -266,6 +275,26 @@ export async function getHomeData(): Promise<HomeData> {
     });
   }
 
+  // Category-aware stats for price opportunities — prevents cross-category contamination
+  // e.g. "iPhone 14 Pro Max Ekran Koruyucu" (aksesuar) priced against phone averages
+  const productCategoryStats = new Map<
+    string,
+    { count: number; total: number; lowest: number }
+  >();
+  for (const listing of publicListings) {
+    const key = `${listing.productName}||${listing.category ?? ""}`;
+    const current = productCategoryStats.get(key) ?? {
+      count: 0,
+      total: 0,
+      lowest: listing.price,
+    };
+    productCategoryStats.set(key, {
+      count: current.count + 1,
+      total: current.total + listing.price,
+      lowest: Math.min(current.lowest, listing.price),
+    });
+  }
+
   const popularListedProducts = [...listedProductStats.entries()]
     .map(([productName, stats]) => ({
       productName,
@@ -293,7 +322,8 @@ export async function getHomeData(): Promise<HomeData> {
   ).slice(0, 8);
   const analyzedPriceOpportunities = publicListings
     .map((listing) => {
-      const stats = listedProductStats.get(listing.productName);
+      const key = `${listing.productName}||${listing.category ?? ""}`;
+      const stats = productCategoryStats.get(key);
       if (!stats || stats.count < 2) return null;
 
       const averagePrice = stats.total / stats.count;
@@ -328,7 +358,8 @@ export async function getHomeData(): Promise<HomeData> {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     .map((listing) => {
-      const stats = listedProductStats.get(listing.productName);
+      const key = `${listing.productName}||${listing.category ?? ""}`;
+      const stats = productCategoryStats.get(key);
       const averagePrice = stats ? stats.total / stats.count : listing.price;
       return {
         ...listing,
@@ -415,11 +446,13 @@ export async function getHomeData(): Promise<HomeData> {
         id: product.id,
         name: String(product.name),
       })),
-      listings: publicListings.map((listing) => ({
-        productName: listing.productName,
-        price: listing.price,
-        createdAt: listing.createdAt,
-      })),
+      listings: publicListings
+        .filter((listing) => listing.category !== "Aksesuar")
+        .map((listing) => ({
+          productName: listing.productName,
+          price: listing.price,
+          createdAt: listing.createdAt,
+        })),
       searches: marketPulseSearches,
       limit: 5,
     }),

@@ -9,6 +9,7 @@ export type SourceEngineRunOptions = {
   sourceSlug?: string;
   limit?: number;
   includeUnsupported?: boolean;
+  category?: string;
 };
 
 export type SourceEngineSource = SourceRunRecord & {

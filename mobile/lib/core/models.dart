@@ -334,16 +334,20 @@ class ListingDetailData {
 
 class NotificationRecord {
   const NotificationRecord({
+    required this.id,
     required this.title,
     required this.body,
     required this.timestamp,
     required this.kind,
+    this.isRead = false,
   });
 
+  final String id;
   final String title;
   final String body;
   final DateTime timestamp;
   final String kind;
+  final bool isRead;
 }
 
 String formatMoney(int value) {

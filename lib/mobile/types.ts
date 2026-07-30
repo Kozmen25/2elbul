@@ -86,6 +86,7 @@ export type MobileSearchProductHit = {
   id: string;
   name: string;
   slug: string | null;
+  category: string | null;
   listingCount: number;
   minPrice: number;
   averagePrice: number;
@@ -104,6 +105,7 @@ export type MobileSearchListingHit = {
   productId: string;
   productName: string;
   productSlug: string | null;
+  category: string | null;
   score: number;
 };
 

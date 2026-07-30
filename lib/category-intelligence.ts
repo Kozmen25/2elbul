@@ -397,6 +397,52 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
     ],
     excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "konsol", "tv", "arac", "emlak"],
   },
+  {
+    slug: "aksesuar",
+    label: "Telefon Aksesuarı",
+    shortDescription: "Telefon aksesuarları ikinci el piyasa analizi",
+    longDescription:
+      "Kılıf, şarj aleti, powerbank, ekran koruyucu, kablo, batarya, tutucu, adaptör ve diğer telefon aksesuarları için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istihbaratı.",
+    matchKeywords: [
+      "aksesuar",
+      "kılıf",
+      "kilif",
+      "şarj aleti",
+      "sarj aleti",
+      "şarj cihazı",
+      "sarj cihazi",
+      "powerbank",
+      "power bank",
+      "ekran koruyucu",
+      "ekran koruma",
+      "kablo",
+      "data kablosu",
+      "tutucu",
+      "telefon tutucu",
+      "batarya",
+      "yedek pil",
+      "adaptör",
+      "adapter",
+      "donusturucu",
+      "dönüştürücü",
+      "lens kiti",
+      "selfie çubuğu",
+      "selfie cubugu",
+      "monopod",
+    ],
+    excludeKeywords: [
+      "laptop",
+      "bilgisayar",
+      "tv",
+      "televizyon",
+      "konsol",
+      "playstation",
+      "arac",
+      "otomobil",
+      "emlak",
+      "daire",
+    ],
+  },
 ];
 
 const CATEGORY_CATALOG_PAGE_SIZE = 1000;
@@ -423,6 +469,7 @@ const CATEGORY_ALIASES: Record<string, string> = {
   "araba": "arac",
   "konut": "emlak",
   "daire": "emlak",
+  "telefon-aksesuari": "aksesuar",
 };
 
 export function findCategoryRoute(slug: string): CategoryRoute | null {

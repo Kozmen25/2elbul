@@ -17,7 +17,8 @@ export type ConfidenceSignalName =
   | "priceConsistency"
   | "titleSimilarity"
   | "sourceCount"
-  | "sourceReliability";
+  | "sourceReliability"
+  | "categoryScore";
 
 export type ConfidenceSignalScores = Partial<Record<ConfidenceSignalName, number | null>>;
 
@@ -64,6 +65,7 @@ export type DuplicateScoreLike = {
   price: number;
   titleSimilarity: number;
   sourceDiversity: number;
+  categoryScore: number;
 };
 
 export type ProductSignalsLike = {

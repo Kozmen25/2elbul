@@ -11,6 +11,7 @@ export interface DuplicateScore {
   price: number;
   titleSimilarity: number;
   sourceDiversity: number;
+  categoryScore: number;
 }
 
 export interface DuplicateResult extends ConfidenceMetadata {
@@ -26,6 +27,7 @@ export interface DuplicateFingerprint {
   storage: string | null;
   ram: string | null;
   variant: string | null;
+  category: string | null;
   normalized: string;
   tokens: Set<string>;
 }
@@ -39,6 +41,7 @@ export interface ComparisonInput {
   condition?: string | null;
   price?: number | null;
   sourceId?: number | null;
+  category?: string | null;
 }
 
 export interface DuplicateMatch extends ConfidenceMetadata {

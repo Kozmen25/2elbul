@@ -85,6 +85,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   let loadError = "";
   let favoriteListingIds: string[] = [];
   let searchIntentLabel: string | null = null;
+  let productCategory: Map<string, string | null> = new Map();
 
   const serverSupabase = await createSupabaseServerClient();
   const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
@@ -103,11 +104,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       Promise.all(
         searchTerms.map((term) => {
           const cacheKey = cacheKeyFrom({ type: "product-search", term: term.term });
-          const cached = cacheGet<{ id: string | number; name: string }[]>(cacheKey);
+          const cached = cacheGet<{ id: string | number; name: string; category: string | null }[]>(cacheKey);
           if (cached) return { data: cached, error: null };
           return supabase
             .from("products")
-            .select("id, name")
+            .select("id, name, category")
             .ilike("name", `%${term.term}%`)
             .then((result) => {
               if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
@@ -149,12 +150,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     if (productSearchError || titleSearchError) {
       loadError = "İlanlar aranırken bir sorun oluştu. Lütfen tekrar deneyin.";
     } else {
-      const matchingProductsById = new Map<string, { id: string | number; name: string }>();
+      const matchingProductsById = new Map<string, { id: string | number; name: string; category: string | null }>();
       for (const result of matchingProductsResults) {
         for (const product of result.data ?? []) {
           matchingProductsById.set(String(product.id), {
             id: product.id,
             name: String(product.name),
+            category: 'category' in product ? String(product.category) : null,
           });
         }
       }
@@ -198,11 +200,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         const productsResult = productIds.length
           ? await (async () => {
               const cacheKey = cacheKeyFrom({ type: "product-names", ids: productIds });
-              const cached = cacheGet<{ id: string | number; name: string }[]>(cacheKey);
+              const cached = cacheGet<{ id: string | number; name: string; category: string | null }[]>(cacheKey);
               if (cached) return { data: cached, error: null };
               const result = await supabase
                 .from("products")
-                .select("id, name")
+                .select("id, name, category")
                 .in("id", productIds);
               if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
               return result;
@@ -226,6 +228,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               ]),
           );
 
+          productCategory = new Map(
+            (productsResult.data ?? [])
+              .filter((product) => !isPublicDemoProductName(String(product.name)))
+              .map((product) => [
+                String(product.id),
+                'category' in product ? String(product.category) : null,
+              ]),
+          );
+
           listings = rows
             .map((row) => ({
               id: String(row.id),
@@ -233,6 +244,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               title: String(row.title),
               productName:
                 productNames.get(String(row.product_id)) ?? "Diğer",
+              category:
+                productCategory.get(String(row.product_id)) ?? null,
               price: Number(row.price),
               city: String(row.city),
               source: row.source,
@@ -310,6 +323,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         query={query}
         initialListings={listings}
         productPriceStats={productPriceStats}
+        productCategories={Object.fromEntries(productCategory)}
         loadError={loadError}
         favoriteListingIds={favoriteListingIds}
         isAuthenticated={isAuthenticated}

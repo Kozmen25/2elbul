@@ -47,6 +47,7 @@ export type Listing = {
   productId?: string;
   title: string;
   productName: string;
+  category?: string | null;
   price: number;
   city: string;
   source: ListingSource;

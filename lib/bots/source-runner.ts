@@ -13,6 +13,8 @@ import {
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
 import type { BotAdapterListing } from "@/lib/bots/types";
 import { RecoveryMetricsService } from "@/lib/recovery";
+import { EASYCEP_ACCESSORY_CATEGORY_URL } from "@/lib/bots/adapters/easycep";
+import { GETMOBIL_ACCESSORY_CATEGORY_URL } from "@/lib/bots/adapters/getmobil";
 
 export type SourceRunRecord = {
   id: number;
@@ -49,6 +51,7 @@ type RunSourceOptions = {
   maxLimit?: number;
   forceStatus?: "pending" | "published" | "active";
   skipInactiveMarking?: boolean;
+  category?: string;
 };
 
 export function isSupportedScrapeSource(slug: string) {
@@ -112,12 +115,13 @@ export async function runSourceScrapeBot(
   let durationMs = 0;
 
   try {
+    const scrapeUrl = resolveScrapeUrl(source, options.category);
     const adapter = getStandardSourceAdapter({
       sourceId: source.id,
       sourceName: source.name,
       sourceSlug: source.slug,
       apiUrl: null,
-      scrapeUrl: source.scrape_url ?? null,
+      scrapeUrl,
       cronEnabled: true,
       cronSchedule: "",
       productLimit: limit,
@@ -375,4 +379,18 @@ function isMissingColumn(error: unknown, columns: string[]) {
     code === "PGRST204" ||
     columns.some((column) => text.includes(column))
   );
+}
+
+function resolveScrapeUrl(source: SourceRunRecord, category?: string): string | null {
+  if (category === "Aksesuar") {
+    switch (source.slug) {
+      case "easycep":
+        return EASYCEP_ACCESSORY_CATEGORY_URL;
+      case "getmobil":
+        return GETMOBIL_ACCESSORY_CATEGORY_URL;
+      default:
+        return source.scrape_url ?? null;
+    }
+  }
+  return source.scrape_url ?? null;
 }

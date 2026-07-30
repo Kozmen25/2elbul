@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       searchTerms.map((term) =>
         supabase
           .from("products")
-          .select("id, name")
+          .select("id, name, category")
           .ilike("name", `%${term.term}%`),
       ),
     ),
@@ -83,12 +83,13 @@ export async function GET(request: NextRequest) {
     return mobileError("İlanlar aranırken bir sorun oluştu.", 500);
   }
 
-  const matchingProductsById = new Map<string, { id: string | number; name: string }>();
+  const matchingProductsById = new Map<string, { id: string | number; name: string; category: string | null }>();
   for (const result of matchingProductsResults) {
     for (const product of result.data ?? []) {
       matchingProductsById.set(String(product.id), {
         id: product.id,
         name: String(product.name),
+        category: 'category' in product ? String(product.category) : null,
       });
     }
   }
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
   const rows = [...rowsById.values()].filter((row) => !isPublicDemoListing(row));
   const productIds = [...new Set(rows.map((row) => String(row.product_id)))];
   const productsResult = productIds.length
-    ? await supabase.from("products").select("id, name, slug").in("id", productIds)
+    ? await supabase.from("products").select("id, name, slug, category").in("id", productIds)
     : { data: [], error: null };
 
   if (productsResult.error) {
@@ -132,6 +133,7 @@ export async function GET(request: NextRequest) {
         {
           name: String(p.name),
           slug: p.slug ? String(p.slug) : createProductSlug(String(p.name)),
+          category: 'category' in p ? String(p.category) : null,
         },
       ]),
   );
@@ -153,6 +155,7 @@ export async function GET(request: NextRequest) {
         productId: String(row.product_id),
         productName: product.name,
         productSlug: product.slug as string | null,
+        category: product.category ?? null,
         score: scoreSearchResult(intent, {
           title: String(row.title),
           productName: product.name,
@@ -203,6 +206,7 @@ export async function GET(request: NextRequest) {
       id: listing.productId,
       name: listing.productName,
       slug: listing.productSlug,
+      category: listing.category ?? null,
       listingCount: productListings.length,
       minPrice: Math.min(...prices),
       averagePrice: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),

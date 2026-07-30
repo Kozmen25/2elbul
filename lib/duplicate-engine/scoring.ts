@@ -213,6 +213,15 @@ export function calculateSourceDiversityScore(
   return sourceId1 === sourceId2 ? 0 : 50;
 }
 
+export function calculateCategoryScore(
+  category1: string | null | undefined,
+  category2: string | null | undefined
+): number {
+  if (!category1 && !category2) return 100;
+  if (!category1 || !category2) return 30;
+  return category1.toLowerCase() === category2.toLowerCase() ? 100 : 0;
+}
+
 export function calculateDuplicateScore(
   input1: ComparisonInput,
   input2: ComparisonInput,
@@ -224,27 +233,29 @@ export function calculateDuplicateScore(
     brand: calculateBrandScore(input1.brand, input2.brand),
     model: calculateModelScore(input1.model, input2.model),
     storage: calculateStorageScore(input1.storage, input2.storage),
-    ram: calculateRamScore(input1.ram, input2.ram, input1.brand),
+    ram: calculateRamScore(input1.ram, input2.ram, input1.category),
     variant: calculateVariantScore(input1.model, input2.model),
     condition: calculateConditionScore(input1.condition, input2.condition),
     price: calculatePriceScore(input1.price, input2.price),
     titleSimilarity: calculateTitleSimilarityScore(input1.title, input2.title),
     sourceDiversity: calculateSourceDiversityScore(input1.sourceId, input2.sourceId),
+    categoryScore: calculateCategoryScore(input1.category, input2.category),
   };
 }
 
 export function aggregateScores(scores: DuplicateScore): number {
   const weights = {
-    normalization: 0.35,
-    brand: 0.18,
-    model: 0.18,
-    storage: 0.12,
-    ram: 0.06,
-    variant: 0.04,
+    normalization: 0.32,
+    brand: 0.16,
+    model: 0.16,
+    storage: 0.11,
+    ram: 0.05,
+    variant: 0.03,
     condition: 0.03,
     price: 0.02,
     titleSimilarity: 0.01,
     sourceDiversity: 0.01,
+    categoryScore: 0.10,
   };
 
   const weighted =
@@ -257,7 +268,8 @@ export function aggregateScores(scores: DuplicateScore): number {
     scores.condition * weights.condition +
     scores.price * weights.price +
     scores.titleSimilarity * weights.titleSimilarity +
-    scores.sourceDiversity * weights.sourceDiversity;
+    scores.sourceDiversity * weights.sourceDiversity +
+    scores.categoryScore * weights.categoryScore;
 
   return Math.round(weighted);
 }

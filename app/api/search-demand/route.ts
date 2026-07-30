@@ -13,6 +13,7 @@ const RATE_LIMIT_AUTH = { limit: 100, windowMs: 60 * 60 * 1000 };
 type SearchDemandBody = {
   query?: unknown;
   resultCount?: unknown;
+  category?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
 
   const query = typeof body.query === "string" ? body.query.trim() : "";
   const resultCount = Number(body.resultCount ?? 0);
+  const category = typeof body.category === "string" ? body.category.trim() : null;
 
   const ip = getClientIp(request);
   const serverSupabase = await createSupabaseServerClient();
@@ -122,6 +124,7 @@ export async function POST(request: Request) {
         status: "queued",
         error_message: null,
         ...(userId ? { user_id: userId } : {}),
+        ...(category ? { category } : {}),
       })
       .eq("id", demandId);
     if (error) {
@@ -140,6 +143,7 @@ export async function POST(request: Request) {
         result_count: Math.trunc(resultCount),
         user_id: userId,
         status: "queued",
+        ...(category ? { category } : {}),
       })
       .select("id")
       .single();
@@ -194,6 +198,7 @@ export async function POST(request: Request) {
         source_id: sourceId,
         status: "pending",
         priority: resultCount === 0 ? 3 : 5,
+        ...(category ? { category } : {}),
       }));
 
     if (queueRows.length) {

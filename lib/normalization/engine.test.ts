@@ -484,7 +484,7 @@ describe('Normalization Engine', () => {
 
     it('should produce clean hyphen-separated key', () => {
       const result = extractProductSignals('Samsung Galaxy S24 Ultra 256GB 12GB RAM');
-      expect(result.normalizedKey).toBe('samsung-galaxy-s24-ultra-256gb');
+      expect(result.normalizedKey).toBe('telefon-samsung-galaxy-s24-ultra-256gb');
     });
   });
 

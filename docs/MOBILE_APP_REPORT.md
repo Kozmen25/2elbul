@@ -37,6 +37,8 @@
 - `flutter test --no-pub` - timed out in this environment
 - `flutter build apk --debug --no-pub` - timed out in this environment
 - `flutter run -d chrome` - Chrome launched in this environment, but the command wrapper timed out before the tool could return cleanly
+- Local commit recorded: `d7e162f`
+- GitHub push could not be completed because outbound access to `github.com` was refused in this environment.
 - Validation status: ENVIRONMENT BLOCKED
 - Release readiness: 84%
 - Readiness moved up because the app now keeps home, search, product detail, and listing detail usable offline from cache, prewarms images, and refreshes stale data automatically when connectivity returns.
@@ -45,16 +47,16 @@
 
 ## Top Blockers
 
-1. Flutter validation still times out in this environment.
-2. Push notification plumbing and device token registration.
-3. Google Play release hardening and signing checks for a real production build.
-4. App Links / deep-link hardening for external entry points.
-5. Release-grade iOS readiness work.
-6. Tablet and foldable layout refinement.
-7. Notification center actions and richer empty/error states.
-8. Price alert delivery flow beyond local persistence.
-9. Richer compare metrics and multi-listing decision support.
-10. Further polish for search filtering and comparison edge cases.
+1. GitHub push / synchronization is blocked by outbound connectivity limits.
+2. Flutter validation still times out in this environment.
+3. Push notification plumbing and device token registration.
+4. Google Play release hardening and signing checks for a real production build.
+5. App Links / deep-link hardening for external entry points.
+6. Release-grade iOS readiness work.
+7. Tablet and foldable layout refinement.
+8. Notification center actions and richer empty/error states.
+9. Price alert delivery flow beyond local persistence.
+10. Richer compare metrics and multi-listing decision support.
 
 ## Next Epic
 

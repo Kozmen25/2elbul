@@ -10,6 +10,7 @@ export function createComparisonInput(
     condition?: string | null;
     price?: number | null;
     sourceId?: number | null;
+    category?: string | null;
   }
 ): ComparisonInput {
   return {
@@ -21,6 +22,7 @@ export function createComparisonInput(
     condition: options?.condition || null,
     price: options?.price || null,
     sourceId: options?.sourceId || null,
+    category: options?.category || null,
   };
 }
 

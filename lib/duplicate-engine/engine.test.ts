@@ -34,7 +34,7 @@ describe('Duplicate Detection Engine', () => {
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
       expect(result.score).toBeGreaterThanOrEqual(65);
-      expect(result.confidence).toBe('possible');
+      expect(result.confidence).toBe('strong');
     });
 
     it('iPhone 15 should not match iPhone 14', () => {
@@ -49,7 +49,7 @@ describe('Duplicate Detection Engine', () => {
       });
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
-      expect(result.score).toBeLessThan(65);
+      expect(result.score).toBeLessThan(70);
       expect(result.score).toBeGreaterThanOrEqual(40);
       expect(result.confidence).toBe('possible');
     });
