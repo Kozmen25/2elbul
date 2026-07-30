@@ -589,6 +589,8 @@ export function detectCategory(normalized: string, brand: string | null) {
     "airpods", "şarj aleti", "sarj aleti",
     "usb", "hdmi", "donusturucu", "aksesuar",
     "kep", "selfie", "monopod", "tripod", "cephe",
+    "cam koruyucu", "koruyucu cam", "cam film", "ekran filmi",
+    "temperli cam", "koruyucu film", "ekran koruma",
   ];
   if (accessoryKeywords.some((kw) => normalized.includes(kw))) {
     return "Aksesuar";
