@@ -71,6 +71,7 @@ type ProductRow = {
   id: string | number;
   name: string;
   category?: string | null;
+  attributes?: unknown;
 };
 
 type ListingRow = {
@@ -120,7 +121,7 @@ export async function getHomeData(): Promise<HomeData> {
     searchDemandsResult,
   ] =
     await Promise.all([
-      supabase.from("products").select("id, name"),
+      supabase.from("products").select("id, name, attributes"),
       getPublishedHomeListings(supabase),
       supabase.from("products").select("id, category"),
       supabase
@@ -203,13 +204,13 @@ export async function getHomeData(): Promise<HomeData> {
         category = detectCategory(normalized, brand) ?? null;
       }
 
-      // Listing-title-level override: a product can have both phone and accessory listings
-      // e.g. "iPhone 14 Pro Max" product has screen protector listings under it
-      // The listing title ["Nettech ... Ekran Koruyucu"] reveals the true category
-      const titleNormalized = normalizeProductTitle(listing.title);
-      const titleBrand = extractBrand(titleNormalized);
-      const titleCategory = detectCategory(titleNormalized, titleBrand);
-      if (titleCategory === "Aksesuar") {
+      // Product Understanding Engine override: if the engine determined this
+      // product is an accessory, override the category. This catches cases
+      // like "iPhone 14 Pro Max Ekran Koruyucu" where the product IS an accessory
+      // even if the product name matches a phone pattern.
+      const attrs = product.attributes as Record<string, unknown> | null;
+      const pu = attrs?.productType as { value?: string; confidence?: number } | null;
+      if (pu?.value === "accessory") {
         category = "Aksesuar";
       }
 

@@ -5,20 +5,21 @@ import type {
 } from "./types";
 
 export const CONFIDENCE_SIGNAL_WEIGHTS: Record<ConfidenceSignalName, number> = {
-  normalizationScore: 0.09,
-  taxonomyScore: 0.07,
-  brandScore: 0.09,
-  modelScore: 0.13,
-  storageScore: 0.09,
-  ramScore: 0.07,
+  normalizationScore: 0.08,
+  taxonomyScore: 0.06,
+  brandScore: 0.08,
+  modelScore: 0.12,
+  storageScore: 0.08,
+  ramScore: 0.06,
   variantScore: 0.04,
   duplicateScore: 0.13,
   priceConsistency: 0.05,
   titleSimilarity: 0.04,
   sourceCount: 0.02,
   sourceReliability: 0.04,
-  categoryScore: 0.12,
-  conditionSourceConfidence: 0.05,
+  categoryScore: 0.11,
+  conditionSourceConfidence: 0.04,
+  productUnderstandingScore: 0.05,
 };
 
 export const CONFIDENCE_LEVEL_THRESHOLDS = {

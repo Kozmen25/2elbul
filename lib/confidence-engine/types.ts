@@ -19,7 +19,8 @@ export type ConfidenceSignalName =
   | "sourceCount"
   | "sourceReliability"
   | "categoryScore"
-  | "conditionSourceConfidence";
+  | "conditionSourceConfidence"
+  | "productUnderstandingScore";
 
 export type ConfidenceSignalScores = Partial<Record<ConfidenceSignalName, number | null>>;
 

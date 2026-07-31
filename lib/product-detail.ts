@@ -32,6 +32,7 @@ import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseClient } from "@/lib/supabase";
 import { formatCurrencyTRY } from "@/lib/formatters";
 import { extractBrand, formatBrandDisplayName } from "@/lib/normalization";
+import type { ProductUnderstandingResult } from "@/lib/product-understanding";
 import {
   groupListingDuplicates,
   summarizeDuplicateGroups,
@@ -43,10 +44,12 @@ export type ProductRecord = {
   name: string;
   slug: string;
   category: string | null;
+  attributes?: unknown;
 };
 
 export type ProductDetailData = {
   product: ProductRecord;
+  productUnderstanding: ProductUnderstandingResult | null;
   listings: Listing[];
   duplicateSummary: DuplicateBatchSummary;
   priceHistory: PriceHistoryRecord[];
@@ -105,6 +108,7 @@ type ProductRow = {
   name: string;
   slug?: string | null;
   category?: string | null;
+  attributes?: unknown;
 };
 
 type ListingRow = {
@@ -150,7 +154,7 @@ export const getProductBySlug = cache(
     const normalizedSlug = createProductSlug(slug);
     const slugResult = await supabase
       .from("products")
-      .select("id, name, slug, category")
+      .select("id, name, slug, category, attributes")
       .eq("slug", normalizedSlug)
       .maybeSingle();
 
@@ -165,14 +169,15 @@ export const getProductBySlug = cache(
           "category" in slugResult.data && slugResult.data.category
             ? String(slugResult.data.category)
             : null,
+        attributes: slugResult.data.attributes ?? null,
       };
     }
 
     let fallbackResult = await supabase
       .from("products")
-      .select("id, name, category");
+      .select("id, name, category, attributes");
     if (fallbackResult.error && isMissingProductCategoryColumn(fallbackResult.error)) {
-      fallbackResult = await supabase.from("products").select("id, name");
+      fallbackResult = await supabase.from("products").select("id, name, attributes");
     }
 
     if (fallbackResult.error) {
@@ -193,6 +198,7 @@ export const getProductBySlug = cache(
             "category" in product && product.category
               ? String(product.category)
               : null,
+          attributes: product.attributes ?? null,
         }
       : null;
   },
@@ -264,6 +270,9 @@ export async function getProductDetail(
     );
     return {
       product,
+      productUnderstanding: product.attributes
+        ? (product.attributes as ProductUnderstandingResult)
+        : null,
       listings: [],
       duplicateSummary,
       priceHistory: [],
@@ -326,6 +335,9 @@ export async function getProductDetail(
 
   return {
     product,
+    productUnderstanding: product.attributes
+      ? (product.attributes as ProductUnderstandingResult)
+      : null,
     listings,
     duplicateSummary,
     priceHistory,
