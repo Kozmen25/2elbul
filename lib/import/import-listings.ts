@@ -13,6 +13,7 @@ import {
 } from "@/lib/product-matcher";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGlobalContext } from "@/lib/taxonomy/context";
+import { analyzeProduct } from "@/lib/product-understanding";
 
 export async function importListings(
   source: ImportSource,
@@ -133,6 +134,32 @@ export async function importListings(
 
       if (listingError) throw new Error(listingError.message);
       result.imported += 1;
+
+      // Analyze product type (non-fatal — engine failure doesn't roll back listing)
+      try {
+        const understanding = analyzeProduct({
+          title: listing.title,
+          price: listing.price,
+          sourceId: listing.sourceId ? String(listing.sourceId) : undefined,
+          marketplaceCategory: listing.category ?? undefined,
+        });
+
+        // Store product understanding result in products.attributes JSONB
+        const { error: attrError } = await supabase
+          .from("products")
+          .update({ attributes: understanding })
+          .eq("id", matchedProduct.id);
+
+        if (attrError) {
+          console.warn(
+            `[Import] Failed to update attributes for product ${matchedProduct.id}: ${attrError.message}`,
+          );
+        }
+      } catch (engineError) {
+        console.warn(
+          `[Import] Product Understanding Engine failed for "${listing.title}": ${engineError instanceof Error ? engineError.message : "Unknown error"}`,
+        );
+      }
     } catch (error) {
       result.failed += 1;
       result.errors.push({
