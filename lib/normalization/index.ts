@@ -18,4 +18,5 @@ export {
   extractProductSignals,
   generateProductKey,
   inferCondition,
+  detectModel,
 } from './engine';

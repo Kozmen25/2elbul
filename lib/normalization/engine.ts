@@ -501,7 +501,7 @@ const CONDITION_WORDS = new Set([
   "refurbished",
 ]);
 
-function detectModel(
+export function detectModel(
   normalized: string,
   tokens: string[],
   brand: string | null,
