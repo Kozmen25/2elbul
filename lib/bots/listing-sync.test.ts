@@ -208,7 +208,7 @@ describe("listing-sync duplicate detection", () => {
         source: l.source,
         condition: l.condition,
       })),
-      70,
+      65,
     );
 
     expect(result.groups).toBeDefined();

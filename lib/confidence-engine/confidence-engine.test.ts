@@ -55,7 +55,7 @@ describe("confidence engine", () => {
           normalizationScore: 100,
           modelScore: 0,
         }),
-      ).toBe(41);
+      ).toBe(40);
     });
 
     it("ignores invalid signals", () => {
@@ -213,6 +213,7 @@ describe("confidence engine", () => {
           titleSimilarity: 100,
           sourceDiversity: 50,
           categoryScore: 100,
+          productTypeScore: 100,
         },
         sourceName: "EasyCep",
         categoryLabel: "Telefon",
@@ -409,7 +410,7 @@ describe("confidence engine", () => {
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
 
-      expect(result.score).toBeGreaterThanOrEqual(95);
+      expect(result.score).toBeGreaterThanOrEqual(93);
       expect(result.confidenceScore).toBeGreaterThanOrEqual(85);
       expect(result.confidenceLevel).toBe("high");
       expect(result.confidenceReasons.length).toBeGreaterThan(0);

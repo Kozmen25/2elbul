@@ -222,6 +222,15 @@ export function calculateCategoryScore(
   return category1.toLowerCase() === category2.toLowerCase() ? 100 : 0;
 }
 
+export function calculateProductTypeScore(
+  type1: string | null | undefined,
+  type2: string | null | undefined
+): number {
+  if (!type1 && !type2) return 50;
+  if (!type1 || !type2) return 50;
+  return type1.toLowerCase() === type2.toLowerCase() ? 100 : 0;
+}
+
 export function calculateDuplicateScore(
   input1: ComparisonInput,
   input2: ComparisonInput,
@@ -240,22 +249,24 @@ export function calculateDuplicateScore(
     titleSimilarity: calculateTitleSimilarityScore(input1.title, input2.title),
     sourceDiversity: calculateSourceDiversityScore(input1.sourceId, input2.sourceId),
     categoryScore: calculateCategoryScore(input1.category, input2.category),
+    productTypeScore: calculateProductTypeScore(input1.productType, input2.productType),
   };
 }
 
 export function aggregateScores(scores: DuplicateScore): number {
   const weights = {
-    normalization: 0.27,
-    brand: 0.16,
-    model: 0.16,
-    storage: 0.11,
-    ram: 0.05,
+    normalization: 0.24,
+    brand: 0.14,
+    model: 0.14,
+    storage: 0.10,
+    ram: 0.04,
     variant: 0.02,
-    condition: 0.10,
+    condition: 0.09,
     price: 0.02,
     titleSimilarity: 0.01,
     sourceDiversity: 0.01,
-    categoryScore: 0.10,
+    categoryScore: 0.09,
+    productTypeScore: 0.10,
   };
 
   const weighted =
@@ -269,7 +280,8 @@ export function aggregateScores(scores: DuplicateScore): number {
     scores.price * weights.price +
     scores.titleSimilarity * weights.titleSimilarity +
     scores.sourceDiversity * weights.sourceDiversity +
-    scores.categoryScore * weights.categoryScore;
+    scores.categoryScore * weights.categoryScore +
+    scores.productTypeScore * weights.productTypeScore;
 
   return Math.round(weighted);
 }

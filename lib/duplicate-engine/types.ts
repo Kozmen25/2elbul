@@ -12,6 +12,7 @@ export interface DuplicateScore {
   titleSimilarity: number;
   sourceDiversity: number;
   categoryScore: number;
+  productTypeScore: number;
 }
 
 export interface DuplicateResult extends ConfidenceMetadata {
@@ -42,6 +43,7 @@ export interface ComparisonInput {
   price?: number | null;
   sourceId?: number | null;
   category?: string | null;
+  productType?: string | null;
 }
 
 export interface DuplicateMatch extends ConfidenceMetadata {

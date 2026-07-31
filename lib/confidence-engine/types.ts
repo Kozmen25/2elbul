@@ -68,6 +68,7 @@ export type DuplicateScoreLike = {
   titleSimilarity: number;
   sourceDiversity: number;
   categoryScore: number;
+  productTypeScore: number;
 };
 
 export type ProductSignalsLike = {

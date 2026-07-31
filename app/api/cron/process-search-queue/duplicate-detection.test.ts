@@ -27,7 +27,7 @@ describe("process-search-queue duplicate detection", () => {
       },
     ];
 
-    const result = groupListingDuplicates(queueListings, 70);
+    const result = groupListingDuplicates(queueListings, 65);
 
     expect(result.groups).toBeDefined();
     expect(result.count).toBeGreaterThan(0);

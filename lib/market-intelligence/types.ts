@@ -14,6 +14,7 @@ export type MarketIntelligenceScope = {
   category: string | null;
   brand?: string | null;
   city?: string | null;
+  productType?: string | null;
 };
 
 export type MarketIntelligenceListing = Pick<
