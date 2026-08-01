@@ -1,5 +1,5 @@
 import type { ListingCondition, ListingSource } from "@/lib/listings";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
 import { buildMarketPulse, type MarketPulse } from "@/lib/market-pulse";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
@@ -121,7 +121,7 @@ export async function getHomeData(): Promise<HomeData> {
     searchDemandsResult,
   ] =
     await Promise.all([
-      supabase.from("products").select("id, name, attributes"),
+      getHomeProducts(supabase),
       getPublishedHomeListings(supabase),
       supabase.from("products").select("id, category"),
       supabase
@@ -474,6 +474,21 @@ export async function getHomeData(): Promise<HomeData> {
     }),
     error: "",
   };
+}
+
+async function getHomeProducts(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+) {
+  const attrsResult = await supabase
+    .from("products")
+    .select("id, name, attributes");
+
+  if (!attrsResult.error) return attrsResult;
+  if (!isMissingAttributesColumn(attrsResult.error)) return attrsResult;
+
+  return supabase
+    .from("products")
+    .select("id, name");
 }
 
 async function getPublishedHomeListings(

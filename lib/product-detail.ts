@@ -179,6 +179,9 @@ export const getProductBySlug = cache(
     if (fallbackResult.error && isMissingProductCategoryColumn(fallbackResult.error)) {
       fallbackResult = await supabase.from("products").select("id, name, attributes");
     }
+    if (fallbackResult.error && isMissingAttributesColumn(fallbackResult.error)) {
+      fallbackResult = await supabase.from("products").select("id, name, slug");
+    }
 
     if (fallbackResult.error) {
       console.error("Supabase product slug fallback failed:", fallbackResult.error);
@@ -911,6 +914,17 @@ function isMissingProductCategoryColumn(error: unknown) {
     record.code === "42703" ||
     record.code === "PGRST204" ||
     text.includes("category")
+  );
+}
+
+function isMissingAttributesColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: string; message?: string; details?: string };
+  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
+  return (
+    record.code === "42703" ||
+    record.code === "PGRST204" ||
+    text.includes("attributes")
   );
 }
 
