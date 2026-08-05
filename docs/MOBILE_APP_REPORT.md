@@ -20,6 +20,8 @@
 - Added offline status propagation through Riverpod plus offline banners on shell and detail routes.
 - Added image prefetching and cache warming for home, search, product, listing, and compare surfaces.
 - Wired pull-to-refresh to explicit repository refresh methods so refreshes now invalidate cached data instead of only rebuilding UI state.
+- Upgraded the notification center with local read/dismiss actions, bulk clear, bulk mark-read, and an unread badge on the home entry point.
+- Added a local price-alert inbox in settings with view, delete, and clear-all controls.
 
 ## Architecture
 
@@ -40,8 +42,8 @@
 - Local commit recorded: `d7e162f`
 - GitHub push could not be completed because outbound access to `github.com` was refused in this environment.
 - Validation status: ENVIRONMENT BLOCKED
-- Release readiness: 84%
-- Readiness moved up because the app now keeps home, search, product detail, and listing detail usable offline from cache, prewarms images, and refreshes stale data automatically when connectivity returns.
+- Release readiness: 86%
+- Readiness moved up because the app now keeps home, search, product detail, and listing detail usable offline from cache, prewarms images, refreshes stale data automatically, and gives notifications and price alerts real inbox actions.
 
 ## Remaining Work
 
@@ -54,9 +56,9 @@
 5. App Links / deep-link hardening for external entry points.
 6. Release-grade iOS readiness work.
 7. Tablet and foldable layout refinement.
-8. Notification center actions and richer empty/error states.
-9. Price alert delivery flow beyond local persistence.
-10. Richer compare metrics and multi-listing decision support.
+8. Push notification plumbing and device token registration.
+9. Richer compare metrics and multi-listing decision support.
+10. Further polish for search filtering and comparison edge cases.
 
 ## Next Epic
 

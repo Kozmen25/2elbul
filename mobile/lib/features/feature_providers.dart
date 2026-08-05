@@ -19,6 +19,10 @@ final notificationsProvider = FutureProvider<List<NotificationRecord>>((ref) {
   return ref.read(catalogRepositoryProvider).loadNotifications();
 });
 
+final alertsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return ref.read(catalogRepositoryProvider).loadAlerts();
+});
+
 final offlineModeProvider = StreamProvider<bool>((ref) {
   return ref.read(catalogRepositoryProvider).offlineModeChanges;
 });

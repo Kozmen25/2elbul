@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/data/app_preferences.dart';
 import '../../core/data/mock_catalog_repository.dart';
+import '../../core/models.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../core/theme/theme_mode_preference.dart';
+import '../feature_providers.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -12,6 +15,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preferences = ref.watch(appPreferencesControllerProvider);
+    final alerts = ref.watch(alertsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ayarlar')),
@@ -79,6 +83,79 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 20),
+          _section(
+            context,
+            title: 'Fiyat alarmları',
+            child: alerts.when(
+              data: (items) {
+                if (items.isEmpty) {
+                  return EmptyState(
+                    title: 'Aktif alarm yok',
+                    subtitle: 'Bir ürün detayında fiyat alarmı kurduğunda burada görünür.',
+                    action: FilledButton.tonalIcon(
+                      onPressed: () => context.push('/search'),
+                      icon: const Icon(Icons.search),
+                      label: const Text('Aramaya git'),
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          await ref.read(catalogRepositoryProvider).clearAlerts();
+                          ref.invalidate(alertsProvider);
+                        },
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text('Temizle'),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...items.asMap().entries.map(
+                      (entry) {
+                        final index = entry.key;
+                        final alert = entry.value;
+                        final isLast = index == items.length - 1;
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+                          child: _AlertRow(
+                            title: alert['productName']?.toString() ??
+                                alert['productSlug']?.toString() ??
+                                'Alarm',
+                            targetPrice: alert['targetPrice'] as int? ?? 0,
+                            createdAt: DateTime.tryParse(alert['createdAt']?.toString() ?? '') ??
+                                DateTime.now(),
+                            onDelete: () async {
+                              final id = alert['id']?.toString();
+                              if (id == null) return;
+                              await ref.read(catalogRepositoryProvider).deleteAlert(id);
+                              ref.invalidate(alertsProvider);
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(),
+              ),
+              error: (_, _) => EmptyState(
+                title: 'Alarmlar yüklenemedi',
+                subtitle: 'Kayıtlı alarmlar hazırlanırken bir sorun oluştu.',
+                action: FilledButton(
+                  onPressed: () => ref.invalidate(alertsProvider),
+                  child: const Text('Yeniden dene'),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Card(
             child: Column(
               children: [
@@ -139,3 +216,36 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
+class _AlertRow extends StatelessWidget {
+  const _AlertRow({
+    required this.title,
+    required this.targetPrice,
+    required this.createdAt,
+    required this.onDelete,
+  });
+
+  final String title;
+  final int targetPrice;
+  final DateTime createdAt;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+      child: ListTile(
+        leading: const Icon(Icons.price_change_outlined),
+        title: Text(title),
+        subtitle: Text(
+          'Hedef ${formatMoney(targetPrice)} · ${formatShortDate(createdAt)}',
+        ),
+        trailing: IconButton(
+          tooltip: 'Sil',
+          onPressed: onDelete,
+          icon: const Icon(Icons.close),
+        ),
+      ),
+    );
+  }
+}

@@ -27,14 +27,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final feed = ref.watch(homeFeedProvider);
+    final notifications = ref.watch(notificationsProvider);
+    final unreadCount = notifications.maybeWhen(
+      data: (items) => items.where((item) => !item.isRead).length,
+      orElse: () => 0,
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('2ElBul'),
         actions: [
-          IconButton(
-            onPressed: () => context.push('/notifications'),
-            icon: const Icon(Icons.notifications_none),
+          Badge.count(
+            count: unreadCount,
+            isLabelVisible: unreadCount > 0,
+            child: IconButton(
+              onPressed: () => context.push('/notifications'),
+              icon: const Icon(Icons.notifications_none),
+            ),
           ),
         ],
       ),

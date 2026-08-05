@@ -472,6 +472,7 @@ class MockCatalogRepository {
   Future<void> saveAlert({
     required String productSlug,
     required int targetPrice,
+    String? productName,
   }) async {
     await _ensureReady();
     final alerts = _alertsBox.values
@@ -479,7 +480,9 @@ class MockCatalogRepository {
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
     alerts.add({
+      'id': DateTime.now().microsecondsSinceEpoch.toString(),
       'productSlug': productSlug,
+      'productName': productName,
       'targetPrice': targetPrice,
       'createdAt': DateTime.now().toIso8601String(),
     });
@@ -495,6 +498,24 @@ class MockCatalogRepository {
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
+  }
+
+  Future<void> deleteAlert(String id) async {
+    await _ensureReady();
+    final alerts = _alertsBox.values
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .where((item) => item['id']?.toString() != id)
+        .toList();
+    await _alertsBox.clear();
+    for (final alert in alerts) {
+      await _alertsBox.add(alert);
+    }
+  }
+
+  Future<void> clearAlerts() async {
+    await _ensureReady();
+    await _alertsBox.clear();
   }
 
   Future<ListingDetailData> loadListingDetail(String listingId, {bool refresh = false}) async {

@@ -305,6 +305,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
     await ref.read(catalogRepositoryProvider).saveAlert(
           productSlug: data.listing.productSlug,
           targetPrice: target,
+          productName: data.listing.productName,
         );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
