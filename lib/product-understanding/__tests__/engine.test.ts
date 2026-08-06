@@ -18,7 +18,46 @@ function makeInput(overrides: Partial<ProductUnderstandingInput> & { title: stri
 describe("Product Understanding Engine", () => {
   // ── Accessory detection ─────────────────────────────────────────────
 
-  it("detects iPhone screen protector as accessory with compatible device", () => {
+  it("detects iPhone 14 Pro as Device with correct productIntent", () => {
+    const result = analyzeProduct(makeInput({
+      title: "iPhone 14 Pro 128GB Cep Telefonu",
+      price: 35000,
+      sourceId: "Sahibinden",
+    }));
+
+    expect(result.productType.value).toBe("primary_product");
+    expect(result.productIntent.value).toBe("Device");
+    expect(result.deviceFamily.value).toBeNull();
+    expect(result.priceRealityCheck.value?.signalDirection).toBe("primary");
+  });
+
+  it("detects MacBook Air M2 as Device", () => {
+    const result = analyzeProduct(makeInput({
+      title: "MacBook Air M2 13.6 inç 8GB RAM 256GB SSD",
+      price: 28000,
+      sourceId: "MediaMarkt",
+    }));
+
+    expect(result.productType.value).toBe("primary_product");
+    expect(result.productIntent.value).toBe("Device");
+    expect(result.deviceModel.value).toMatch(/macbook/i);
+  });
+
+  it("detects MacBook Air M2 Şarj Aleti as Accessory", () => {
+    const result = analyzeProduct(makeInput({
+      title: "MacBook Air M2 Şarj Aleti 30W USB-C",
+      price: 450,
+      sourceId: "Trendyol",
+    }));
+
+    expect(result.productType.value).toBe("accessory");
+    expect(result.accessoryType.value).toBe("charger");
+    expect(result.productIntent.value).toBe("Accessory");
+    expect(result.compatibleDevice.value).toMatch(/macbook/i);
+    expect(result.deviceFamily.value).toBe("Charger");
+  });
+
+  it("detects screen protector as Accessory with productIntent", () => {
     const result = analyzeProduct(makeInput({
       title: "iPhone 14 Pro Max Ekran Koruyucu Temperli Cam",
       price: 150,
@@ -28,11 +67,13 @@ describe("Product Understanding Engine", () => {
     expect(result.productType.value).toBe("accessory");
     expect(result.productType.confidence).toBeGreaterThanOrEqual(60);
     expect(result.accessoryType.value).toBe("screen_protector");
+    expect(result.productIntent.value).toBe("Accessory");
+    expect(result.deviceFamily.value).toBe("Screen Protector");
     expect(result.compatibleDevice.value).toMatch(/iphone/i);
     expect(result.compatibleModel.value).toMatch(/1[45]/);
   });
 
-  it("detects Samsung phone case as accessory", () => {
+  it("detects Samsung phone case as Accessory", () => {
     const result = analyzeProduct(makeInput({
       title: "Samsung Galaxy S24 Ultra Silikon Kılıf Kapak",
       price: 200,
@@ -41,6 +82,10 @@ describe("Product Understanding Engine", () => {
 
     expect(result.productType.value).toBe("accessory");
     expect(result.accessoryType.value).toBe("case");
+    expect(result.productIntent.value).toBe("Accessory");
+    expect(result.deviceFamily.value).toBe("Case");
+    expect(result.compatibleDevice.value).toMatch(/samsung/i);
+    expect(result.compatibleModel.value).toMatch(/s24/i);
   });
 
   it("detects a genuine primary device (iPhone listing)", () => {

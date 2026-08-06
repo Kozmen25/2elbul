@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { getStandardSourceAdapter } from "@/lib/bots/connectors";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { isMissingColumnArray } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     .eq("id", sourceId)
     .maybeSingle();
 
-  if (sourceResult.error && isMissingColumn(sourceResult.error, ["api_url"])) {
+  if (sourceResult.error && isMissingColumnArray(sourceResult.error, ["api_url"])) {
     sourceResult = await supabase
       .from("sources")
       .select(
@@ -134,15 +135,4 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
   return "Kaynak sağlığı kontrolü başarısız oldu.";
-}
-
-function isMissingColumn(error: unknown, columns: string[]) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    columns.some((column) => text.includes(column))
-  );
 }

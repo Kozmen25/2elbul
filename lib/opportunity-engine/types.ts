@@ -66,4 +66,6 @@ export type OpportunitySignalContext = {
   dataFreshness: OpportunityDataFreshness;
   latestListingAgeDays: number | null;
   sourceConcentration: number | null;
+  productType: string | null;
+  productTypeMatchScore: number | null;
 };

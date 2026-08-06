@@ -73,6 +73,8 @@ export function buildOpportunityAnalysis({
     dataFreshness,
     latestListingAgeDays,
     sourceConcentration,
+    productType: marketIntelligence.scope.productType ?? null,
+    productTypeMatchScore: marketIntelligence.scope.productType ? 100 : null,
   };
 
   const opportunityScore = calculateOpportunityScore(context);
@@ -96,6 +98,7 @@ export function buildOpportunityAnalysis({
       sampleSize,
       confidenceLevel,
       dataFreshness,
+      productTypeMatchScore: context.productTypeMatchScore,
     }),
     reasons,
     warningSignals,
@@ -114,13 +117,24 @@ function buildOpportunityRecommendation({
   sampleSize,
   confidenceLevel,
   dataFreshness,
+  productTypeMatchScore,
 }: {
   opportunityScore: number;
   riskScore: number;
   sampleSize: number;
   confidenceLevel: ConfidenceLevel;
   dataFreshness: OpportunityAnalysis["dataFreshness"];
+  productTypeMatchScore: number | null;
 }): OpportunityRecommendation {
+  if (productTypeMatchScore === 0) {
+    return {
+      action: "avoid",
+      label: "Uzak dur",
+      description:
+        "Ürün tipi uyuşmazlığı tespit edildi. Farklı kategorideki ürünler karşılaştırılamaz.",
+    };
+  }
+
   if (
     sampleSize < 3 ||
     confidenceLevel === "very-low" ||

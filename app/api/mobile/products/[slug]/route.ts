@@ -159,7 +159,7 @@ function toMobileMarketIntelligence(
   listings: Listing[],
 ): MobileMarketIntelligence | null {
   const mi = detail.marketIntelligence;
-  if (!mi) return computeMarketIntelligenceFromListings(listings);
+  if (!mi) return null;
 
   return {
     totalListingsInCategory: mi.totalListings ?? listings.length,
@@ -177,43 +177,5 @@ function toMobileMarketIntelligence(
       condition: c.condition as ListingCondition,
       count: c.count,
     })),
-  };
-}
-
-function computeMarketIntelligenceFromListings(
-  listings: Listing[],
-): MobileMarketIntelligence | null {
-  if (!listings.length) return null;
-
-  const prices = listings
-    .map((l) => l.price)
-    .filter((p) => Number.isFinite(p))
-    .sort((a, b) => a - b);
-  if (!prices.length) return null;
-
-  const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-  const mid = Math.floor(prices.length / 2);
-  const median = prices.length % 2 === 0
-    ? (prices[mid - 1] + prices[mid]) / 2
-    : prices[mid];
-
-  const sourceDist = new Map<string, number>();
-  const condDist = new Map<string, number>();
-  for (const l of listings) {
-    sourceDist.set(l.source, (sourceDist.get(l.source) ?? 0) + 1);
-    condDist.set(l.condition, (condDist.get(l.condition) ?? 0) + 1);
-  }
-
-  return {
-    totalListingsInCategory: listings.length,
-    averagePrice: Math.round(avg),
-    medianPrice: Math.round(median),
-    priceRange: { min: prices[0], max: prices[prices.length - 1] },
-    sourceDistribution: [...sourceDist.entries()]
-      .map(([source, count]) => ({ source: source as ListingSource, count }))
-      .sort((a, b) => b.count - a.count),
-    conditionDistribution: [...condDist.entries()]
-      .map(([condition, count]) => ({ condition: condition as ListingCondition, count }))
-      .sort((a, b) => b.count - a.count),
   };
 }

@@ -143,3 +143,105 @@ export function averageConfidenceScore(
     normalized.reduce((sum, value) => sum + value, 0) / normalized.length,
   );
 }
+
+/**
+ * Extract the product type from a product's attributes JSONB column.
+ * Product Understanding stores the result at:
+ *   attributes.productUnderstanding.productType.value
+ */
+export function extractProductTypeFromAttributes(
+  attributes: unknown,
+): string | null {
+  if (!attributes || typeof attributes !== "object") return null;
+  const record = attributes as Record<string, unknown>;
+  const pu = record.productUnderstanding as Record<string, unknown> | undefined;
+  if (!pu || typeof pu !== "object") return null;
+  const pt = pu.productType as { value?: unknown } | undefined;
+  if (!pt || typeof pt !== "object") return null;
+  if (typeof pt.value === "string" && pt.value.length > 0) return pt.value;
+  return null;
+}
+
+/**
+ * Extract any ScoredValue<string> field from attributes.productUnderstanding.
+ * Works for: compatibleFamily, deviceFamily, compatibleDevice, deviceModel, etc.
+ * Returns the `value` string, or null if the field is missing/empty.
+ */
+export function extractPueField(
+  attributes: unknown,
+  field: string,
+): string | null {
+  if (!attributes || typeof attributes !== "object") return null;
+  const record = attributes as Record<string, unknown>;
+  const pu = record.productUnderstanding as Record<string, unknown> | undefined;
+  if (!pu || typeof pu !== "object") return null;
+  const f = pu[field] as { value?: unknown } | undefined;
+  if (!f || typeof f !== "object") return null;
+  if (typeof f.value === "string" && f.value.length > 0) return f.value;
+  return null;
+}
+
+/**
+ * Filter MarketIntelligenceListing[] to only include listings whose product
+ * type matches the expected type. Uses Product Understanding data stored in
+ * each product's attributes JSONB, accessed via a product lookup map.
+ *
+ * Also populates listing.productType from the product attributes for
+ * downstream consumers.
+ *
+ * Graceful degradation: when expectedProductType is null/undefined, or when
+ * product attributes are unavailable, returns all listings unchanged.
+ */
+export function filterListingsByProductType(
+  listings: MarketIntelligenceListing[],
+  expectedProductType: string | null | undefined,
+  productLookup: Map<string, { attributes?: unknown }>,
+): MarketIntelligenceListing[] {
+  if (!expectedProductType || !listings.length) return listings;
+
+  return listings
+    .map((listing) => {
+      const pid = listing.productId;
+      if (pid == null) return null;
+
+      const product = productLookup.get(String(pid));
+      if (!product) return null;
+
+      const actualType = extractProductTypeFromAttributes(product.attributes);
+      if (!actualType) return null;
+
+      if (actualType !== expectedProductType) return null;
+
+      return { ...listing, productType: actualType };
+    })
+    .filter((l) => l !== null) as MarketIntelligenceListing[];
+}
+
+/**
+ * Determine the most common product type across a set of products.
+ * Returns null when no products have product type data.
+ * Used by aggregate pages (city, category, brand) to determine the
+ * dominant product type for market intelligence comparison gating.
+ */
+export function dominantProductType(
+  products: Array<{ attributes?: unknown }>,
+): string | null {
+  const counts = new Map<string, number>();
+  for (const product of products) {
+    const pt = extractProductTypeFromAttributes(product.attributes);
+    if (pt) {
+      counts.set(pt, (counts.get(pt) ?? 0) + 1);
+    }
+  }
+  if (!counts.size) return null;
+
+  let maxCount = 0;
+  let dominant: string | null = null;
+  for (const [type, count] of counts) {
+    if (count > maxCount) {
+      maxCount = count;
+      dominant = type;
+    }
+  }
+  return dominant;
+}

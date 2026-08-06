@@ -18,6 +18,7 @@ import type {
 } from "@/lib/unified-source-engine";
 import { DeadLetterQueue, classifyError } from "@/lib/recovery";
 import { hasValidSecret } from "@/lib/auth/cron-auth";
+import { ensureProductLegacy, normalizeProductName } from "@/lib/search/product-legacy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -488,34 +489,6 @@ async function importAdapterListings(
   };
 }
 
-async function ensureProductLegacy(
-  supabase: SupabaseClient,
-  query: string,
-) {
-  const productName = normalizeProductName(query);
-
-  const existing = await supabase
-    .from("products")
-    .select("id")
-    .eq("name", productName)
-    .maybeSingle();
-
-  if (existing.error) throw existing.error;
-  if (existing.data?.id) return Number(existing.data.id);
-
-  const { data, error } = await supabase
-    .from("products")
-    .insert({ name: productName })
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    throw new Error(error?.message ?? "Ürün oluşturulamadı.");
-  }
-
-  return Number(data.id);
-}
-
 async function saveListingWithSchemaFallback(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
@@ -648,10 +621,6 @@ function createNoResultsMessage(
   adapters: Array<{ slug: string; found: number }>,
 ) {
   return `Gerçek kaynaklarda sonuç bulunamadı. Denenen kaynaklar: ${formatTriedAdapters(adapters)}.`;
-}
-
-function normalizeProductName(query: string) {
-  return query.trim().replace(/\s+/g, " ") || "Aranan ürün";
 }
 
 function ensureExternalId(

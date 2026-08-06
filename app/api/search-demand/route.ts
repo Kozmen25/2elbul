@@ -3,6 +3,7 @@ import { normalizeSearchDemandQuery } from "@/lib/search-demand";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { isMissingSearchQueueTable } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -217,16 +218,4 @@ export async function POST(request: Request) {
     queued: true,
     message: "Bu ürün için piyasayı tarıyoruz.",
   });
-}
-
-function isMissingSearchQueueTable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42P01" ||
-    record.code === "PGRST205" ||
-    text.includes("search_demands") ||
-    text.includes("bot_queue")
-  );
 }

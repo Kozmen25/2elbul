@@ -106,6 +106,7 @@ export type MobileSearchListingHit = {
   productName: string;
   productSlug: string | null;
   category: string | null;
+  productType?: string | null;
   score: number;
 };
 

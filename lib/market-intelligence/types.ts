@@ -23,6 +23,7 @@ export type MarketIntelligenceListing = Pick<
 > & {
   productId?: string | number | null;
   productName?: string | null;
+  productType?: string;
   status?: string | null;
   confidenceScore?: number | null;
   confidenceLevel?: ConfidenceLevel | null;
@@ -128,4 +129,5 @@ export type MarketIntelligenceInput = {
   decisionInsight?: MarketIntelligenceDecisionInsight | null;
   duplicateSummary?: DuplicateBatchSummary | null;
   analyzedAt?: string | Date | null;
+  attributes?: unknown;
 };

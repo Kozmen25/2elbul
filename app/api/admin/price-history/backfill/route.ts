@@ -5,8 +5,8 @@ import {
   normalizeBackfillLimit,
   type PriceHistoryBackfillListing,
 } from "@/lib/price-history-backfill";
+import { isMissingPriceHistorySchemaError } from "@/lib/listing-status";
 import {
-  isMissingPriceHistorySchemaError,
   recordListingPriceHistory,
 } from "@/lib/price-history";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";

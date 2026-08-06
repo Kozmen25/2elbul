@@ -64,11 +64,14 @@ export function extractCompatibleDevice(
     family = modelParts[0];
 
     // Use display-friendly brand names based on detected model prefix
-    // "iphone" prefix → "iPhone"; "galaxy" prefix → "Samsung"; else capitalize
+    // "iphone" prefix → "iPhone"; "galaxy" prefix → "Samsung"; "macbook" prefix → "MacBook"; else capitalize
     let displayBrand: string;
     if (modelParts[0] === "iphone") {
       displayBrand = "iPhone";
-    } else if (modelParts[0] === "galaxy" || modelParts[0] === "ipad" || modelParts[0] === "macbook") {
+    } else if (modelParts[0] === "macbook") {
+      // MacBook models: modelParts = ["macbook","air","m2"] → "MacBook Air M2"
+      displayBrand = "MacBook";
+    } else if (modelParts[0] === "galaxy" || modelParts[0] === "ipad") {
       // detectModel returns "iphone-15-pro-max", "galaxy-s24-ultra", etc.
       // For galaxy models, use "Samsung" as the display brand
       const lowerBrand = brand.toLowerCase();

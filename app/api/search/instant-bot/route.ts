@@ -18,6 +18,7 @@ import type {
 } from "@/lib/unified-source-engine";
 import { getGlobalContext } from "@/lib/taxonomy/context";
 import type { createCategoryResolver } from "@/lib/taxonomy/integration";
+import { ensureProductLegacy } from "@/lib/search/product-legacy";
 import { verifySearchRequest } from "@/lib/auth/search-auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -447,25 +448,6 @@ async function importListings(
     matchedProducts: matchedProductIds.size,
     duplicateSummary,
   };
-}
-
-async function ensureProductLegacy(supabase: SupabaseClient, query: string) {
-  const productName = query.trim().replace(/\s+/g, " ") || "Aranan ürün";
-  const existing = await supabase
-    .from("products")
-    .select("id")
-    .eq("name", productName)
-    .maybeSingle();
-  if (existing.error) throw existing.error;
-  if (existing.data?.id) return Number(existing.data.id);
-
-  const { data, error } = await supabase
-    .from("products")
-    .insert({ name: productName })
-    .select("id")
-    .single();
-  if (error || !data) throw new Error(error?.message ?? "Ürün oluşturulamadı.");
-  return Number(data.id);
 }
 
 async function findExistingListing(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isRecord } from "@/lib/records";
+import { isMissingColumnArray } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -163,7 +164,7 @@ async function finishBotCenterRun(
   };
   let result = await supabase.from("bot_runs").update(payload).eq("id", runId);
 
-  if (result.error && isMissingColumn(result.error, ["matched_product_count"])) {
+  if (result.error && isMissingColumnArray(result.error, ["matched_product_count"])) {
     const { matched_product_count: _matchedProductCount, ...legacyPayload } =
       payload;
     result = await supabase.from("bot_runs").update(legacyPayload).eq("id", runId);
@@ -274,17 +275,4 @@ function asRecord(value: unknown): Record<string, unknown> {
 function numberValue(value: unknown) {
   const number = Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
-}
-
-function isMissingColumn(error: unknown, columns: string[]) {
-  if (!isRecord(error)) return false;
-  const code = typeof error.code === "string" ? error.code : undefined;
-  const message = typeof error.message === "string" ? error.message : "";
-  const details = typeof error.details === "string" ? error.details : "";
-  const text = `${message} ${details}`.toLowerCase();
-  return (
-    code === "42703" ||
-    code === "PGRST204" ||
-    columns.some((column) => text.includes(column))
-  );
 }

@@ -3,8 +3,8 @@ import { ADMIN_EMAILS } from "@/lib/admin";
 import {
   getSiteGeneralSettings,
   getSiteMaintenanceSettings,
-  isMissingSiteSettingsTable,
 } from "@/lib/site-settings";
+import { isMissingSiteSettingsTable } from "@/lib/listing-status";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { SettingsForm } from "./settings-form";
 

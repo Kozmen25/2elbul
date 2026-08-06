@@ -1514,9 +1514,6 @@ final demoNotifications = <NotificationRecord>[
     kind: 'alert',
   ),
 ];
-    kind: 'alert',
-  ),
-];
 
 String demoProductSummary(String slug) {
   switch (slug) {

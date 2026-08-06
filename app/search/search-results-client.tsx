@@ -30,6 +30,11 @@ import {
   type MarketIntelligenceListing,
 } from "@/lib/market-intelligence";
 import {
+  extractProductTypeFromAttributes,
+  filterListingsByProductType,
+} from "@/lib/market-intelligence/helpers";
+import { calculateProductUnderstandingConfidence } from "@/lib/confidence-engine/product-understanding-confidence";
+import {
   buildOpportunityAnalysis,
   type OpportunityAnalysis,
 } from "@/lib/opportunity-engine";
@@ -47,7 +52,6 @@ import { createProductSlug } from "@/lib/product-slug";
 import { groupListingDuplicates, summarizeDuplicateGroups } from "@/lib/product-matcher";
 import { formatCurrencyTRY, formatDateTR, formatNumberTR } from "@/lib/formatters";
 import { getAbsoluteUrl } from "@/lib/site-url";
-import { toConfidenceResult } from "@/lib/market-intelligence/helpers";
 import { TrustBadge, confidenceToTrustLevel } from "@/lib/trust-badge";
 import { recordSearch, createSavedSearch } from "./actions";
 
@@ -90,6 +94,7 @@ type SearchResultsClientProps = {
   initialListings: Listing[];
   productPriceStats: Record<string, ProductPriceStats>;
   productCategories: Record<string, string | null>;
+  productAttributes?: Record<string, { attributes?: unknown }>;
   loadError?: string;
   favoriteListingIds: string[];
   isAuthenticated: boolean;
@@ -119,6 +124,7 @@ export function SearchResultsClient({
   initialListings,
   productPriceStats,
   productCategories,
+  productAttributes = {},
   loadError = "",
   favoriteListingIds,
   isAuthenticated,
@@ -363,8 +369,8 @@ export function SearchResultsClient({
   ]);
 
   const productSummaries = useMemo(
-    () => buildProductSummaries(filteredListings),
-    [filteredListings],
+    () => buildProductSummaries(filteredListings, productAttributes),
+    [filteredListings, productAttributes],
   );
   const filteredProductSummaries = useMemo(
     () => filterProductSummariesBySignal(productSummaries, signal),
@@ -1772,13 +1778,23 @@ function StatCard({
   );
 }
 
-export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
+export function buildProductSummaries(
+  listings: Listing[],
+  productAttributes?: Record<string, { attributes?: unknown }>,
+): ProductSummary[] {
   const analyzedAt = new Date();
   const groups = new Map<string, Listing[]>();
 
   for (const listing of listings) {
     const key = listing.productId || createProductSlug(listing.productName);
     groups.set(key, [...(groups.get(key) ?? []), listing]);
+  }
+
+  const productLookup = new Map<string, { attributes?: unknown }>();
+  if (productAttributes) {
+    for (const [id, entry] of Object.entries(productAttributes)) {
+      productLookup.set(id, entry);
+    }
   }
 
   return [...groups.entries()].map(([productId, productListings]) => {
@@ -1788,6 +1804,10 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
       [...productListings].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )[0]?.createdAt ?? analyzedAt.toISOString();
+
+    const productAttrs = productLookup.get(productId)?.attributes;
+    const productType = extractProductTypeFromAttributes(productAttrs);
+
     const marketIntelligenceListings: MarketIntelligenceListing[] = productListings.map(
       (listing) => ({
         id: listing.id,
@@ -1803,6 +1823,13 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
         status: "published",
       }),
     );
+
+    const filteredListings = filterListingsByProductType(
+      marketIntelligenceListings,
+      productType,
+      productLookup,
+    );
+
     const duplicateSummary = buildDuplicateSummary(productListings);
     const intelligence = calculateProductIntelligence({
       listings: productListings.map((listing) => ({
@@ -1810,7 +1837,7 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
         createdAt: listing.createdAt,
       })),
     });
-    const decisionInsight = buildSearchDecisionInsight(intelligence);
+    const decisionInsight = buildSearchDecisionInsight(intelligence, productAttrs, productListings.length);
     const marketIntelligence = buildMarketIntelligence({
       scope: {
         productId,
@@ -1818,8 +1845,9 @@ export function buildProductSummaries(listings: Listing[]): ProductSummary[] {
         slug,
         url: getAbsoluteUrl(`/product/${slug}`),
         category: productListings[0]?.category ?? null,
+        productType,
       },
-      listings: marketIntelligenceListings,
+      listings: productType !== null ? filteredListings : marketIntelligenceListings,
       intelligence,
       decisionInsight,
       duplicateSummary,
@@ -1893,18 +1921,29 @@ function buildDuplicateSummary(listings: Listing[]): {
 
 function buildSearchDecisionInsight(
   intelligence: ProductIntelligence,
+  attributes?: unknown,
+  sourceCount: number = 0,
 ): MarketIntelligenceDecisionInsight | null {
   if (intelligence.marketValue.listingCount < 3 || intelligence.decisionSupport.label === "Veri Az") {
     return null;
   }
 
-  const confidenceScore = Math.round(
-    20 +
-      intelligence.decisionSupport.buyScore * 0.35 +
-      intelligence.decisionSupport.liquidityScore * 0.35 +
-      (100 - intelligence.decisionSupport.volatilityScore) * 0.2 +
-      intelligence.opportunity.score * 0.1,
-  );
+  // Extract PUE productUnderstandingScore from attributes (same pattern as buildMarketIntelligence)
+  const attrs = attributes as Record<string, unknown> | null;
+  const pu = attrs?.productUnderstanding as Record<string, unknown> | null;
+  const puTypeConfidence = pu?.productType as { confidence?: number } | null;
+  const productUnderstandingScore =
+    typeof puTypeConfidence?.confidence === "number" && Number.isFinite(puTypeConfidence.confidence)
+      ? puTypeConfidence.confidence / 100
+      : null;
+
+  const confidence = calculateProductUnderstandingConfidence({
+    decisionConfidence: null,
+    productUnderstandingScore,
+    sourceCount,
+    sourcesUsed: [],
+  });
+
   const reasons = [
     intelligence.marketValue.listingCount >= 8
       ? "İlan sayısı güçlü."
@@ -1925,7 +1964,7 @@ function buildSearchDecisionInsight(
   ];
 
   return {
-    confidence: toConfidenceResult(confidenceScore, reasons),
+    confidence: { ...confidence, reasons: [...confidence.reasons, ...reasons] },
     smartPrice: {
       summary: intelligence.recommendation.description,
       details: [

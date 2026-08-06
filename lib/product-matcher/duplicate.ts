@@ -21,6 +21,7 @@ export function detectListingDuplicates(
     price: reference.price,
     sourceId: reference.sourceId,
     condition: reference.condition,
+    productType: reference.productType,
   });
 
   const matches: DuplicateMatch[] = [];
@@ -30,6 +31,7 @@ export function detectListingDuplicates(
       price: candidate.price,
       sourceId: candidate.sourceId,
       condition: candidate.condition,
+      productType: candidate.productType,
     });
 
     const result = compareListings(refInput, candInput);
@@ -73,6 +75,7 @@ export function groupListingDuplicates(
       price: l.price,
       sourceId: l.sourceId,
       condition: l.condition,
+      productType: l.productType,
     }),
     id: l.id,
   }));
@@ -125,30 +128,59 @@ export function groupListingDuplicatesByKey(
     }
   }
 
-  // Phase 2: within each brand, partition by normalized_key
+  // Phase 2: within each brand, partition by productType, then by normalized_key
   const allGroups: Array<{ brand: string; key: string; items: ComparisonListing[] }> = [];
   const nullKeyWithinBrand: ComparisonListing[] = [];
 
   for (const [brand, brandListings] of brandMap) {
-    const keyMap = new Map<string, ComparisonListing[]>();
+    // First partition by productType to prevent cross-type grouping
+    // e.g. "Samsung S24" phone and "Samsung S24 Charger" accessory get separate buckets
+    const typeMap = new Map<string, ComparisonListing[]>();
+    const nullTypeListings: ComparisonListing[] = [];
 
     for (const listing of brandListings) {
+      if (listing.productType) {
+        const bucket = typeMap.get(listing.productType);
+        if (bucket) bucket.push(listing);
+        else typeMap.set(listing.productType, [listing]);
+      } else {
+        nullTypeListings.push(listing);
+      }
+    }
+
+    // Within each productType bucket, partition by normalized_key
+    for (const [, typeListings] of typeMap) {
+      const keyMap = new Map<string, ComparisonListing[]>();
+      for (const listing of typeListings) {
+        const signals = getSignals(listing.title);
+        const nk = signals.normalizedKey;
+        if (nk && nk !== brand && nk !== listing.title.toLowerCase().replace(/\s+/g, "-")) {
+          const bucket = keyMap.get(nk);
+          if (bucket) bucket.push(listing);
+          else keyMap.set(nk, [listing]);
+        } else {
+          nullKeyWithinBrand.push(listing);
+        }
+      }
+      for (const [key, items] of keyMap) {
+        allGroups.push({ brand, key, items });
+      }
+    }
+
+    // Also process listings without productType (graceful degradation)
+    const nullTypeKeyMap = new Map<string, ComparisonListing[]>();
+    for (const listing of nullTypeListings) {
       const signals = getSignals(listing.title);
       const nk = signals.normalizedKey;
-
       if (nk && nk !== brand && nk !== listing.title.toLowerCase().replace(/\s+/g, "-")) {
-        const bucket = keyMap.get(nk);
-        if (bucket) {
-          bucket.push(listing);
-        } else {
-          keyMap.set(nk, [listing]);
-        }
+        const bucket = nullTypeKeyMap.get(nk);
+        if (bucket) bucket.push(listing);
+        else nullTypeKeyMap.set(nk, [listing]);
       } else {
         nullKeyWithinBrand.push(listing);
       }
     }
-
-    for (const [key, items] of keyMap) {
+    for (const [key, items] of nullTypeKeyMap) {
       allGroups.push({ brand, key, items });
     }
   }
@@ -165,6 +197,7 @@ export function groupListingDuplicatesByKey(
           price: listing.price,
           sourceId: listing.sourceId,
           condition: listing.condition,
+          productType: listing.productType,
         }),
         id: listing.id,
       });

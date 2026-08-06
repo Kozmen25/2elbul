@@ -16,6 +16,7 @@ export type TaxonomyNode = {
   keywords: string[];
   children?: TaxonomyNode[];
   metadata?: Record<string, unknown>;
+  productType?: string;
 };
 
 export type TaxonomyMatch = {

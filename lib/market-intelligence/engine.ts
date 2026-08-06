@@ -1,21 +1,19 @@
 import type { ConfidenceResult } from "@/lib/confidence-engine";
-import { clampScore } from "@/lib/confidence-engine/scoring";
-import type { ProductIntelligence } from "@/lib/intelligence-engine";
+import { calculateProductUnderstandingConfidence } from "@/lib/confidence-engine/product-understanding-confidence";
 import type {
   MarketIntelligence,
   MarketIntelligenceInput,
   MarketIntelligenceJsonLd,
   MarketIntelligenceJsonLdProperty,
-  MarketIntelligenceDecisionInsight,
+  MarketOpportunity,
 } from "./types";
 import { buildMarketPriceAnalysis } from "./price-analysis";
 import { buildMarketSummary } from "./market-summary";
-import { buildMarketOpportunity } from "./opportunity";
 import {
   normalizeAnalysisTimestamp,
-  toConfidenceLevel,
   roundDecimal,
 } from "./helpers";
+import { buildOpportunityAnalysis } from "@/lib/opportunity-engine";
 
 export function buildMarketIntelligence(
   input: MarketIntelligenceInput,
@@ -31,20 +29,80 @@ export function buildMarketIntelligence(
     duplicateSummary: input.duplicateSummary ?? null,
   });
   const sourcesUsed = marketSummary.sourceBreakdown.map((entry) => entry.source);
-  const confidence = buildMarketConfidence({
-    intelligence: input.intelligence ?? null,
-    decisionInsight: input.decisionInsight ?? null,
-    priceAnalysis,
-    sourcesUsed,
-    duplicateDensity: marketSummary.duplicateDensity,
+
+  // Extract PUE confidence score from attributes when available
+  const attrs = input.attributes as Record<string, unknown> | null;
+  const pu = attrs?.productUnderstanding as Record<string, unknown> | null;
+  const puTypeConfidence = pu?.productType as { confidence?: number } | null;
+  const productUnderstandingScore =
+    typeof puTypeConfidence?.confidence === "number" && Number.isFinite(puTypeConfidence.confidence)
+      ? puTypeConfidence.confidence / 100
+      : null;
+
+  const confidence = calculateProductUnderstandingConfidence({
+    decisionConfidence: input.decisionInsight?.confidence ?? null,
+    productUnderstandingScore,
     sourceCount: marketSummary.sourceCount,
+    sourcesUsed,
   });
-  const opportunity = buildMarketOpportunity({
-    priceAnalysis,
-    intelligence: input.intelligence ?? null,
-    decisionInsight: input.decisionInsight ?? null,
-    confidenceScore: confidence.score,
-  });
+
+  // Wire opportunity engine when sufficient data exists
+  const sampleSize = priceAnalysis.sampleSize;
+  const confidenceScore = confidence.score;
+  let opportunity: MarketOpportunity;
+  if (sampleSize >= 3 && confidenceScore > 0) {
+    const opportunityAnalysis = buildOpportunityAnalysis({
+      marketIntelligence: {
+        scope: input.scope,
+        analysisGeneratedAt,
+        sampleSize,
+        confidenceScore,
+        confidenceLevel: confidence.level,
+        confidenceReasons: confidence.reasons,
+        sourcesUsed,
+        priceAnalysis,
+        marketSummary,
+        opportunity: {
+          score: 0,
+          label: "Veri yetersiz",
+          explanation: "Opportunity Engine üzerinden hesaplanıyor",
+          action: "wait",
+          discountPercent: null,
+        },
+        structuredData: {} as MarketIntelligenceJsonLd,
+      },
+      intelligence: input.intelligence ?? null,
+      duplicateSummary: input.duplicateSummary ?? null,
+      analyzedAt: input.analyzedAt,
+      latestListingAt: null,
+    });
+    opportunity = {
+      score: opportunityAnalysis.opportunityScore,
+      label: opportunityAnalysis.recommendation.action === "buy_now"
+        ? "Güçlü fırsat" as const
+        : opportunityAnalysis.recommendation.action === "watch"
+          ? "Takip etmeye değer" as const
+          : opportunityAnalysis.recommendation.action === "avoid"
+            ? "Dikkatli incele" as const
+            : opportunityAnalysis.recommendation.action === "insufficient_data"
+              ? "Veri yetersiz" as const
+              : "Normal piyasa" as const,
+      explanation: opportunityAnalysis.recommendation.description,
+      action: opportunityAnalysis.recommendation.action === "avoid"
+        ? "wait" as const
+        : opportunityAnalysis.recommendation.action,
+      discountPercent: null,
+    };
+  } else {
+    opportunity = {
+      score: 0,
+      label: "Veri yetersiz",
+      explanation: "Opportunity Engine üzerinden hesaplanıyor",
+      action: "wait",
+      discountPercent: null,
+    };
+  }
+
   const structuredData = buildMarketIntelligenceJsonLd({
     scope: input.scope,
     analysisGeneratedAt,
@@ -57,8 +115,8 @@ export function buildMarketIntelligence(
   return {
     scope: input.scope,
     analysisGeneratedAt,
-    sampleSize: priceAnalysis.sampleSize,
-    confidenceScore: confidence.score,
+    sampleSize,
+    confidenceScore,
     confidenceLevel: confidence.level,
     confidenceReasons: confidence.reasons,
     sourcesUsed,
@@ -132,92 +190,5 @@ export function buildMarketIntelligenceJsonLd({
         : {}),
     },
     additionalProperty,
-  };
-}
-
-function buildMarketConfidence({
-  intelligence,
-  decisionInsight,
-  priceAnalysis,
-  sourcesUsed,
-  duplicateDensity,
-  sourceCount,
-}: {
-  intelligence: ProductIntelligence | null;
-  decisionInsight: MarketIntelligenceDecisionInsight | null;
-  priceAnalysis: ReturnType<typeof buildMarketPriceAnalysis>;
-  sourcesUsed: string[];
-  duplicateDensity: number;
-  sourceCount: number;
-}): ConfidenceResult {
-  const decisionConfidence = decisionInsight?.confidence ?? null;
-  const baseScore =
-    decisionConfidence?.score ??
-    (priceAnalysis.sampleSize > 0 ? 52 : 0);
-  const sourceBonus =
-    sourceCount >= 3 ? 8 : sourceCount === 2 ? 4 : sourceCount === 1 ? 2 : 0;
-  const sampleBonus =
-    priceAnalysis.sampleSize >= 10
-      ? 8
-      : priceAnalysis.sampleSize >= 5
-        ? 4
-        : priceAnalysis.sampleSize >= 3
-          ? 2
-          : 0;
-  const duplicatePenalty =
-    duplicateDensity >= 0.25 ? 14 : duplicateDensity >= 0.1 ? 8 : 0;
-  const spreadPenalty =
-    priceAnalysis.priceSpreadPercent == null
-      ? 0
-      : priceAnalysis.priceSpreadPercent >= 50
-        ? 10
-        : priceAnalysis.priceSpreadPercent >= 30
-          ? 5
-          : 0;
-  const demandBonus =
-    intelligence?.demand.demandLevel === "high"
-      ? 3
-      : intelligence?.demand.demandLevel === "medium"
-        ? 1
-        : 0;
-
-  const score = clampScore(
-    baseScore + sourceBonus + sampleBonus + demandBonus - duplicatePenalty - spreadPenalty,
-  );
-
-  const reasons = [
-    ...(decisionConfidence?.reasons ?? []),
-    priceAnalysis.sampleSize >= 10
-      ? "Örneklem güçlü"
-      : priceAnalysis.sampleSize >= 3
-        ? "Örneklem yeterli"
-        : "Örneklem sınırlı",
-    sourceCount >= 3
-      ? `${sourceCount} farklı kaynak doğruladı`
-      : sourceCount === 2
-        ? "İki kaynak doğruladı"
-        : sourceCount === 1
-          ? "Tek kaynak"
-          : "Kaynak bilgisi yok",
-    duplicateDensity > 0
-      ? `Duplicate yoğunluğu %${roundDecimal(duplicateDensity * 100, 1)}`
-      : "Duplicate yoğunluğu düşük",
-    priceAnalysis.priceSpreadPercent != null && priceAnalysis.priceSpreadPercent <= 15
-      ? "Fiyat bandı dengeli"
-      : priceAnalysis.priceSpreadPercent != null && priceAnalysis.priceSpreadPercent >= 40
-        ? "Fiyat bandı geniş"
-        : "Fiyat bandı normal",
-    ...(
-      sourcesUsed.length > 0 && sourceCount >= 3
-        ? ["Kaynak çeşitliliği yüksek"]
-        : []
-    ),
-  ].filter(Boolean);
-
-  return {
-    score,
-    level: toConfidenceLevel(score),
-    reasons: [...new Set(reasons)].slice(0, 5),
-    signals: decisionConfidence?.signals ?? {},
   };
 }

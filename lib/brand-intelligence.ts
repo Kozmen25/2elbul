@@ -1,10 +1,16 @@
 import { cache } from "react";
 import type { ConfidenceLevel } from "@/lib/confidence-engine";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import { isMissingStatusColumn, isMissingAttributesColumn, isMissingProductCategoryColumn, isMissingListingUpdatedAtColumn } from "@/lib/listing-status";
 import { calculateProductIntelligence, type ProductIntelligence } from "@/lib/intelligence-engine";
 import { buildMarketIntelligence, type MarketIntelligence, type MarketIntelligenceListing } from "@/lib/market-intelligence";
-import { toConfidenceResult } from "@/lib/market-intelligence/helpers";
+import {
+  toConfidenceResult,
+  toConfidenceLevel,
+  dominantProductType,
+  filterListingsByProductType,
+  extractProductTypeFromAttributes,
+} from "@/lib/market-intelligence/helpers";
 import { buildMarketPulse, type MarketPulse, type MarketPulseItem } from "@/lib/market-pulse";
 import { formatBrandDisplayName, extractBrand } from "@/lib/normalization";
 import { createProductSlug } from "@/lib/product-slug";
@@ -20,7 +26,6 @@ import {
   type OpportunityAnalysis,
 } from "@/lib/opportunity-engine";
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
-import { toConfidenceLevel } from "@/lib/market-intelligence/helpers";
 
 export type BrandCatalogEntry = {
   slug: string;
@@ -34,6 +39,7 @@ export type BrandProductRecord = {
   name: string;
   slug: string;
   category: string | null;
+  attributes?: unknown;
   createdAt: string | null;
 };
 
@@ -63,6 +69,7 @@ export type BrandListingRecord = {
   updatedAt: string | null;
   confidenceScore: number | null;
   confidenceLevel: ConfidenceLevel | null;
+  productType?: string;
 };
 
 export type BrandFaqItem = {
@@ -158,6 +165,7 @@ type BrandCatalogRow = {
   name: string;
   slug?: string | null;
   category?: string | null;
+  attributes?: unknown;
   created_at?: string | null;
 };
 
@@ -243,6 +251,10 @@ export const getBrandPageData = cache(
       })),
       [],
     );
+    const dominantType = dominantProductType(brandProducts);
+    const filteredListings = dominantType
+      ? filterListingsByProductType(listings, dominantType, productLookup)
+      : listings;
     const marketIntelligence = buildMarketIntelligence({
       scope: {
         productId: `brand-${normalizedBrandSlug}`,
@@ -251,8 +263,9 @@ export const getBrandPageData = cache(
         url: brandUrl,
         category: "Marka",
         brand: brandName,
+        productType: dominantType,
       },
-      listings: listings.map((listing) => ({
+      listings: filteredListings.map((listing) => ({
         id: listing.id,
         title: listing.title,
         price: listing.price,
@@ -551,6 +564,7 @@ function buildBrandListings(
       if (!Number.isFinite(price) || price <= 0) return null;
 
       const confidenceScore = normalizeScore(row.confidence_score);
+      const productType = extractProductTypeFromAttributes(product.attributes);
 
       return {
         id: String(row.id),
@@ -567,9 +581,10 @@ function buildBrandListings(
         updatedAt: row.updated_at ? String(row.updated_at) : null,
         confidenceScore,
         confidenceLevel: confidenceScore !== null ? toConfidenceLevel(confidenceScore) : null,
+        productType: productType ?? undefined,
       };
     })
-    .filter((listing): listing is BrandListingRecord => listing !== null);
+    .filter((listing) => listing !== null) as BrandListingRecord[];
 }
 
 function normalizeBrandSlug(input: string) {
@@ -607,11 +622,13 @@ async function fetchAllBrandProducts(
   const products: BrandProductRecord[] = [];
   let offset = 0;
   let includeCategory = true;
+  let includeAttributes = true;
 
   while (true) {
-    const columns = includeCategory
-      ? "id, name, slug, category, created_at"
-      : "id, name, slug, created_at";
+    const cols = ["id", "name", "slug"];
+    if (includeCategory) cols.push("category");
+    if (includeAttributes) cols.push("attributes");
+    const columns = cols.join(", ");
     const result = await supabase
       .from("products")
       .select(columns)
@@ -621,6 +638,10 @@ async function fetchAllBrandProducts(
     if (result.error) {
       if (includeCategory && isMissingProductCategoryColumn(result.error)) {
         includeCategory = false;
+        continue;
+      }
+      if (includeAttributes && isMissingAttributesColumn(result.error)) {
+        includeAttributes = false;
         continue;
       }
 
@@ -637,6 +658,7 @@ async function fetchAllBrandProducts(
           name: String(row.name),
           slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
           category: "category" in row && row.category ? String(row.category) : null,
+          attributes: "attributes" in row ? row.attributes : undefined,
           createdAt: row.created_at ? String(row.created_at) : null,
         })),
     );
@@ -768,25 +790,6 @@ function chunkArray<T>(values: T[], size: number) {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
-}
-
-function isMissingProductCategoryColumn(error: unknown) {
-  return isMissingColumn(error, "category");
-}
-
-function isMissingListingUpdatedAtColumn(error: unknown) {
-  return isMissingColumn(error, "updated_at");
-}
-
-function isMissingColumn(error: unknown, column: string) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes(column.toLowerCase())
-  );
 }
 
 function buildBrandSearches(

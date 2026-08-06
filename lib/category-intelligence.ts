@@ -1,10 +1,16 @@
 import { cache } from "react";
 import type { ConfidenceLevel } from "@/lib/confidence-engine";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import { isMissingStatusColumn, isMissingAttributesColumn, isMissingProductCategoryColumn, isMissingListingUpdatedAtColumn } from "@/lib/listing-status";
 import { calculateProductIntelligence } from "@/lib/intelligence-engine";
 import { buildMarketIntelligence, type MarketIntelligence, type MarketIntelligenceListing } from "@/lib/market-intelligence";
-import { toConfidenceResult, toConfidenceLevel } from "@/lib/market-intelligence/helpers";
+import {
+  dominantProductType,
+  extractProductTypeFromAttributes,
+  filterListingsByProductType,
+  toConfidenceResult,
+  toConfidenceLevel,
+} from "@/lib/market-intelligence/helpers";
 import { buildMarketPulse, type MarketPulse, type MarketPulseItem } from "@/lib/market-pulse";
 import { formatBrandDisplayName, extractBrand, normalizeSearchText } from "@/lib/normalization";
 import { createProductSlug } from "@/lib/product-slug";
@@ -28,6 +34,8 @@ export type CategoryRoute = {
   longDescription: string;
   matchKeywords: string[];
   excludeKeywords: string[];
+  expectedProductType?: string;
+  attributeFilters?: string[];
 };
 
 export type CategoryCatalogEntry = {
@@ -42,6 +50,7 @@ export type CategoryProductRecord = {
   name: string;
   slug: string;
   category: string | null;
+  attributes?: unknown;
   createdAt: string | null;
 };
 
@@ -71,6 +80,7 @@ export type CategoryListingRecord = {
   updatedAt: string | null;
   confidenceScore: number | null;
   confidenceLevel: ConfidenceLevel | null;
+  productType?: string;
 };
 
 export type CategoryBrandDistributionEntry = {
@@ -158,6 +168,8 @@ export type CategoryPageData = {
   categoryUrl: string;
   shortDescription: string;
   longDescription: string;
+  expectedProductType?: string;
+  attributeFilters?: string[];
   productCount: number;
   listingCount: number;
   marketIntelligence: MarketIntelligence;
@@ -201,6 +213,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "google pixel",
     ],
     excludeKeywords: ["tablet", "ipad", "watch", "saat", "kulaklik", "airpods", "konsol", "laptop", "bilgisayar"],
+    expectedProductType: "primary_product",
   },
   {
     slug: "bilgisayar",
@@ -230,6 +243,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "chromebook",
     ],
     excludeKeywords: ["tablet", "ipad", "telefon", "iphone", "konsol", "ekran karti", "ekran kartı", "monitor", "monitoru"],
+    expectedProductType: "primary_product",
   },
   {
     slug: "konsol",
@@ -252,6 +266,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "wii",
     ],
     excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "tablet", "nintendo switch lite joy"],
+    expectedProductType: "primary_product",
   },
   {
     slug: "tv-ses",
@@ -281,6 +296,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "ekran",
     ],
     excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "konsol", "playstation", "ps5", "tablet"],
+    expectedProductType: "primary_product",
   },
   {
     slug: "arac",
@@ -359,6 +375,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "rezistans",
     ],
     excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "arac ", "otomobil", "emlak"],
+    expectedProductType: "spare_part",
   },
   {
     slug: "ev-yasam",
@@ -442,6 +459,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "emlak",
       "daire",
     ],
+    expectedProductType: "accessory",
   },
 ];
 
@@ -513,7 +531,20 @@ export function matchProductToRoute(
   productName: string,
   productCategory: string | null,
   route: CategoryRoute,
+  productAttributes?: unknown,
 ): boolean {
+  // PUE-first: if the product has a productType, use it to match against the
+  // route's expectedProductType. This overrides keyword matching entirely.
+  if (route.expectedProductType && productAttributes) {
+    const productType = extractProductTypeFromAttributes(productAttributes);
+    if (productType === route.expectedProductType) {
+      return true;
+    }
+    if (productType !== null) {
+      return false;
+    }
+  }
+
   const normalizedCategory = normalizeSearchText(productCategory ?? "");
   const normalizedName = normalizeSearchText(productName ?? "");
 
@@ -554,7 +585,7 @@ export const getCategoryCatalog = cache(async (): Promise<CategoryCatalogEntry[]
 
   return CATEGORY_ROUTES.map((route) => {
     const routeProducts = products.filter((product) =>
-      matchProductToRoute(product.name, product.category, route),
+      matchProductToRoute(product.name, product.category, route, product.attributes),
     );
     const routeProductIds = new Set(routeProducts.map((product) => product.id));
     const routeListings = listings.filter((listing) =>
@@ -586,7 +617,7 @@ export const getCategoryPageData = cache(
 
     const products = await fetchAllProducts(supabase);
     const categoryProducts = products.filter((product) =>
-      matchProductToRoute(product.name, product.category, route),
+      matchProductToRoute(product.name, product.category, route, product.attributes),
     );
 
     const productLookup = new Map(categoryProducts.map((product) => [product.id, product]));
@@ -595,6 +626,10 @@ export const getCategoryPageData = cache(
     const searchEvents = await fetchSearchEvents(supabase);
     const searchDemands = await fetchSearchDemands(supabase);
     const listings = buildCategoryListings(listingRows, productLookup);
+    const dominantType = dominantProductType(categoryProducts);
+    const filteredListings = dominantType
+      ? filterListingsByProductType(listings, dominantType, productLookup)
+      : listings;
 
     if (!categoryProducts.length && !listings.length) {
       return buildEmptyCategoryPageData(route);
@@ -643,8 +678,9 @@ export const getCategoryPageData = cache(
         url: categoryUrl,
         category: route.label,
         brand: route.label,
+        productType: dominantType,
       },
-      listings: listings.map((listing) => ({
+      listings: filteredListings.map((listing) => ({
         id: listing.id,
         title: listing.title,
         price: listing.price,
@@ -726,6 +762,8 @@ export const getCategoryPageData = cache(
       categoryUrl,
       shortDescription: route.shortDescription,
       longDescription: route.longDescription,
+      expectedProductType: route.expectedProductType,
+      attributeFilters: route.attributeFilters,
       productCount: categoryProducts.length,
       listingCount: marketIntelligence.marketSummary.totalListingCount,
       marketIntelligence,
@@ -746,6 +784,7 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
   const categoryUrl = getAbsoluteUrl(`/category/${route.slug}`);
   const emptyIntelligence = calculateProductIntelligence({ listings: [] });
   const emptyDecisionInsight = buildProductDecisionInsight(route.label, [], []);
+  const emptyDuplicateSummary = resolveProductDetailDuplicateSummary([]);
   const marketIntelligence = buildMarketIntelligence({
     scope: {
       productId: `category-${route.slug}`,
@@ -754,6 +793,7 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
       url: categoryUrl,
       category: route.label,
       brand: route.label,
+      productType: null,
     },
     listings: [],
     intelligence: emptyIntelligence,
@@ -764,13 +804,13 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
       ),
       smartPrice: emptyDecisionInsight.smartPrice,
     },
-    duplicateSummary: resolveProductDetailDuplicateSummary([]),
+    duplicateSummary: emptyDuplicateSummary,
     analyzedAt: new Date(),
   });
   const opportunityAnalysis = buildOpportunityAnalysis({
     marketIntelligence,
     intelligence: emptyIntelligence,
-    duplicateSummary: resolveProductDetailDuplicateSummary([]),
+    duplicateSummary: emptyDuplicateSummary,
     analyzedAt: marketIntelligence.analysisGeneratedAt,
     latestListingAt: null,
   });
@@ -798,11 +838,13 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
     categoryUrl,
     shortDescription: route.shortDescription,
     longDescription: route.longDescription,
+    expectedProductType: route.expectedProductType,
+    attributeFilters: route.attributeFilters,
     productCount: 0,
     listingCount: 0,
     marketIntelligence,
     opportunityAnalysis,
-    duplicateSummary: resolveProductDetailDuplicateSummary([]),
+    duplicateSummary: emptyDuplicateSummary,
     marketPulse: emptyPulse,
     topOpportunities: [],
     popularProducts: [],
@@ -1027,6 +1069,7 @@ function buildCategoryListings(
       if (!Number.isFinite(price) || price <= 0) return null;
 
       const confidenceScore = normalizeScore(row.confidence_score);
+      const productType = extractProductTypeFromAttributes(product.attributes);
 
       return {
         id: String(row.id),
@@ -1043,9 +1086,10 @@ function buildCategoryListings(
         updatedAt: row.updated_at ? String(row.updated_at) : null,
         confidenceScore,
         confidenceLevel: confidenceScore !== null ? toConfidenceLevel(confidenceScore) : null,
+        productType: productType ?? undefined,
       };
     })
-    .filter((listing): listing is CategoryListingRecord => listing !== null);
+    .filter((listing) => listing !== null) as CategoryListingRecord[];
 }
 
 function normalizeScore(value: unknown) {
@@ -1084,11 +1128,13 @@ async function fetchAllProducts(
   const products: CategoryProductRecord[] = [];
   let offset = 0;
   let includeCategory = true;
+  let includeAttributes = true;
 
   while (true) {
-    const columns = includeCategory
-      ? "id, name, slug, category, created_at"
-      : "id, name, slug, created_at";
+    const cols = ["id", "name", "slug"];
+    if (includeCategory) cols.push("category");
+    if (includeAttributes) cols.push("attributes");
+    const columns = cols.join(", ");
     const result = await supabase
       .from("products")
       .select(columns)
@@ -1098,6 +1144,10 @@ async function fetchAllProducts(
     if (result.error) {
       if (includeCategory && isMissingProductCategoryColumn(result.error)) {
         includeCategory = false;
+        continue;
+      }
+      if (includeAttributes && isMissingAttributesColumn(result.error)) {
+        includeAttributes = false;
         continue;
       }
 
@@ -1114,6 +1164,7 @@ async function fetchAllProducts(
           name: String(row.name),
           slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
           category: "category" in row && row.category ? String(row.category) : null,
+          attributes: "attributes" in row ? row.attributes : undefined,
           createdAt: row.created_at ? String(row.created_at) : null,
         })),
     );
@@ -1261,25 +1312,6 @@ function chunkArray<T>(values: T[], size: number) {
   return chunks;
 }
 
-function isMissingProductCategoryColumn(error: unknown) {
-  return isMissingColumn(error, "category");
-}
-
-function isMissingListingUpdatedAtColumn(error: unknown) {
-  return isMissingColumn(error, "updated_at");
-}
-
-function isMissingColumn(error: unknown, column: string) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes(column.toLowerCase())
-  );
-}
-
 function buildCategorySearches(
   events: CategorySearchEventRecord[],
   demands: CategorySearchDemandRecord[],
@@ -1302,6 +1334,7 @@ type CategoryProductRow = {
   name: string;
   slug?: string | null;
   category?: string | null;
+  attributes?: unknown;
   created_at?: string | null;
 };
 

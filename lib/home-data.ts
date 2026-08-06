@@ -3,7 +3,8 @@ import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-
 import { buildMarketPulse, type MarketPulse } from "@/lib/market-pulse";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
-import { normalizeProductTitle, extractBrand, detectCategory } from "@/lib/normalization/engine";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
+import { getCategoryForProductType } from "@/lib/taxonomy/product-type-mapping";
 
 export type { MarketPulseItem } from "@/lib/market-pulse";
 
@@ -198,20 +199,14 @@ export async function getHomeData(): Promise<HomeData> {
       if (!product || !Number.isFinite(price) || price <= 0) return null;
 
       let category = product.category ?? null;
-      if (!category) {
-        const normalized = normalizeProductTitle(product.name);
-        const brand = extractBrand(normalized);
-        category = detectCategory(normalized, brand) ?? null;
-      }
 
-      // Product Understanding Engine override: if the engine determined this
-      // product is an accessory, override the category. This catches cases
-      // like "iPhone 14 Pro Max Ekran Koruyucu" where the product IS an accessory
-      // even if the product name matches a phone pattern.
-      const attrs = product.attributes as Record<string, unknown> | null;
-      const pu = attrs?.productType as { value?: string; confidence?: number } | null;
-      if (pu?.value === "accessory") {
-        category = "Aksesuar";
+      // Product Understanding Engine override: resolve category from PUE productType.
+      // This catches cases like "iPhone 14 Pro Max Ekran Koruyucu" where the
+      // product IS an accessory even if the product name matches a phone pattern.
+      const pueProductType = extractProductTypeFromAttributes(product.attributes);
+      const pueCategory = getCategoryForProductType(pueProductType);
+      if (pueCategory) {
+        category = pueCategory;
       }
 
       return {
@@ -236,6 +231,10 @@ export async function getHomeData(): Promise<HomeData> {
     .filter((listing): listing is NonNullable<typeof listing> => Boolean(listing));
   const publicListings = normalizedListings.filter(
     (listing) => !isPublicDemoListing(listing),
+  );
+
+  const productLookup = new Map(
+    products.map((product) => [String(product.name), product]),
   );
 
   const searchCounts = new Map<string, number>();
@@ -275,7 +274,9 @@ export async function getHomeData(): Promise<HomeData> {
     { count: number; total: number; lowest: number }
   >();
   for (const listing of publicListings) {
-    if (listing.category === "Aksesuar") continue;
+    const product = productLookup.get(listing.productName);
+    const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
+    if (pt !== "primary_product") continue;
     const current = listedProductStats.get(listing.productName) ?? {
       count: 0,
       total: 0,
@@ -387,10 +388,18 @@ export async function getHomeData(): Promise<HomeData> {
     ...analyzedPriceOpportunities,
     ...fallbackOpportunities,
   ]
-    .filter((listing) => listing.category !== "Aksesuar")
+    .filter((listing) => {
+      const product = productLookup.get(listing.productName);
+      const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
+      return pt === "primary_product";
+    })
     .slice(0, 8);
   const priceDrops = publicListings
-    .filter((listing) => listing.category !== "Aksesuar")
+    .filter((listing) => {
+      const product = productLookup.get(listing.productName);
+      const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
+      return pt === "primary_product";
+    })
     .filter(
       (listing) =>
         listing.previousPrice !== null &&
@@ -463,7 +472,11 @@ export async function getHomeData(): Promise<HomeData> {
         name: String(product.name),
       })),
       listings: publicListings
-        .filter((listing) => listing.category !== "Aksesuar")
+        .filter((listing) => {
+          const product = productLookup.get(listing.productName);
+          const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
+          return pt === "primary_product";
+        })
         .map((listing) => ({
           productName: listing.productName,
           price: listing.price,

@@ -69,6 +69,7 @@ export type DuplicateScoreLike = {
   sourceDiversity: number;
   categoryScore: number;
   productTypeScore: number;
+  productUnderstandingScore: number;
 };
 
 export type ProductSignalsLike = {
@@ -79,4 +80,5 @@ export type ProductSignalsLike = {
   color?: string | null;
   category: string | null;
   normalizedKey: string;
+  productUnderstandingScore?: number | null;
 };

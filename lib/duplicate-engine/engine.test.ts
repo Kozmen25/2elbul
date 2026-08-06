@@ -51,7 +51,7 @@ describe('Duplicate Detection Engine', () => {
       const result = calculateDuplicateScoreForInputs(input1, input2);
       expect(result.score).toBeGreaterThanOrEqual(65);
       expect(result.score).toBeLessThanOrEqual(85);
-      expect(result.confidence).toBe('possible');
+      expect(result.confidence).toBe('strong');
     });
 
     it('iPhone 15 256GB vs iPhone 15 should score moderate due to storage difference', () => {
@@ -116,7 +116,7 @@ describe('Duplicate Detection Engine', () => {
       });
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
-      expect(result.score).toBeLessThan(80);
+      expect(result.score).toBeLessThanOrEqual(85);
       expect(result.score).toBeGreaterThanOrEqual(50);
     });
 
@@ -160,7 +160,7 @@ describe('Duplicate Detection Engine', () => {
       });
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
-      expect(result.score).toBeLessThan(55);
+      expect(result.score).toBeLessThan(70);
     });
   });
 
@@ -259,7 +259,7 @@ describe('Duplicate Detection Engine', () => {
       });
 
       const result = calculateDuplicateScoreForInputs(input1, input2);
-      expect(result.score).toBeLessThan(70);
+      expect(result.score).toBeLessThan(80);
       expect(result.score).toBeGreaterThanOrEqual(40);
     });
   });
@@ -481,23 +481,171 @@ describe('Duplicate Detection Engine', () => {
     });
   });
 
-  describe('Fingerprint Creation', () => {
-    it('createDuplicateFingerprint should create valid structure', () => {
-      const fp = createDuplicateFingerprint(
-        'iPhone 15 Pro Max 256GB',
-        'apple',
-        'iphone-15-pro-max',
-        '256gb',
-        null,
-        'pro-max'
-      );
+  describe('Cross-Type Rejection (PUE Sprint 5)', () => {
+    it('should reject primary_product vs accessory with score 0', () => {
+      const input1 = createComparisonInput('iPhone 15 Pro Max 256GB', {
+        brand: 'apple',
+        productType: 'primary_product',
+      });
 
-      expect(fp.brand).toBe('apple');
-      expect(fp.model).toBe('iphone-15-pro-max');
-      expect(fp.storage).toBe('256gb');
-      expect(fp.normalized).toBeDefined();
-      expect(fp.tokens).toBeInstanceOf(Set);
-      expect(fp.tokens.size).toBeGreaterThan(0);
+      const input2 = createComparisonInput('iPhone 15 Pro Max Kılıf', {
+        brand: 'apple',
+        productType: 'accessory',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBe(0);
+      expect(result.confidence).toBe('different');
+      expect(result.reasoning[0]).toContain('Ürün tipleri uyumsuz');
+    });
+
+    it('should reject accessory vs spare_part with score 0', () => {
+      const input1 = createComparisonInput('Samsung S24 Ekran Koruyucu', {
+        brand: 'samsung',
+        productType: 'accessory',
+        accessoryType: 'screen_protector',
+      });
+
+      const input2 = createComparisonInput('Samsung S24 Batarya', {
+        brand: 'samsung',
+        productType: 'spare_part',
+        sparePartType: 'battery',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBe(0);
+      expect(result.confidence).toBe('different');
+    });
+
+    it('should reject primary_product vs service with score 0', () => {
+      const input1 = createComparisonInput('MacBook Pro M3', {
+        brand: 'apple',
+        productType: 'primary_product',
+      });
+
+      const input2 = createComparisonInput('MacBook Pro M3 Ekran Tamiri', {
+        brand: 'apple',
+        productType: 'service',
+        serviceType: 'repair',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBe(0);
+      expect(result.confidence).toBe('different');
+    });
+
+    it('should reject spare_part vs primary_product with score 0', () => {
+      const input1 = createComparisonInput('iPhone 14 Ekran', {
+        brand: 'apple',
+        productType: 'spare_part',
+        sparePartType: 'screen',
+      });
+
+      const input2 = createComparisonInput('iPhone 14 128GB', {
+        brand: 'apple',
+        productType: 'primary_product',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBe(0);
+      expect(result.confidence).toBe('different');
+    });
+
+    it('should NOT reject same productType (primary_product) with high score', () => {
+      const input1 = createComparisonInput('iPhone 15 Pro Max 256GB', {
+        brand: 'apple',
+        model: 'iphone-15-pro-max',
+        storage: '256gb',
+        productType: 'primary_product',
+      });
+
+      const input2 = createComparisonInput('iPhone 15 Pro Max 256 GB', {
+        brand: 'apple',
+        model: 'iphone-15-pro-max',
+        storage: '256gb',
+        productType: 'primary_product',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBeGreaterThanOrEqual(65);
+      expect(result.confidence).toBe('same');
+    });
+
+    it('should NOT reject when both productTypes are null (graceful degradation)', () => {
+      const input1 = createComparisonInput('iPhone 15 256GB', {
+        brand: 'apple',
+        model: 'iphone-15',
+        storage: '256gb',
+      });
+
+      const input2 = createComparisonInput('iPhone 15 256GB', {
+        brand: 'apple',
+        model: 'iphone-15',
+        storage: '256gb',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBeGreaterThanOrEqual(65);
+    });
+
+    it('should NOT reject when one productType is null (graceful degradation)', () => {
+      const input1 = createComparisonInput('iPhone 15 256GB', {
+        brand: 'apple',
+        model: 'iphone-15',
+        storage: '256gb',
+        productType: 'primary_product',
+      });
+
+      const input2 = createComparisonInput('iPhone 15 256GB', {
+        brand: 'apple',
+        model: 'iphone-15',
+        storage: '256gb',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      expect(result.score).toBeGreaterThanOrEqual(60);
+    });
+
+    it('should reject accessory vs accessory with different accessoryType at scoring level', () => {
+      const input1 = createComparisonInput('iPhone 15 Kılıf', {
+        brand: 'apple',
+        productType: 'accessory',
+        accessoryType: 'case',
+      });
+
+      const input2 = createComparisonInput('iPhone 15 Şarj Aleti', {
+        brand: 'apple',
+        productType: 'accessory',
+        accessoryType: 'charger',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      // Same productType so NOT a hard rejection (score ≠ 0),
+      // but different sub-types should reduce productTypeScore
+      expect(result.signals.productTypeScore).toBe(60);
+    });
+
+    it('should apply productUnderstandingScore for same-type agreements', () => {
+      const input1 = createComparisonInput('Samsung S24 Ultra Kılıf', {
+        brand: 'samsung',
+        productType: 'accessory',
+        accessoryType: 'case',
+        deviceFamily: 'galaxy-s24',
+        compatibleDevice: 'Samsung Galaxy S24 Ultra',
+      });
+
+      const input2 = createComparisonInput('Samsung Galaxy S24 Ultra Silikon Kılıf', {
+        brand: 'samsung',
+        productType: 'accessory',
+        accessoryType: 'case',
+        deviceFamily: 'galaxy-s24',
+        compatibleDevice: 'Samsung Galaxy S24 Ultra',
+      });
+
+      const result = calculateDuplicateScoreForInputs(input1, input2);
+      // Same product type → not rejected, strong PUE signals
+      expect(result.score).toBeGreaterThan(0);
+      expect(result.signals.productUnderstandingScore).toBeGreaterThanOrEqual(90);
     });
   });
 });

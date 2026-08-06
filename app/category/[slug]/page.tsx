@@ -32,6 +32,7 @@ import {
   formatOpportunityLevel,
 } from "@/lib/opportunity-engine";
 import type { MarketPulseItem } from "@/lib/market-pulse";
+import { getCategoryForProductType } from "@/lib/taxonomy/product-type-mapping";
 
 type CategoryPageProps = {
   params: Promise<{ slug: string }>;
@@ -114,6 +115,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     brandDistribution,
     faqItems,
     jsonLd,
+    expectedProductType,
+    attributeFilters,
   } = categoryData;
   const hasEnoughData = marketIntelligence.sampleSize >= 3;
   const sourceLabel = formatMarketIntelligenceSources(
@@ -245,6 +248,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               value={formatOpportunityLevel(opportunityAnalysis.riskLevel)}
             />
           </div>
+
+          {expectedProductType ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[#ff6b00]/18 bg-[#fff7f1] px-3 py-1.5 text-xs font-black uppercase tracking-[0.04em] text-[#d95700]">
+                {getCategoryForProductType(expectedProductType) ?? expectedProductType}
+              </span>
+            </div>
+          ) : null}
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
             <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">

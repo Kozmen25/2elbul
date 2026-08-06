@@ -28,7 +28,7 @@ export function fuseProductTypeSignals(
 ): { value: ProductType; confidence: number } {
   const active = signals.filter((s) => s.weight > 0 && s.confidence > 0);
   if (active.length === 0) {
-    return { value: "primary_product", confidence: 50 };
+    return { value: "primary_product", confidence: 0 };
   }
 
   // Group by value, compute weighted average
@@ -53,7 +53,7 @@ export function fuseProductTypeSignals(
     .sort((a, b) => b.confidence - a.confidence);
 
   if (candidates.length === 0) {
-    return { value: "primary_product", confidence: 50 };
+    return { value: "primary_product", confidence: 0 };
   }
 
   // Single candidate

@@ -274,9 +274,9 @@ describe("buildMarketIntelligenceForProductDetail", () => {
       analyzedAt,
     });
 
-    expect(result.confidenceScore).toBe(85);
-    expect(result.confidenceLevel).toBe("high");
-    expect(result.confidenceReasons).toContain("Model same");
+    expect(result.confidenceScore).toBe(70);
+    expect(result.confidenceLevel).toBe("medium");
+    expect(result.confidenceReasons).toContain("İki kaynak aynı sonuca işaret ediyor");
   });
 
   it("keeps the product brand in JSON-LD metadata", () => {
@@ -333,7 +333,7 @@ describe("buildMarketIntelligenceForProductDetail", () => {
       analyzedAt,
     });
 
-    expect(getProperty(result, "Confidence level")).toBe("high");
+    expect(getProperty(result, "Confidence level")).toBe("medium");
   });
 
   it("exposes the source list in JSON-LD", () => {

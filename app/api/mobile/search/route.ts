@@ -1,7 +1,9 @@
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isMissingStatusColumn } from "@/lib/listing-status";
-import { resolveSearchIntent, scoreSearchResult } from "@/lib/search-intent";
+import { detectQueryIntent } from "@/lib/search/query-intent-detector";
+import { attachPueScore } from "@/lib/search/pue-ranking";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
+import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
 import { createProductSlug } from "@/lib/product-slug";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { mobileSuccess, mobileError } from "@/lib/mobile/response";
@@ -57,21 +59,20 @@ export async function GET(request: NextRequest) {
     return mobileError("Supabase bağlantısı yapılandırılmamış.", 500);
   }
 
-  const intent = resolveSearchIntent(query);
-  const searchTerms = intent.terms.slice(0, 48);
+  const intent = detectQueryIntent(query);
 
   const [matchingProductsResults, titleListingsResults] = await Promise.all([
     Promise.all(
-      searchTerms.map((term) =>
+      [query].map((term) =>
         supabase
           .from("products")
-          .select("id, name, category")
-          .ilike("name", `%${term.term}%`),
+          .select("id, name, category, attributes")
+          .ilike("name", `%${term}%`),
       ),
     ),
     Promise.all(
-      searchTerms.map((term) =>
-        searchPublishedListingsByTitle(supabase, `%${term.term}%`),
+      [query].map((term) =>
+        searchPublishedListingsByTitle(supabase, `%${term}%`),
       ),
     ),
   ]);
@@ -83,13 +84,14 @@ export async function GET(request: NextRequest) {
     return mobileError("İlanlar aranırken bir sorun oluştu.", 500);
   }
 
-  const matchingProductsById = new Map<string, { id: string | number; name: string; category: string | null }>();
+  const matchingProductsById = new Map<string, { id: string | number; name: string; category: string | null; attributes?: unknown }>();
   for (const result of matchingProductsResults) {
     for (const product of result.data ?? []) {
       matchingProductsById.set(String(product.id), {
         id: product.id,
         name: String(product.name),
         category: 'category' in product ? String(product.category) : null,
+        attributes: (product as { attributes?: unknown }).attributes,
       });
     }
   }
@@ -118,7 +120,17 @@ export async function GET(request: NextRequest) {
   const rows = [...rowsById.values()].filter((row) => !isPublicDemoListing(row));
   const productIds = [...new Set(rows.map((row) => String(row.product_id)))];
   const productsResult = productIds.length
-    ? await supabase.from("products").select("id, name, slug, category").in("id", productIds)
+    ? await supabase
+        .from("products")
+        .select("id, name, slug, category, attributes")
+        .in("id", productIds)
+        .then((result) => {
+          if (!result.error || !isMissingAttributesColumn(result.error)) return result;
+          return supabase
+            .from("products")
+            .select("id, name, slug, category")
+            .in("id", productIds);
+        })
     : { data: [], error: null };
 
   if (productsResult.error) {
@@ -138,8 +150,18 @@ export async function GET(request: NextRequest) {
       ]),
   );
 
+  const productLookup = new Map<string, { attributes?: unknown }>(
+    (productsResult.data ?? [])
+      .filter((p) => !isPublicDemoProductName(String(p.name)))
+      .filter((p) => (p as { attributes?: unknown }).attributes != null)
+      .map((p) => [
+        String(p.id),
+        { attributes: (p as { attributes?: unknown }).attributes },
+      ]),
+  );
+
   let allListings: MobileSearchListingHit[] = rows
-    .map((row) => {
+    .map((row): MobileSearchListingHit | null => {
       const product = productData.get(String(row.product_id));
       if (!product) return null;
       return {
@@ -156,13 +178,14 @@ export async function GET(request: NextRequest) {
         productName: product.name,
         productSlug: product.slug as string | null,
         category: product.category ?? null,
-        score: scoreSearchResult(intent, {
-          title: String(row.title),
-          productName: product.name,
-        }),
+        productType: (() => {
+          const lookup = productLookup.get(String(row.product_id));
+          return lookup ? extractProductTypeFromAttributes(lookup.attributes) : null;
+        })(),
+        score: attachPueScore(intent, String(row.product_id), productLookup),
       };
     })
-    .filter((l): l is MobileSearchListingHit => l !== null);
+    .filter(Boolean) as MobileSearchListingHit[];
 
   // Apply filters
   if (minPrice !== null) allListings = allListings.filter((l) => l.price >= minPrice!);
@@ -256,15 +279,15 @@ export async function GET(request: NextRequest) {
 
   const pagination: MobilePagination = { page, limit, total, totalPages };
   const mobileIntent: MobileSearchIntent = {
-    query: intent.query,
-    label: intent.label,
-    matchedCategories: intent.matchedCategories.map((mc) => mc.slug),
-    isBroadCategory: intent.isBroadCategory,
+    query: intent.rawQuery,
+    label: intent.productType ?? null,
+    matchedCategories: [],
+    isBroadCategory: false,
   };
 
   const response: MobileSearchResponse = {
     query,
-    intent: intent.query ? mobileIntent : null,
+    intent: intent.rawQuery ? mobileIntent : null,
     products: productHits,
     listings: paginatedListings,
     filters,

@@ -1,10 +1,20 @@
 import { cache } from "react";
 import type { ConfidenceLevel } from "@/lib/confidence-engine";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import { isMissingStatusColumn, isMissingAttributesColumn, isMissingProductCategoryColumn, isMissingListingUpdatedAtColumn } from "@/lib/listing-status";
 import { calculateProductIntelligence } from "@/lib/intelligence-engine";
-import { buildMarketIntelligence, type MarketIntelligence, type MarketIntelligenceListing } from "@/lib/market-intelligence";
-import { toConfidenceResult, toConfidenceLevel } from "@/lib/market-intelligence/helpers";
+import {
+  buildMarketIntelligence,
+  type MarketIntelligence,
+  type MarketIntelligenceListing,
+} from "@/lib/market-intelligence";
+import {
+  dominantProductType,
+  extractProductTypeFromAttributes,
+  filterListingsByProductType,
+  toConfidenceResult,
+  toConfidenceLevel,
+} from "@/lib/market-intelligence/helpers";
 import { buildMarketPulse, type MarketPulse, type MarketPulseItem } from "@/lib/market-pulse";
 import { formatBrandDisplayName, extractBrand } from "@/lib/normalization";
 import { createProductSlug } from "@/lib/product-slug";
@@ -33,6 +43,7 @@ export type CityProductRecord = {
   name: string;
   slug: string;
   category: string | null;
+  attributes?: unknown;
 };
 
 export type CitySearchEventRecord = {
@@ -61,6 +72,7 @@ export type CityListingRecord = {
   updatedAt: string | null;
   confidenceScore: number | null;
   confidenceLevel: ConfidenceLevel | null;
+  productType?: string;
 };
 
 export type CityBrandDistributionEntry = {
@@ -165,6 +177,7 @@ type ProductRow = {
   name: string;
   slug?: string | null;
   category?: string | null;
+  attributes?: unknown;
 };
 
 export type CityListingRow = {
@@ -386,6 +399,10 @@ function buildCityPageDataFromRecords({
     })),
     [],
   );
+  const dominantType = dominantProductType(products);
+  const filteredListings = dominantType
+    ? filterListingsByProductType(listings, dominantType, new Map(products.map((p) => [p.id, p])))
+    : listings;
   const marketIntelligence = buildMarketIntelligence({
     scope: {
       productId: `city-${citySlug}`,
@@ -395,8 +412,9 @@ function buildCityPageDataFromRecords({
       category: "Şehir",
       brand: cityName,
       city: cityName,
+      productType: dominantType,
     },
-    listings: listings.map((listing) => ({
+    listings: filteredListings.map((listing) => ({
       id: listing.id,
       title: listing.title,
       price: listing.price,
@@ -706,6 +724,7 @@ function buildCityListings(
       if (!Number.isFinite(price) || price <= 0) return null;
 
       const confidenceScore = normalizeScore(row.confidence_score);
+      const productType = extractProductTypeFromAttributes(product.attributes);
 
       return {
         id: String(row.id),
@@ -722,9 +741,10 @@ function buildCityListings(
         updatedAt: row.updated_at ? String(row.updated_at) : null,
         confidenceScore,
         confidenceLevel: confidenceScore !== null ? toConfidenceLevel(confidenceScore) : null,
+        productType: productType ?? undefined,
       };
     })
-    .filter((listing): listing is CityListingRecord => listing !== null);
+    .filter((listing) => listing !== null) as CityListingRecord[];
 }
 
 function normalizeScore(value: unknown) {
@@ -818,10 +838,12 @@ async function fetchCityProducts(
   if (!productIds.length) return [];
 
   let includeCategory = true;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const columns = includeCategory
-      ? "id, name, slug, category"
-      : "id, name, slug";
+  let includeAttributes = true;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const cols = ["id", "name", "slug"];
+    if (includeCategory) cols.push("category");
+    if (includeAttributes) cols.push("attributes");
+    const columns = cols.join(", ");
     const result = await supabase
       .from("products")
       .select(columns)
@@ -830,6 +852,10 @@ async function fetchCityProducts(
     if (result.error) {
       if (includeCategory && isMissingProductCategoryColumn(result.error)) {
         includeCategory = false;
+        continue;
+      }
+      if (includeAttributes && isMissingAttributesColumn(result.error)) {
+        includeAttributes = false;
         continue;
       }
       console.error("City product query failed:", result.error);
@@ -843,6 +869,7 @@ async function fetchCityProducts(
         name: String(row.name),
         slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
         category: "category" in row && row.category ? String(row.category) : null,
+        attributes: "attributes" in row ? row.attributes : undefined,
       }));
   }
 
@@ -912,25 +939,6 @@ function buildCitySearches(
       createdAt: demand.createdAt,
     })),
   ];
-}
-
-function isMissingProductCategoryColumn(error: unknown) {
-  return isMissingColumn(error, "category");
-}
-
-function isMissingListingUpdatedAtColumn(error: unknown) {
-  return isMissingColumn(error, "updated_at");
-}
-
-function isMissingColumn(error: unknown, column: string) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes(column.toLowerCase())
-  );
 }
 
 export { CITY_LISTING_BATCH_SIZE };

@@ -115,19 +115,27 @@ export function scoreOpportunityIntelligenceOpportunity(value: number | null | u
   return 24;
 }
 
+export function scoreOpportunityProductTypeMatch(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value >= 90) return 98;
+  if (value >= 50) return 72;
+  return 18;
+}
+
 export function calculateOpportunityScore(context: OpportunitySignalContext): number {
   if (context.sampleSize <= 0) return 0;
 
   const weightedSignals: Array<[number | null, number]> = [
-    [scoreOpportunityPriceAdvantage(context.priceAdvantagePercent), 0.22],
-    [scoreOpportunityDecisionEdge(context.buyScore, context.waitScore), 0.18],
-    [scoreOpportunityIntelligenceOpportunity(context.opportunityScoreFromIntelligence), 0.12],
-    [scoreOpportunityConfidence(context.confidenceScore), 0.15],
-    [scoreOpportunitySampleSize(context.sampleSize), 0.11],
-    [scoreOpportunitySourceCount(context.sourceCount), 0.08],
-    [scoreOpportunityDuplicateDensity(context.duplicateDensity), 0.08],
+    [scoreOpportunityPriceAdvantage(context.priceAdvantagePercent), 0.18],
+    [scoreOpportunityDecisionEdge(context.buyScore, context.waitScore), 0.16],
+    [scoreOpportunityIntelligenceOpportunity(context.opportunityScoreFromIntelligence), 0.10],
+    [scoreOpportunityConfidence(context.confidenceScore), 0.13],
+    [scoreOpportunitySampleSize(context.sampleSize), 0.10],
+    [scoreOpportunitySourceCount(context.sourceCount), 0.07],
+    [scoreOpportunityDuplicateDensity(context.duplicateDensity), 0.07],
     [scoreOpportunityPriceSpread(context.priceSpreadPercent), 0.04],
-    [scoreOpportunityFreshness(context.dataFreshness), 0.02],
+    [scoreOpportunityFreshness(context.dataFreshness), 0.03],
+    [scoreOpportunityProductTypeMatch(context.productTypeMatchScore), 0.12],
   ];
 
   let weightedScore = 0;

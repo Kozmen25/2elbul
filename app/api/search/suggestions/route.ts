@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { createProductSlug } from "@/lib/product-slug";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
+import { detectQueryIntent } from "@/lib/search/query-intent-detector";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { cacheGet, cacheSet, cacheKeyFrom } from "@/lib/cache";
 
 type ProductRow = {
   id: string | number;
   name: string;
+  attributes?: unknown;
 };
 
 type ListingProductRow = {
@@ -61,7 +63,7 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
   const [productsResult, listingsResult] = await Promise.all([
     supabase
       .from("products")
-      .select("id, name")
+      .select("id, name, attributes")
       .ilike("name", pattern)
       .limit(12),
     searchListingsByTitle(pattern),
@@ -95,7 +97,7 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
 
   const { data, error } = await supabase
     .from("products")
-    .select("id, name")
+    .select("id, name, attributes")
     .in("id", [...productIds])
     .limit(50);
 
@@ -104,7 +106,12 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
     return [];
   }
 
-  const result = toSuggestions((data ?? []) as ProductRow[], counts, query);
+  const result = toSuggestions(
+    (data ?? []) as ProductRow[],
+    counts,
+    query,
+    detectQueryIntent(query),
+  );
   cacheSet(cacheKey, result, 30_000);
   return result;
 }
@@ -134,7 +141,7 @@ async function getPopularSuggestions(): Promise<Suggestion[]> {
   if (!counts.size) {
     const { data, error } = await supabase
       .from("products")
-      .select("id, name")
+      .select("id, name, attributes")
       .order("created_at", { ascending: false })
       .limit(MAX_SUGGESTIONS);
 
@@ -148,7 +155,7 @@ async function getPopularSuggestions(): Promise<Suggestion[]> {
 
   const { data, error } = await supabase
     .from("products")
-    .select("id, name")
+    .select("id, name, attributes")
     .in("id", [...counts.keys()])
     .limit(50);
 
@@ -200,15 +207,37 @@ async function searchRecentListingProducts() {
     .limit(400);
 }
 
+/**
+ * Extract PUE productType with confidence from a product's attributes.
+ * Returns null when data is missing or malformed.
+ */
+function getPueProductType(attributes: unknown): { value: string; confidence: number } | null {
+  if (!attributes || typeof attributes !== "object") return null;
+  const record = attributes as Record<string, unknown>;
+  const pu = record.productUnderstanding as Record<string, unknown> | undefined;
+  if (!pu || typeof pu !== "object") return null;
+  const pt = pu.productType as { value?: unknown; confidence?: unknown } | undefined;
+  if (!pt || typeof pt !== "object") return null;
+  if (typeof pt.value !== "string" || pt.value.length === 0) return null;
+  return { value: pt.value, confidence: typeof pt.confidence === "number" ? pt.confidence : 0 };
+}
+
 function toSuggestions(
   products: ProductRow[],
   counts: Map<string, number>,
   query = "",
+  intent?: { productType: string | null },
 ): Suggestion[] {
   const normalizedQuery = query.toLocaleLowerCase("tr-TR");
 
   return products
     .filter((product) => !isPublicDemoProductName(String(product.name)))
+    .filter((product) => {
+      if (!intent?.productType) return true;
+      const pue = getPueProductType(product.attributes);
+      if (!pue || pue.confidence < 70) return true;
+      return pue.value === intent.productType;
+    })
     .map((product) => ({
       id: String(product.id),
       name: String(product.name),

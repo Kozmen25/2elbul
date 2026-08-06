@@ -10,6 +10,10 @@ import {
 import type { BotAdapterListing } from "@/lib/bots/types";
 import { isSupportedScrapeSource, runSourceScrapeBot } from "@/lib/bots/source-runner";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import {
+  isMissingBotListingStatusColumn,
+  isMissingIntegrationSettingsColumn,
+} from "@/lib/listing-status";
 import { createDemoListings } from "./demo-data";
 
 export type SourceInput = {
@@ -532,40 +536,6 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
   return "Bilinmeyen bot hatası";
-}
-
-function isMissingBotListingStatusColumn(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    (text.includes("bot_listing_status") &&
-      (text.includes("column") || text.includes("schema cache")))
-  );
-}
-
-function isMissingIntegrationSettingsColumn(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    [
-      "api_url",
-      "scrape_url",
-      "cron_enabled",
-      "cron_schedule",
-      "product_limit",
-      "fetch_limit",
-      "integration_type",
-      "bot_import_mode",
-      "last_success",
-    ]
-      .some((column) => text.includes(column))
-  );
 }
 
 function withoutIntegrationSettings<T extends Record<string, unknown>>(

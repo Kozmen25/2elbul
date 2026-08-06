@@ -5,10 +5,11 @@ import type {
   ListingCondition,
   ListingSource,
 } from "@/lib/listings";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
 import { buildProductPriceStats } from "@/lib/price-analysis";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
-import { resolveSearchIntent, scoreSearchResult } from "@/lib/search-intent";
+import { detectQueryIntent } from "@/lib/search/query-intent-detector";
+import { rankListingsByPue } from "@/lib/search/pue-ranking";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getMetadataBase, getAbsoluteUrl } from "@/lib/site-url";
@@ -84,8 +85,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   let listings: Listing[] = [];
   let loadError = "";
   let favoriteListingIds: string[] = [];
-  let searchIntentLabel: string | null = null;
   let productCategory: Map<string, string | null> = new Map();
+  let productAttributes = new Map<string, { attributes?: unknown }>();
 
   const serverSupabase = await createSupabaseServerClient();
   const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
@@ -97,19 +98,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     loadError =
       "Supabase bağlantısı yapılandırılmamış. Ortam değişkenlerini kontrol edin.";
   } else if (query) {
-    const intent = resolveSearchIntent(query);
-    searchIntentLabel = intent.label;
-    const searchTerms = intent.terms.slice(0, 48);
     const [matchingProductsResults, titleListingsResults] = await Promise.all([
       Promise.all(
-        searchTerms.map((term) => {
-          const cacheKey = cacheKeyFrom({ type: "product-search", term: term.term });
+        [query].map((term) => {
+          const cacheKey = cacheKeyFrom({ type: "product-search", term });
           const cached = cacheGet<{ id: string | number; name: string; category: string | null }[]>(cacheKey);
           if (cached) return { data: cached, error: null };
           return supabase
             .from("products")
             .select("id, name, category")
-            .ilike("name", `%${term.term}%`)
+            .ilike("name", `%${term}%`)
             .then((result) => {
               if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
               return result;
@@ -117,11 +115,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         }),
       ),
       Promise.all(
-        searchTerms.map((term) => {
-          const cacheKey = cacheKeyFrom({ type: "listing-title-search", term: term.term });
+        [query].map((term) => {
+          const cacheKey = cacheKeyFrom({ type: "listing-title-search", term });
           const cached = cacheGet<{ id: string | number; title: string; product_id: string | number; price: string | number; city: string; source: ListingSource; url: string; condition: ListingCondition; image_url: string | null; created_at: string }[]>(cacheKey);
           if (cached) return { data: cached, error: null };
-          return searchPublishedListingsByTitle(supabase, `%${term.term}%`)
+          return searchPublishedListingsByTitle(supabase, `%${term}%`)
             .then((result) => {
               if (!result.error) cacheSet(cacheKey, result.data ?? [], 15_000);
               return result;
@@ -200,14 +198,22 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         const productsResult = productIds.length
           ? await (async () => {
               const cacheKey = cacheKeyFrom({ type: "product-names", ids: productIds });
-              const cached = cacheGet<{ id: string | number; name: string; category: string | null }[]>(cacheKey);
+              const cached = cacheGet<{ id: string | number; name: string; category: string | null; attributes?: unknown }[]>(cacheKey);
               if (cached) return { data: cached, error: null };
               const result = await supabase
                 .from("products")
+                .select("id, name, category, attributes")
+                .in("id", productIds);
+              if (!result.error || !isMissingAttributesColumn(result.error)) {
+                if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
+                return result;
+              }
+              const fallback = await supabase
+                .from("products")
                 .select("id, name, category")
                 .in("id", productIds);
-              if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
-              return result;
+              if (!fallback.error) cacheSet(cacheKey, fallback.data ?? [], 60_000);
+              return fallback;
             })()
           : { data: [], error: null };
 
@@ -237,36 +243,42 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               ]),
           );
 
-          listings = rows
-            .map((row) => ({
-              id: String(row.id),
-              productId: String(row.product_id),
-              title: String(row.title),
-              productName:
-                productNames.get(String(row.product_id)) ?? "Diğer",
-              category:
-                productCategory.get(String(row.product_id)) ?? null,
-              price: Number(row.price),
-              city: String(row.city),
-              source: row.source,
-              url: String(row.url),
-              condition: row.condition,
-              imageUrl: row.image_url ? String(row.image_url) : null,
-              createdAt: String(row.created_at),
-            }))
-            .sort((a, b) => {
-              const scoreDifference =
-                scoreSearchResult(intent, {
-                  title: b.title,
-                  productName: b.productName,
-                }) -
-                scoreSearchResult(intent, {
-                  title: a.title,
-                  productName: a.productName,
-                });
-              if (scoreDifference !== 0) return scoreDifference;
-              return a.price - b.price;
-            });
+          productAttributes = new Map<string, { attributes?: unknown }>(
+            (productsResult.data ?? [])
+              .filter((product) => !isPublicDemoProductName(String(product.name)))
+              .filter((product) => (product as { attributes?: unknown }).attributes != null)
+              .map((product) => [
+                String(product.id),
+                { attributes: (product as { attributes?: unknown }).attributes },
+              ]),
+          );
+
+          const intent = detectQueryIntent(query);
+          const pueListings = rows.map((row) => ({
+            id: String(row.id),
+            productId: String(row.product_id),
+            title: String(row.title),
+            productName:
+              productNames.get(String(row.product_id)) ?? "Diğer",
+            category:
+              productCategory.get(String(row.product_id)) ?? null,
+            price: Number(row.price),
+            city: String(row.city),
+            source: row.source,
+            url: String(row.url),
+            condition: row.condition,
+            imageUrl: row.image_url ? String(row.image_url) : null,
+            createdAt: String(row.created_at),
+          }));
+          const scored = rankListingsByPue(
+            intent,
+            pueListings.map((l) => ({ productId: l.productId, price: l.price, title: l.title })),
+            productAttributes,
+          );
+          const scoredIndex = new Map(scored.map((s, i) => [`${s.productId}:${s.price}:${s.title}`, i]));
+          listings = [...pueListings].sort(
+            (a, b) => (scoredIndex.get(`${a.productId}:${a.price}:${a.title}`) ?? 0) - (scoredIndex.get(`${b.productId}:${b.price}:${b.title}`) ?? 0)
+          );
         }
       }
     }
@@ -324,11 +336,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         initialListings={listings}
         productPriceStats={productPriceStats}
         productCategories={Object.fromEntries(productCategory)}
+        productAttributes={Object.fromEntries(productAttributes)}
         loadError={loadError}
         favoriteListingIds={favoriteListingIds}
         isAuthenticated={isAuthenticated}
         shouldQueueSearchDemand={Boolean(query && listings.length < 3 && !loadError)}
-        searchIntentLabel={searchIntentLabel}
       />
     </>
   );

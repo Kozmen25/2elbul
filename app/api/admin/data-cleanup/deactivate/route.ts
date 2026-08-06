@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { getPublicDemoListingReasons } from "@/lib/public-data-cleanup";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { isMissingColumnStrict } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -143,7 +144,7 @@ async function fetchListingCandidate(
     };
   }
 
-  if (!isMissingColumn(statusSelect.error, "status")) {
+  if (!isMissingColumnStrict(statusSelect.error, "status")) {
     return { listing: null, mode: "none", error: statusSelect.error };
   }
 
@@ -161,7 +162,7 @@ async function fetchListingCandidate(
     };
   }
 
-  if (!isMissingColumn(activeSelect.error, "is_active")) {
+  if (!isMissingColumnStrict(activeSelect.error, "is_active")) {
     return { listing: null, mode: "none", error: activeSelect.error };
   }
 
@@ -202,16 +203,4 @@ function normalizeListingId(value: unknown) {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
   return /^[0-9a-fA-F-]+$/.test(trimmed) ? trimmed : "";
-}
-
-function isMissingColumn(error: unknown, column: string) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    (text.includes(column.toLowerCase()) &&
-      (text.includes("column") || text.includes("schema cache")))
-  );
 }

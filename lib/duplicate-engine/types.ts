@@ -13,6 +13,7 @@ export interface DuplicateScore {
   sourceDiversity: number;
   categoryScore: number;
   productTypeScore: number;
+  productUnderstandingScore: number;
 }
 
 export interface DuplicateResult extends ConfidenceMetadata {
@@ -29,6 +30,7 @@ export interface DuplicateFingerprint {
   ram: string | null;
   variant: string | null;
   category: string | null;
+  productType: string | null;
   normalized: string;
   tokens: Set<string>;
 }
@@ -44,6 +46,11 @@ export interface ComparisonInput {
   sourceId?: number | null;
   category?: string | null;
   productType?: string | null;
+  accessoryType?: string | null;
+  sparePartType?: string | null;
+  serviceType?: string | null;
+  deviceFamily?: string | null;
+  compatibleDevice?: string | null;
 }
 
 export interface DuplicateMatch extends ConfidenceMetadata {

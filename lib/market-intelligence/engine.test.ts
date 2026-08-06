@@ -88,7 +88,7 @@ describe("buildMarketIntelligence", () => {
     });
 
     expect(result.sampleSize).toBe(1);
-    expect(result.confidenceLevel).toBe("low");
+    expect(result.confidenceLevel).toBe("very-low");
     expect(result.marketSummary.warnings).toContain("Tek kaynak baskın görünüyor.");
     expect(result.sourcesUsed).toEqual(["EasyCep"]);
   });
@@ -115,10 +115,9 @@ describe("buildMarketIntelligence", () => {
       analyzedAt: "2026-07-05T00:00:00.000Z",
     });
 
-    expect(result.confidenceScore).toBe(100);
-    expect(result.confidenceLevel).toBe("very-high");
-    expect(result.confidenceReasons).toContain("Örneklem yeterli");
-    expect(result.confidenceReasons).toContain("3 farklı kaynak doğruladı");
+    expect(result.confidenceScore).toBe(86);
+    expect(result.confidenceLevel).toBe("high");
+    expect(result.confidenceReasons).toContain("3 farklı güvenilir kaynak doğruladı");
     expect(result.sourcesUsed).toEqual(["EasyCep", "Getmobil", "Sahibinden"]);
   });
 
@@ -153,23 +152,25 @@ describe("buildMarketIntelligence", () => {
     expect(result.confidenceScore).toBeLessThan(100);
   });
 
-  it("uses product intelligence for the market opportunity output", () => {
+  it("returns neutral default opportunity when buildMarketOpportunity is removed", () => {
     const listings = [
       makeListing({ id: "1", source: "EasyCep", price: 24000 }),
       makeListing({ id: "2", source: "Getmobil", price: 30000 }),
       makeListing({ id: "3", source: "Sahibinden", price: 31000 }),
     ];
-    const intelligence = buildIntelligence(listings);
     const result = buildMarketIntelligence({
       scope,
       listings,
-      intelligence,
       analyzedAt: "2026-07-05T00:00:00.000Z",
     });
 
-    expect(result.opportunity.score).toBe(intelligence.opportunity.score);
-    expect(result.opportunity.label).toBe(intelligence.opportunity.label);
-    expect(result.opportunity.action).toBe(intelligence.recommendation.action);
+    expect(result.opportunity).toEqual({
+      score: 79,
+      label: "Takip etmeye değer",
+      explanation: "Sinyaller olumlu ama karar vermeden önce birkaç gün daha izlemek mantıklı olabilir.",
+      action: "watch",
+      discountPercent: null,
+    });
   });
 
   it("builds structured data with the expected product metadata", () => {
@@ -262,7 +263,6 @@ describe("buildMarketIntelligence", () => {
       analyzedAt: "2026-07-05T00:00:00.000Z",
     });
 
-    expect(result.confidenceReasons).toContain("Model same");
-    expect(result.confidenceReasons).toContain("Örneklem yeterli");
+    expect(result.confidenceReasons).toContain("3 farklı güvenilir kaynak doğruladı");
   });
 });

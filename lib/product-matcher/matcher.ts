@@ -9,6 +9,7 @@ import {
   findExistingMatchedProduct,
 } from "./repository";
 import { isDuplicateError } from "./helpers";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import type {
   BatchMatchCandidate,
   BatchMatcherInput,
@@ -22,6 +23,7 @@ type MatcherState = {
   signals: ReturnType<typeof extractProductSignals>;
   canonicalName: string;
   canonicalKey: string;
+  productType?: string | null;
 };
 
 export async function dryRunProductMatch({
@@ -31,8 +33,9 @@ export async function dryRunProductMatch({
   category,
   source,
   resolver,
+  attributes,
 }: FindOrCreateMatchedProductInput): Promise<ProductMatcherDryRunResult> {
-  const state = prepareMatcherState(title, productName, resolver);
+  const state = prepareMatcherState(title, productName, resolver, attributes);
   const matchedProduct = await findExistingMatchedProduct(
     supabase,
     state.canonicalName,
@@ -71,8 +74,9 @@ export async function findOrCreateMatchedProduct({
   category,
   source,
   resolver,
+  attributes,
 }: FindOrCreateMatchedProductInput): Promise<MatchedProduct> {
-  const state = prepareMatcherState(title, productName, resolver);
+  const state = prepareMatcherState(title, productName, resolver, attributes);
   const confidence = buildProductConfidenceMetadata(state.signals, {
     normalizedTitle: state.normalizedTitle,
     canonicalTitle: state.canonicalName,
@@ -141,18 +145,21 @@ function prepareMatcherState(
   title: string,
   productName: string | null | undefined,
   resolver?: ICategoryResolver,
+  attributes?: unknown,
 ): MatcherState {
   const combinedTitle = `${productName ?? ""} ${title}`.trim();
   const normalizedTitle = normalizeProductTitle(combinedTitle);
   const signals = extractProductSignals(combinedTitle, resolver);
   const canonicalName = createCanonicalProductName(signals, productName || title);
   const canonicalKey = signals.normalizedKey;
+  const productType = extractProductTypeFromAttributes(attributes);
 
   return {
     normalizedTitle,
     signals,
     canonicalName,
     canonicalKey,
+    productType,
   };
 }
 
@@ -164,7 +171,7 @@ export async function batchFindOrCreateMatchedProducts(
   if (inputs.length === 0) return [];
 
   const states = inputs.map((input) =>
-    prepareMatcherState(input.title, input.productName, resolver),
+    prepareMatcherState(input.title, input.productName, resolver, input.attributes),
   );
 
   const candidates: BatchMatchCandidate[] = states.map((s) => ({

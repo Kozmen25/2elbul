@@ -1,6 +1,7 @@
 import { Bot } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { isMissingColumnArray } from "@/lib/listing-status";
 import {
   BotCenterClient,
   type SourceHealthMonitor,
@@ -89,7 +90,7 @@ async function loadBotMonitors() {
     .order("created_at", { ascending: false })
     .limit(200);
 
-  if (runsResult.error && isMissingColumn(runsResult.error, ["matched_product_count"])) {
+  if (runsResult.error && isMissingColumnArray(runsResult.error, ["matched_product_count"])) {
     runsResult = await supabase
       .from("bot_runs")
       .select(
@@ -166,7 +167,7 @@ async function loadSourceHealth(): Promise<SourceHealthMonitor[]> {
     )
     .order("name", { ascending: true });
 
-  if (sourcesResult.error && isMissingColumn(sourcesResult.error, ["api_url"])) {
+  if (sourcesResult.error && isMissingColumnArray(sourcesResult.error, ["api_url"])) {
     sourcesResult = await supabase
       .from("sources")
       .select(
@@ -196,7 +197,7 @@ async function loadSourceHealth(): Promise<SourceHealthMonitor[]> {
     .order("created_at", { ascending: false })
     .limit(500);
 
-  if (runsResult.error && isMissingColumn(runsResult.error, ["matched_product_count"])) {
+  if (runsResult.error && isMissingColumnArray(runsResult.error, ["matched_product_count"])) {
     runsResult = await supabase
       .from("bot_runs")
       .select(
@@ -312,15 +313,4 @@ function emptyMonitor(task: BotTask, botName: string) {
     errorCount: 0,
     durationMs: null,
   };
-}
-
-function isMissingColumn(error: unknown, columns: string[]) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    columns.some((column) => text.includes(column))
-  );
 }

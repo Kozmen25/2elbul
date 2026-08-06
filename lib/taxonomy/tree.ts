@@ -25,6 +25,7 @@ class CategoryTreeBuilder {
       level,
       aliases: legacyNode.aliases || [],
       keywords: legacyNode.keywords || [],
+      productType: legacyNode.productType,
       metadata: {
         sourceHints: legacyNode.sourceHints,
         priority: legacyNode.priority,

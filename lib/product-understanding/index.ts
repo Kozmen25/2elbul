@@ -5,6 +5,7 @@ export type {
   AccessoryType,
   SparePartType,
   ServiceType,
+  ProductIntent,
   ProductTypeSignal,
   ScoredValue,
 } from "./types";

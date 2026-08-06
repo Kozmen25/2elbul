@@ -1,4 +1,5 @@
 import type { DuplicateScore, ComparisonInput } from './types';
+import { CATEGORY_LABELS } from "@/lib/taxonomy/product-type-mapping";
 
 export function calculateNormalizationScore(
   norm1: string,
@@ -96,7 +97,7 @@ export function calculateRamScore(
   ram2: string | null | undefined,
   category?: string | null
 ): number {
-  if (category && category !== 'Telefon') return 100;
+  if (category && category !== CATEGORY_LABELS.PHONE) return 100;
 
   if (!ram1 && !ram2) return 100;
   if (!ram1 || !ram2) return 70;
@@ -222,13 +223,105 @@ export function calculateCategoryScore(
   return category1.toLowerCase() === category2.toLowerCase() ? 100 : 0;
 }
 
-export function calculateProductTypeScore(
+export function isProductTypeConflict(
   type1: string | null | undefined,
   type2: string | null | undefined
+): boolean {
+  // Both null → no data, no conflict
+  if (!type1 && !type2) return false;
+  // One null, one known → partial data, let scoring handle it
+  if (!type1 || !type2) return false;
+
+  const t1 = type1.toLowerCase();
+  const t2 = type2.toLowerCase();
+
+  // Same type → no conflict
+  if (t1 === t2) return false;
+
+  // Conflict matrix: any different type pair is a conflict
+  return true;
+}
+
+export function calculateProductTypeScore(
+  type1: string | null | undefined,
+  type2: string | null | undefined,
+  subType1?: string | null | undefined,
+  subType2?: string | null | undefined
 ): number {
   if (!type1 && !type2) return 50;
   if (!type1 || !type2) return 50;
-  return type1.toLowerCase() === type2.toLowerCase() ? 100 : 0;
+
+  if (type1.toLowerCase() !== type2.toLowerCase()) return 0;
+
+  // Same productType — check sub-type agreement if both have sub-type data
+  if (subType1 && subType2) {
+    return subType1.toLowerCase() === subType2.toLowerCase() ? 100 : 60;
+  }
+  // One or both lack sub-type data → can't penalize
+  return 100;
+}
+
+export function calculateProductUnderstandingScore(
+  type1: string | null | undefined,
+  type2: string | null | undefined,
+  accessoryType1?: string | null | undefined,
+  accessoryType2?: string | null | undefined,
+  sparePartType1?: string | null | undefined,
+  sparePartType2?: string | null | undefined,
+  serviceType1?: string | null | undefined,
+  serviceType2?: string | null | undefined,
+  deviceFamily1?: string | null | undefined,
+  deviceFamily2?: string | null | undefined,
+  compatibleDevice1?: string | null | undefined,
+  compatibleDevice2?: string | null | undefined
+): number {
+  // No product type data on either side → neutral
+  if (!type1 && !type2) return 50;
+
+  const sameType = type1 && type2 && type1.toLowerCase() === type2.toLowerCase();
+
+  // Different product types → weak signal
+  if (type1 && type2 && !sameType) return 30;
+
+  // One has data, other doesn't → slightly positive (partial data)
+  if (!type1 || !type2) return 60;
+
+  // Same product type — check additional PUE signals for enrichment
+  let score = 85;
+
+  // Determine the relevant sub-type for each input
+  const subType1 = accessoryType1 || sparePartType1 || serviceType1 || null;
+  const subType2 = accessoryType2 || sparePartType2 || serviceType2 || null;
+
+  // Same sub-type → stronger signal (e.g., both are screen_protector)
+  if (subType1 && subType2 && subType1.toLowerCase() === subType2.toLowerCase()) {
+    score = 95;
+  }
+
+  // Same device family → strong device-level alignment
+  if (deviceFamily1 && deviceFamily2 && deviceFamily1.toLowerCase() === deviceFamily2.toLowerCase()) {
+    score = Math.max(score, 90);
+  }
+
+  // Same compatible device → accessory targeting the same specific device
+  if (compatibleDevice1 && compatibleDevice2 && compatibleDevice1.toLowerCase() === compatibleDevice2.toLowerCase()) {
+    score = Math.max(score, 92);
+  }
+
+  // All signals aligned → maximum confidence
+  if (
+    subType1 && subType2 && subType1.toLowerCase() === subType2.toLowerCase() &&
+    deviceFamily1 && deviceFamily2 && deviceFamily1.toLowerCase() === deviceFamily2.toLowerCase()
+  ) {
+    score = 100;
+  }
+
+  // Different sub-type within same productType → reduces confidence
+  if (subType1 && subType2 && subType1.toLowerCase() !== subType2.toLowerCase()) {
+    score = Math.min(score, 70);
+  }
+
+  return score;
 }
 
 export function calculateDuplicateScore(
@@ -237,6 +330,15 @@ export function calculateDuplicateScore(
   normalized1: string,
   normalized2: string
 ): DuplicateScore {
+  const subType1 = input1.productType === 'accessory' ? input1.accessoryType
+    : input1.productType === 'spare_part' ? input1.sparePartType
+    : input1.productType === 'service' ? input1.serviceType
+    : null;
+  const subType2 = input2.productType === 'accessory' ? input2.accessoryType
+    : input2.productType === 'spare_part' ? input2.sparePartType
+    : input2.productType === 'service' ? input2.serviceType
+    : null;
+
   return {
     normalization: calculateNormalizationScore(normalized1, normalized2),
     brand: calculateBrandScore(input1.brand, input2.brand),
@@ -249,15 +351,23 @@ export function calculateDuplicateScore(
     titleSimilarity: calculateTitleSimilarityScore(input1.title, input2.title),
     sourceDiversity: calculateSourceDiversityScore(input1.sourceId, input2.sourceId),
     categoryScore: calculateCategoryScore(input1.category, input2.category),
-    productTypeScore: calculateProductTypeScore(input1.productType, input2.productType),
+    productTypeScore: calculateProductTypeScore(input1.productType, input2.productType, subType1, subType2),
+    productUnderstandingScore: calculateProductUnderstandingScore(
+      input1.productType, input2.productType,
+      input1.accessoryType, input2.accessoryType,
+      input1.sparePartType, input2.sparePartType,
+      input1.serviceType, input2.serviceType,
+      input1.deviceFamily, input2.deviceFamily,
+      input1.compatibleDevice, input2.compatibleDevice
+    ),
   };
 }
 
 export function aggregateScores(scores: DuplicateScore): number {
   const weights = {
-    normalization: 0.24,
-    brand: 0.14,
-    model: 0.14,
+    normalization: 0.15,
+    brand: 0.08,
+    model: 0.13,
     storage: 0.10,
     ram: 0.04,
     variant: 0.02,
@@ -266,7 +376,8 @@ export function aggregateScores(scores: DuplicateScore): number {
     titleSimilarity: 0.01,
     sourceDiversity: 0.01,
     categoryScore: 0.09,
-    productTypeScore: 0.10,
+    productTypeScore: 0.30,
+    productUnderstandingScore: 0.15,
   };
 
   const weighted =
@@ -281,7 +392,8 @@ export function aggregateScores(scores: DuplicateScore): number {
     scores.titleSimilarity * weights.titleSimilarity +
     scores.sourceDiversity * weights.sourceDiversity +
     scores.categoryScore * weights.categoryScore +
-    scores.productTypeScore * weights.productTypeScore;
+    scores.productTypeScore * weights.productTypeScore +
+    scores.productUnderstandingScore * weights.productUnderstandingScore;
 
   return Math.round(weighted);
 }

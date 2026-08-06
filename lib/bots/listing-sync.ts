@@ -35,6 +35,7 @@ export type ListingSyncResult = {
 
 type PreparedListingSyncState = {
   productIds: Map<string, string | number>;
+  productAttributes: Map<string, unknown | null>;
   matchedProducts: number;
   duplicateSummary: DuplicateBatchSummary;
   errors: string[];
@@ -64,18 +65,20 @@ async function prepareListingSyncState(
   supabase: SupabaseClient,
   listings: BotAdapterListing[],
 ): Promise<PreparedListingSyncState> {
-  const productIds = await loadProductIdsForListings(supabase, listings);
+  const { productIds, productAttributes } = await loadProductIdsForListings(supabase, listings);
   const errors: string[] = [];
   const matchedProducts = await resolveMatchedProductIds(
     supabase,
     listings,
     productIds,
+    productAttributes,
     errors,
   );
   const duplicateSummary = buildDuplicateSummary(listings);
 
   return {
     productIds,
+    productAttributes,
     matchedProducts,
     duplicateSummary,
     errors,
@@ -273,14 +276,21 @@ async function loadProductIdsForListings(
   const productNames = [...new Set(listings.map((listing) => listing.product_name))];
   const { data: existingProducts, error: productLookupError } = await supabase
     .from("products")
-    .select("id, name")
+    .select("id, name, attributes")
     .in("name", productNames);
 
   if (productLookupError) throw productLookupError;
 
-  return new Map(
-    (existingProducts ?? []).map((product) => [String(product.name), product.id]),
-  );
+  const productIds = new Map<string, string | number>();
+  const productAttributes = new Map<string, unknown | null>();
+
+  for (const product of existingProducts ?? []) {
+    const name = String(product.name);
+    productIds.set(name, product.id);
+    productAttributes.set(name, (product as Record<string, unknown>).attributes ?? null);
+  }
+
+  return { productIds, productAttributes };
 }
 
 function buildDuplicateSummary(listings: BotAdapterListing[]) {
@@ -379,6 +389,7 @@ async function resolveMatchedProductIds(
   supabase: SupabaseClient,
   listings: BotAdapterListing[],
   productIds: Map<string, string | number>,
+  productAttributes: Map<string, unknown | null>,
   errors: string[],
 ) {
   const matchedIds = new Set<string>();
@@ -388,6 +399,7 @@ async function resolveMatchedProductIds(
     productName: listing.product_name,
     category: listing.category,
     source: listing.source,
+    attributes: productAttributes.get(listing.product_name) ?? undefined,
   }));
 
   const products = await batchFindOrCreateMatchedProducts(supabase, inputs);

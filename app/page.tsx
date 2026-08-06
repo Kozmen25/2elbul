@@ -30,6 +30,7 @@ import {
   type MarketPulseItem,
   type PriceOpportunity,
 } from "@/lib/home-data";
+import { CATEGORY_ROUTES } from "@/lib/category-intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -59,24 +60,34 @@ export const metadata: Metadata = {
   },
 };
 
+const ROUTE_ICON_MAP: Record<string, React.ComponentType<{ size?: number }>> = {
+  telefon: Smartphone,
+  bilgisayar: Laptop,
+  konsol: Gamepad2,
+  "tv-ses": Tv,
+  arac: Car,
+  emlak: HomeIcon,
+  "yedek-parca": Store,
+  "ev-yasam": FolderSearch2,
+  aksesuar: PackageSearch,
+};
+
 const quickCategories: {
   label: string;
   query: string;
   slug?: string;
   icon: React.ComponentType<{ size?: number }>;
 }[] = [
-  { label: "Telefon", query: "telefon", slug: "telefon", icon: Smartphone },
-  { label: "Bilgisayar", query: "bilgisayar", slug: "bilgisayar", icon: Laptop },
-  { label: "Konsol", query: "oyun konsolu", slug: "konsol", icon: Gamepad2 },
-  { label: "TV / Ses", query: "tv", slug: "tv-ses", icon: Tv },
-  { label: "Araç", query: "araba", slug: "arac", icon: Car },
-  { label: "Emlak", query: "emlak", slug: "emlak", icon: HomeIcon },
-  { label: "Yedek Parça", query: "yedek parça", slug: "yedek-parca", icon: Store },
-  { label: "Ev / Yaşam", query: "mobilya", slug: "ev-yasam", icon: FolderSearch2 },
+  ...CATEGORY_ROUTES.map((route) => ({
+    label: route.label,
+    query: route.matchKeywords[0],
+    slug: route.slug,
+    icon: ROUTE_ICON_MAP[route.slug] || Search,
+  })),
   { label: "Fiyatı düşenler", query: "fiyatı düşen", icon: TrendingDown },
   { label: "Fırsatlar", query: "fırsat", icon: BadgePercent },
   { label: "Yakınımdaki", query: "yakınımdaki", icon: MapPin },
-  { label: "Tüm ilanlar", query: "", icon: PackageSearch },
+  { label: "Tüm ilanlar", query: "", icon: Search },
 ];
 
 const quickAnchors = [

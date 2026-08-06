@@ -1,5 +1,14 @@
 export type ProductType = "primary_product" | "accessory" | "spare_part" | "service";
 
+export type ProductIntent =
+  | "Device"
+  | "Accessory"
+  | "Replacement Part"
+  | "Repair Service"
+  | "Bundle"
+  | "Digital Product"
+  | "Unknown";
+
 export type AccessoryType =
   | "screen_protector"
   | "case"
@@ -47,6 +56,9 @@ export interface ProductUnderstandingResult {
   accessoryType: ScoredValue<AccessoryType>;
   sparePartType: ScoredValue<SparePartType>;
   serviceType: ScoredValue<ServiceType>;
+  productIntent: ScoredValue<ProductIntent>;
+  deviceFamily: ScoredValue<string>;
+  deviceModel: ScoredValue<string>;
   compatibleDevice: ScoredValue<string>;
   compatibleBrand: ScoredValue<string>;
   compatibleFamily: ScoredValue<string>;
@@ -55,6 +67,11 @@ export interface ProductUnderstandingResult {
   condition: ScoredValue<string>;
   sellerType: ScoredValue<"Bireysel" | "Profesyonel">;
   warranty: ScoredValue<boolean>;
+  priceRealityCheck: ScoredValue<{
+    isReasonable: boolean;
+    expectedPriceRange: [number, number] | null;
+    signalDirection: "accessory" | "primary" | null;
+  }>;
 }
 
 export interface ProductUnderstandingInput {

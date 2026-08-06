@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { isMissingPriceHistorySchemaError } from "@/lib/listing-status";
 import {
   buildPriceHistoryBackfillCandidates,
-  isMissingPriceHistorySchemaError,
   isSameListingSameDaySamePrice,
   normalizePriceHistoryInput,
 } from "./price-history";

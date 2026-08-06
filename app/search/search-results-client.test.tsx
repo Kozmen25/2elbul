@@ -170,7 +170,7 @@ describe("search-results decision mapping", () => {
 
   it.each([
     ["strong-opportunities", ["iphone-13"]],
-    ["low-risk", ["iphone-13", "galaxy-a54"]],
+    ["low-risk", ["iphone-13"]],
     ["high-confidence", ["iphone-13"]],
     ["newly-added", ["iphone-13"]],
     ["falling-price", ["galaxy-a54"]],

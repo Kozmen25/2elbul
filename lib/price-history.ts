@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isMissingPriceHistorySchemaError } from "@/lib/listing-status";
 
 export type PriceHistoryInput = {
   productId: number | string | null | undefined;
@@ -76,20 +77,6 @@ export function isSameListingSameDaySamePrice(
       toUtcDay(recordDate) === toUtcDay(normalized.recordedAt)
     );
   });
-}
-
-export function isMissingPriceHistorySchemaError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42P01" ||
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes("price_history") ||
-    text.includes("recorded_at") ||
-    text.includes("source")
-  );
 }
 
 export async function recordListingPriceHistory(

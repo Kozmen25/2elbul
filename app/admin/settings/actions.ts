@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
-import { isMissingSiteSettingsTable } from "@/lib/site-settings";
+import { isMissingSiteSettingsTable } from "@/lib/listing-status";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export type SettingsActionResult = {

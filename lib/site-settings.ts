@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { isMissingSiteSettingsTable } from "@/lib/listing-status";
 
 export type SiteGeneralSettings = {
   siteName: string;
@@ -59,16 +60,4 @@ export async function getSiteMaintenanceSettings(): Promise<SiteMaintenanceSetti
     enabled: Boolean(value.enabled),
     message: String(value.message ?? DEFAULT_MAINTENANCE.message),
   };
-}
-
-export function isMissingSiteSettingsTable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42P01" ||
-    record.code === "PGRST205" ||
-    (text.includes("site_settings") &&
-      (text.includes("relation") || text.includes("schema cache")))
-  );
 }

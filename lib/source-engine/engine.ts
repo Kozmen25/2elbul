@@ -15,6 +15,7 @@ import type {
   SourceEngineSource,
   SourceEngineSummary,
 } from "./types";
+import { isMissingColumnArray } from "@/lib/listing-status";
 
 export async function runSourceEngine(
   supabase: SupabaseClient,
@@ -127,7 +128,7 @@ async function loadSources(
 
   let result: { data: unknown[] | null; error: unknown } = await query;
 
-  if (result.error && isMissingColumn(result.error, ["integration_type", "fetch_limit", "bot_import_mode"])) {
+  if (result.error && isMissingColumnArray(result.error, ["integration_type", "fetch_limit", "bot_import_mode"])) {
     let legacyQuery = supabase
       .from("sources")
       .select(
@@ -177,15 +178,4 @@ export function summarizeSourceEngineResults(results: SourceRunResult[]) {
     errorMessage: result.errorMessage,
     durationMs: result.durationMs,
   }));
-}
-
-function isMissingColumn(error: unknown, columns: string[]) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    columns.some((column) => text.includes(column))
-  );
 }

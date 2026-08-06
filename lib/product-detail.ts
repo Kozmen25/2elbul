@@ -8,7 +8,14 @@ import {
   calculateProductIntelligence,
   type ProductIntelligence,
 } from "@/lib/intelligence-engine";
-import { isMissingStatusColumn } from "@/lib/listing-status";
+import {
+  isMissingStatusColumn,
+  isMissingAttributesColumn,
+  isMissingPriceHistoryTable,
+  isMissingSearchDemandTable,
+  isMissingListingUpdatedAtColumn,
+  isMissingProductCategoryColumn,
+} from "@/lib/listing-status";
 import {
   buildMarketIntelligence,
   type MarketIntelligence,
@@ -16,6 +23,8 @@ import {
   type MarketIntelligenceListing,
 } from "@/lib/market-intelligence";
 import { toConfidenceLevel, toConfidenceResult } from "@/lib/market-intelligence/helpers";
+import { calculateProductUnderstandingConfidence } from "@/lib/confidence-engine/product-understanding-confidence";
+import type { ConfidenceResult } from "@/lib/confidence-engine";
 import {
   buildOpportunityAnalysis,
   buildOpportunityJsonLdProperties,
@@ -38,6 +47,11 @@ import {
   summarizeDuplicateGroups,
   type DuplicateBatchSummary,
 } from "@/lib/product-matcher";
+import {
+  extractProductTypeFromAttributes,
+  filterListingsByProductType,
+} from "@/lib/market-intelligence/helpers";
+import { getCompatibleProducts } from "@/lib/taxonomy/compatibility";
 
 export type ProductRecord = {
   id: string;
@@ -216,7 +230,7 @@ export async function getProductDetail(
   if (!product || !supabase) return null;
   const productBrand = formatBrandDisplayName(extractBrand(product.name));
   const emptyIntelligence = calculateProductIntelligence({ listings: [] });
-  const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], [], product.category);
+  const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], [], product.attributes);
 
   const listingColumns = {
     base: "id, title, price, city, source, url, condition, image_url, created_at, confidence_score",
@@ -333,7 +347,7 @@ export async function getProductDetail(
     product.name,
     listings,
     priceHistory,
-    product.category,
+    product.attributes,
   );
 
   return {
@@ -354,7 +368,7 @@ export async function getProductDetail(
       decisionInsight,
       duplicateSummary,
     }),
-    bestDeals: buildProductBestDeals(listings, product.category),
+    bestDeals: buildProductBestDeals(listings, extractProductTypeFromAttributes(product.attributes)),
     relatedProducts: await getRelatedProducts(supabase, product),
   };
 }
@@ -480,7 +494,7 @@ export function buildProductDecisionInsight(
   productName: string,
   listings: Listing[],
   priceHistory: PriceHistoryRecord[],
-  category?: string | null,
+  attributes?: unknown,
 ): ProductDecisionInsight {
   const prices = listings
     .map((listing) => Number(listing.price))
@@ -507,13 +521,10 @@ export function buildProductDecisionInsight(
     };
   }
 
-  const sorted = [...prices].sort((a, b) => a - b);
   const average = stats.average;
   const median = stats.median;
   const lowest = stats.lowest;
   const highest = stats.highest;
-  const standardDeviation = calculateStandardDeviation(prices, average);
-  const variation = average ? standardDeviation / average : 0;
   const spreadPercent = average ? ((highest - lowest) / average) * 100 : 0;
   const medianDifferencePercent = average
     ? Math.round(((average - median) / average) * 1000) / 10
@@ -521,20 +532,52 @@ export function buildProductDecisionInsight(
   const cheapestDifferencePercent = average
     ? Math.round(((average - lowest) / average) * 1000) / 10
     : 0;
-  const outlierCount = sorted.filter(
-    (price) => price <= average * 0.6 || price >= average * 1.6,
-  ).length;
-  const hasHistory =
-    priceHistory.length >= 2 ||
-    new Set(listings.map((listing) => listing.createdAt?.slice(0, 10))).size >= 2;
 
-  const confidence = buildConfidenceScore({
-    count,
-    variation,
-    outlierCount,
-    hasHistory,
-    cheapestDifferencePercent,
+  const warnings = [
+    ...(spreadPercent >= 35
+      ? ["Piyasada fiyat farkı yüksek; ürün durumu, garanti ve satıcı detaylarını karşılaştır."]
+      : []),
+    ...(cheapestDifferencePercent >= 35
+      ? ["En ucuz ilan ortalamanın çok altında; detayları dikkatli kontrol et."]
+      : []),
+    ...(count < 3 ? ["Tek/az ilan olduğu için karar vermeden önce yeni verileri beklemek daha sağlıklı olur."] : []),
+  ];
+
+  const uniqueSources = [...new Set(listings.map(l => l.source).filter(Boolean))];
+
+  // Extract PUE confidence from product attributes (0-100 scale → 0-1 for confidence engine)
+  const rawAttrs = attributes as Record<string, unknown> | null;
+  const pu = rawAttrs?.productUnderstanding as Record<string, unknown> | null;
+  const ptConf = pu?.productType as { confidence?: number } | null;
+  const productUnderstandingScore =
+    typeof ptConf?.confidence === "number" && Number.isFinite(ptConf.confidence)
+      ? ptConf.confidence / 100
+      : null;
+
+  const pueConfidence = calculateProductUnderstandingConfidence({
+    decisionConfidence: null,
+    productUnderstandingScore,
+    sourceCount: uniqueSources.length,
+    sourcesUsed: uniqueSources as string[],
   });
+  const confidence: ProductDecisionInsight["confidence"] = {
+    score: pueConfidence.score,
+    level: toDecisionConfidenceLevel(pueConfidence.level),
+    description:
+      pueConfidence.level === "very-high" || pueConfidence.level === "high"
+        ? "Bu ürün için fiyat verisi tutarlı ve karar desteği güçlü."
+        : pueConfidence.level === "medium"
+          ? "Analiz kullanılabilir, ancak ilan detaylarını karşılaştırmak önemli."
+          : "Fiyatlar veya veri miktarı güveni düşürüyor; dikkatli inceleme önerilir.",
+    reasons: pueConfidence.reasons,
+    warnings,
+    className:
+      pueConfidence.level === "very-high" || pueConfidence.level === "high"
+        ? "border-green-200 bg-green-50 text-green-700"
+        : pueConfidence.level === "medium"
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-red-200 bg-red-50 text-red-700",
+  };
 
   const reliabilityText =
     count >= 10
@@ -546,16 +589,6 @@ export function buildProductDecisionInsight(
     Math.abs(medianDifferencePercent) <= 5
       ? "Medyan fiyat ile ortalama birbirine yakın; fiyat dağılımı dengeli görünüyor."
       : `Medyan fiyat ortalamadan yaklaşık %${Math.abs(medianDifferencePercent).toLocaleString("tr-TR")} ${medianDifferencePercent > 0 ? "düşük" : "yüksek"}; piyasada farklı fiyat seviyeleri var.`;
-
-  const warnings = [
-    ...(spreadPercent >= 35
-      ? ["Piyasada fiyat farkı yüksek; ürün durumu, garanti ve satıcı detaylarını karşılaştır."]
-      : []),
-    ...(cheapestDifferencePercent >= 35
-      ? ["En ucuz ilan ortalamanın çok altında; detayları dikkatli kontrol et."]
-      : []),
-    ...(count < 3 ? ["Tek/az ilan olduğu için karar vermeden önce yeni verileri beklemek daha sağlıklı olur."] : []),
-  ];
 
   return {
     confidence,
@@ -574,8 +607,10 @@ export function buildProductDecisionInsight(
   };
 }
 
-export function buildProductBestDeals(listings: Listing[], category?: string | null): ProductBestDeal[] {
-  const pricedListings = listings
+export function buildProductBestDeals(listings: Listing[], productType: string | null): ProductBestDeal[] {
+  // Only show best deals for primary products — accessories/spare parts/services
+  // have different pricing dynamics that don't match phone-market comparisons
+  const pricedListings = (productType === "primary_product" ? listings : [])
     .filter((listing) => Number.isFinite(listing.price) && listing.price > 0)
     .sort((a, b) => a.price - b.price);
   const stats = calculateMarketStats(pricedListings.map((listing) => listing.price));
@@ -639,7 +674,7 @@ async function getRelatedProducts(
     priceGroups.set(productId, [...(priceGroups.get(productId) ?? []), price]);
   }
 
-  return products
+  const related = products
     .filter((candidate) => candidate.id !== product.id)
     .map((candidate) => {
       const prices = priceGroups.get(candidate.id) ?? [];
@@ -669,6 +704,27 @@ async function getRelatedProducts(
       averagePrice: item.averagePrice,
       minPrice: item.minPrice,
     }));
+
+  const compatibleProducts = getCompatibleProducts(product, products);
+  const existingIds = new Set(related.map((r) => r.id));
+  const compatToAdd = compatibleProducts
+    .filter((cp) => !existingIds.has(cp.product.id))
+    .slice(0, 3)
+    .map((cp) => {
+      const prices = priceGroups.get(cp.product.id) ?? [];
+      const stats = calculateMarketStats(prices);
+      return {
+        id: cp.product.id,
+        name: cp.product.name,
+        slug: cp.product.slug,
+        category: cp.product.category,
+        listingCount: prices.length,
+        averagePrice: stats?.average ?? null,
+        minPrice: stats?.lowest ?? null,
+      };
+    });
+
+  return [...compatToAdd, ...related];
 }
 
 async function fetchProductsForRelated(
@@ -676,7 +732,7 @@ async function fetchProductsForRelated(
 ) {
   const productsWithCategoryResult = await supabase
     .from("products")
-    .select("id, name, slug, category")
+    .select("id, name, slug, category, attributes")
     .limit(200);
   let productsData = productsWithCategoryResult.data as unknown[] | null;
   let productsError = productsWithCategoryResult.error;
@@ -684,7 +740,7 @@ async function fetchProductsForRelated(
   if (productsError && isMissingProductCategoryColumn(productsError)) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, slug")
+      .select("id, name, slug, attributes")
       .limit(200);
     productsData = fallbackResult.data as unknown[] | null;
     productsError = fallbackResult.error;
@@ -702,6 +758,7 @@ async function fetchProductsForRelated(
       name: String(row.name),
       slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
       category: row.category ? String(row.category) : null,
+      attributes: row.attributes,
     }));
 }
 
@@ -709,18 +766,59 @@ function getRelatedProductScore(
   product: ProductRecord,
   candidate: ProductRecord,
 ) {
+  // 1. Product type match: same type = +30, type mismatch = unrelated (score 0)
+  const sourceType = extractProductTypeFromAttributes(product.attributes);
+  const candidateType = extractProductTypeFromAttributes(candidate.attributes);
+  if (sourceType && candidateType && sourceType !== candidateType) return 0;
+
   let score = 0;
-  if (product.category && candidate.category && product.category === candidate.category) {
-    score += 6;
+
+  if (sourceType && candidateType && sourceType === candidateType) {
+    score += 30;
   }
 
+  // 2. Device family match via PUE
+  const sourceFamily = extractPueField(product.attributes, "deviceFamily");
+  const candidateFamily = extractPueField(candidate.attributes, "deviceFamily");
+  if (sourceFamily && candidateFamily && sourceFamily === candidateFamily) {
+    score += 20;
+  }
+
+  // 3. Compatible device match
+  const sourceCompatDevice = extractPueField(product.attributes, "compatibleDevice");
+  const sourceCompatFamily = extractPueField(product.attributes, "compatibleFamily");
+  const candidateCompatDevice = extractPueField(candidate.attributes, "compatibleDevice");
+  const candidateCompatFamily = extractPueField(candidate.attributes, "compatibleFamily");
+
+  if (
+    (sourceCompatDevice &&
+      (sourceCompatDevice === candidateCompatDevice || sourceCompatDevice === candidateCompatFamily)) ||
+    (candidateCompatDevice &&
+      (candidateCompatDevice === sourceCompatDevice || candidateCompatDevice === sourceCompatFamily)) ||
+    (sourceCompatFamily && sourceCompatFamily === candidateCompatFamily)
+  ) {
+    score += 15;
+  }
+
+  // 5. Token similarity (+2 per matching token, reduced weight)
   const productTokens = getProductSignalTokens(product.name);
   const candidateTokens = getProductSignalTokens(candidate.name);
   for (const token of productTokens) {
-    if (candidateTokens.has(token)) score += token.length >= 4 ? 3 : 2;
+    if (candidateTokens.has(token)) score += 2;
   }
 
   return score;
+}
+
+function extractPueField(attributes: unknown, field: string): string | null {
+  if (!attributes || typeof attributes !== "object") return null;
+  const record = attributes as Record<string, unknown>;
+  const pu = record.productUnderstanding as Record<string, { value?: unknown }> | undefined;
+  if (!pu || typeof pu !== "object") return null;
+  const fieldVal = pu[field];
+  if (!fieldVal || typeof fieldVal !== "object") return null;
+  if (typeof fieldVal.value === "string" && fieldVal.value.length > 0) return fieldVal.value;
+  return null;
 }
 
 function getProductSignalTokens(name: string) {
@@ -742,105 +840,15 @@ function getProductSignalTokens(name: string) {
   );
 }
 
-function buildConfidenceScore({
-  count,
-  variation,
-  outlierCount,
-  hasHistory,
-  cheapestDifferencePercent,
-}: {
-  count: number;
-  variation: number;
-  outlierCount: number;
-  hasHistory: boolean;
-  cheapestDifferencePercent: number;
-}): ProductDecisionInsight["confidence"] {
-  if (count < 3) {
-    return {
-      score: null,
-      level: "Veri yetersiz" as const,
-      description:
-        "Güven skoru için en az 3 karşılaştırılabilir ilan daha sağlıklı sonuç verir.",
-      reasons: [`Şu anda yalnızca ${count} fiyat verisi var.`],
-      warnings: ["Tek ilanlar fırsat gibi görünebilir; satıcı ve ürün detaylarını ayrıca kontrol et."],
-      className: "border-slate-200 bg-slate-50 text-slate-700",
-    };
-  }
-
-  let score = 45;
-  const reasons: string[] = [];
-  const warnings: string[] = [];
-
-  if (count >= 20) {
-    score += 25;
-    reasons.push("İlan sayısı yüksek.");
-  } else if (count >= 10) {
-    score += 20;
-    reasons.push("İlan sayısı güvenilir karşılaştırma için iyi.");
-  } else if (count >= 5) {
-    score += 14;
-    reasons.push("İlan sayısı makul seviyede.");
-  } else {
-    score += 8;
-    reasons.push("İlan sayısı sınırlı ama temel karşılaştırma yapılabiliyor.");
-  }
-
-  if (variation <= 0.12) {
-    score += 25;
-    reasons.push("Fiyatlar birbirine yakın.");
-  } else if (variation <= 0.24) {
-    score += 17;
-    reasons.push("Fiyat dağılımı dengeli.");
-  } else if (variation <= 0.38) {
-    score += 8;
-    reasons.push("Fiyatlarda orta düzey sapma var.");
-  } else {
-    score -= 12;
-    warnings.push("Fiyat dağılımı geniş; ilan detayları arasında ciddi fark olabilir.");
-  }
-
-  if (outlierCount > 0) {
-    const penalty = Math.min(22, outlierCount * 7);
-    score -= penalty;
-    warnings.push(`${outlierCount} ilan piyasa ortalamasından belirgin sapıyor.`);
-  }
-
-  if (hasHistory) {
-    score += 8;
-    reasons.push("Fiyat geçmişi veya farklı günlere ait veri var.");
-  }
-
-  if (cheapestDifferencePercent >= 35) {
-    score -= 12;
-    warnings.push("En ucuz ilan ortalamanın çok altında; detayları dikkatli kontrol et.");
-  }
-
-  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
-  const level: ConfidenceLevel =
-    finalScore >= 80
-      ? "Yüksek güven"
-      : finalScore >= 60
-        ? "Orta güven"
-        : "Düşük güven";
-
-  return {
-    score: finalScore,
-    level,
-    description:
-      level === "Yüksek güven"
-        ? "Bu ürün için fiyat verisi tutarlı ve karar desteği güçlü."
-        : level === "Orta güven"
-          ? "Analiz kullanılabilir, ancak ilan detaylarını karşılaştırmak önemli."
-          : "Fiyatlar veya veri miktarı güveni düşürüyor; dikkatli inceleme önerilir.",
-    reasons,
-    warnings,
-    className:
-      level === "Yüksek güven"
-        ? "border-green-200 bg-green-50 text-green-700"
-        : level === "Orta güven"
-          ? "border-amber-200 bg-amber-50 text-amber-700"
-          : "border-red-200 bg-red-50 text-red-700",
+function toDecisionConfidenceLevel(level: ConfidenceResult["level"]): ConfidenceLevel {
+  const map: Record<ConfidenceResult["level"], ConfidenceLevel> = {
+    "very-high": "Yüksek güven",
+    high: "Yüksek güven",
+    medium: "Orta güven",
+    low: "Düşük güven",
+    "very-low": "Düşük güven",
   };
+  return map[level];
 }
 
 function fetchProductListings(
@@ -863,69 +871,6 @@ function fetchProductListings(
 
 function formatPrice(price: number) {
   return formatCurrencyTRY(price);
-}
-
-function calculateStandardDeviation(prices: number[], average: number) {
-  if (!prices.length || !average) return 0;
-  const variance =
-    prices.reduce((sum, price) => sum + (price - average) ** 2, 0) /
-    prices.length;
-  return Math.sqrt(variance);
-}
-
-function isMissingPriceHistoryTable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42P01" ||
-    record.code === "PGRST205" ||
-    text.includes("price_history")
-  );
-}
-
-function isMissingSearchDemandTable(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42P01" ||
-    record.code === "PGRST205" ||
-    text.includes("search_demands")
-  );
-}
-
-function isMissingListingUpdatedAtColumn(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes("updated_at")
-  );
-}
-
-function isMissingProductCategoryColumn(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes("category")
-  );
-}
-
-function isMissingAttributesColumn(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { code?: string; message?: string; details?: string };
-  const text = `${record.message ?? ""} ${record.details ?? ""}`.toLowerCase();
-  return (
-    record.code === "42703" ||
-    record.code === "PGRST204" ||
-    text.includes("attributes")
-  );
 }
 
 function toMarketIntelligenceDecisionInsight(
@@ -997,6 +942,16 @@ export function buildMarketIntelligenceForProductDetail({
   duplicateSummary: DuplicateBatchSummary;
   analyzedAt?: string | Date | null;
 }): ProductDetailMarketIntelligence {
+  const productType = extractProductTypeFromAttributes(product.attributes);
+  const productLookup = new Map<string, { attributes?: unknown }>(
+    [[String(product.id), product]],
+  );
+  const filteredListings = filterListingsByProductType(
+    listings,
+    productType,
+    productLookup,
+  );
+
   const marketIntelligence = buildMarketIntelligence({
     scope: {
       productId: product.id,
@@ -1005,8 +960,9 @@ export function buildMarketIntelligenceForProductDetail({
       url: getAbsoluteUrl(`/product/${product.slug}`),
       category: product.category,
       brand: productBrand,
+      productType,
     },
-    listings,
+    listings: filteredListings,
     intelligence,
     decisionInsight: toMarketIntelligenceDecisionInsight(decisionInsight),
     duplicateSummary,
@@ -1023,6 +979,13 @@ export function buildMarketIntelligenceForProductDetail({
 
   return {
     ...marketIntelligence,
+    opportunity: {
+      score: intelligence.opportunity?.score ?? 0,
+      label: intelligence.opportunity?.label ?? "Veri yetersiz",
+      explanation: intelligence.opportunity?.explanation ?? "Opportunity Engine üzerinden hesaplanıyor",
+      action: intelligence.recommendation?.action ?? "wait",
+      discountPercent: null,
+    },
     opportunityAnalysis,
     structuredData: {
       ...marketIntelligence.structuredData,

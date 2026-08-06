@@ -8,6 +8,7 @@ export type CategoryNode = {
   children?: CategoryNode[];
   sourceHints?: string[];
   priority?: number;
+  productType?: string;
 };
 
 export type CategoryMatch = {
@@ -127,6 +128,55 @@ export const CATEGORY_TAXONOMY: CategoryNode[] = [
       node("shopping.air-conditioner", "Klima / Isıtma", ["klima", "ısıtma", "isitma"], ["split klima", "mobil klima", "kombi", "ısıtıcı", "isitici", "vantilatör", "vantilator"]),
       node("shopping.tools", "El Aletleri", ["el aleti", "el aletleri"], ["matkap", "şarjlı matkap", "sarjli matkap", "hilti", "testere", "taşlama", "taslama"]),
       node("shopping.pet-supplies", "Evcil Hayvan Ürünleri", ["evcil hayvan ürünü", "evcil hayvan urunu"], ["kedi maması", "kedi mamasi", "köpek maması", "kopek mamasi", "tasma", "kedi kumu"]),
+    ],
+  },
+  {
+    id: "prod-services",
+    label: "Servis",
+    productType: "service",
+    aliases: ["tamir", "onarim", "teknik servis", "telefon tamir", "bilgisayar tamir"],
+    keywords: ["tamir", "onarim", "servis", "degisim", "yenileme", "bakim", "kurtarma", "arıza", "ariza", "teknik servis"],
+    priority: 88,
+    children: [
+      node("prod-services.phone-repair", "Telefon Tamir", ["telefon tamir"], ["ekran değişimi", "ekran degisimi", "batarya değişimi", "batarya degisimi", "su hasarı", "su hasari", "ekran tamir"]),
+      node("prod-services.computer-repair", "Bilgisayar Tamir", ["bilgisayar tamir"], ["laptop tamir", "macbook tamir", "format atma", "format"]),
+      node("prod-services.tablet-repair", "Tablet Tamir", ["tablet tamir"], ["ipad tamir", "tablet ekran degisimi"]),
+      node("prod-services.tech-service", "Teknik Servis", ["teknik servis"], ["arıza tespit", "ariza tespit", "cihaz bakim", "screen repair"]),
+    ],
+  },
+  {
+    id: "prod-spare-parts",
+    label: "Yedek Parça",
+    productType: "spare_part",
+    aliases: ["yedek parca", "telefon parça", "telefon parca", "orijinal parça", "orijinal parca"],
+    keywords: ["ekran paneli", "ekran", "batarya", "sarj soketi", "kamera modulu", "hoparlor", "ana kart", "dokunmatik", "kuvartz", "vibrator"],
+    priority: 88,
+    children: [
+      node("prod-spare-parts.screen", "Ekran", ["ekran", "lcd"], ["oled", "dokunmatik cam", "ön cam", "on cam", "panel"]),
+      node("prod-spare-parts.battery", "Batarya", ["batarya", "pil"], ["lityum pil", "telefon bataryasi"]),
+      node("prod-spare-parts.charging-port", "Şarj Soketi", ["şarj soketi", "sarj soketi", "charge port"], ["flex kablo", "şarj flex", "sarj flex"]),
+      node("prod-spare-parts.camera", "Kamera Modülü", ["kamera modülü", "kamera modulu"], ["arka kamera", "ön kamera", "on kamera", "kamera lens"]),
+      node("prod-spare-parts.speaker", "Hoparlör", ["hoparlör", "hoparlor", "hoparlör modülü", "hoparlor modulu"], ["iç hoparlör", "ic hoparlor", "kulaklık hoparlörü", "kulaklik hoparloru"]),
+      node("prod-spare-parts.mainboard", "Ana Kart", ["ana kart", "mainboard", "mantık kartı", "mantik kartı"], ["logic board", "motherboard", "chip"]),
+      node("prod-spare-parts.flex-cable", "Flex Kablo", ["flex kablo", "flex"], ["sarj flex", "güç flex", "guc flex", "data flex"]),
+    ],
+  },
+  {
+    id: "prod-accessories",
+    label: "Aksesuar",
+    productType: "accessory",
+    aliases: ["telefon aksesuarı", "telefon aksesuari", "cep telefonu aksesuar", "elektronik aksesuar"],
+    keywords: ["kılıf", "kilif", "kablo", "powerbank", "ekran koruyucu", "adaptr", "tutucu", "kızak", "kizak", "lens", "hub", "mause", "mouse", "klavye", "kulaklık", "kulaklik", "airpods", "aksesuar", "sarj aleti", "şarj aleti", "sarj cihazi"],
+    priority: 88,
+    children: [
+      node("prod-accessories.case", "Kılıf", ["kılıf", "kilif", "telefon kılıfı", "telefon kilifi"], ["silikon kılıf", "deri kılıf", "kapak", "cover"]),
+      node("prod-accessories.screen-protector", "Ekran Koruyucu", ["ekran koruyucu", "ekran koruma"], ["temperli cam", "jel film", "nano ekran", "ekran filmi"]),
+      node("prod-accessories.charger", "Şarj Aleti", ["şarj aleti", "sarj aleti", "şarj cihazı", "sarj cihazi"], ["hızlı şarj", "hizli sarj", "duvar şarjı", "duvar sarji", "şarj adaptörü", "sarj adaptoru"]),
+      node("prod-accessories.cable", "Kablo", ["kablo", "data kablosu", "şarj kablosu", "sarj kablosu"], ["usb kablo", "type c", "lightning", "usb c"]),
+      node("prod-accessories.powerbank", "Powerbank", ["powerbank", "taşınabilir şarj", "tasınabilir sarj"], ["pil kutusu", "powerbank 10000", "powerbank 20000"]),
+      node("prod-accessories.holder", "Tutucu", ["tutucu", "telefon tutucu", "telefon aparatı", "telefon aparati"], ["araç tutucu", "arac tutucu", "masa tutucu", "stand"]),
+      node("prod-accessories.adapter", "Adapter / Dönüştürücü", ["adapter", "çevirici", "cevirici", "dönüştürücü", "donusturucu"], ["otg", "aux", "usb hub"]),
+      node("prod-accessories.headphone", "Kulaklık", ["kulaklık aksesuar", "kulaklik aksesuar"], ["bluetooth kulaklık", "kablolu kulaklık", "kulak içi", "kulak ici"]),
     ],
   },
   {
@@ -279,8 +329,9 @@ function node(
   keywords: string[],
   sourceHints: string[] = [],
   children: CategoryNode[] = [],
+  productType?: string,
 ): CategoryNode {
-  return { id, label, aliases, keywords, sourceHints, children };
+  return { id, label, aliases, keywords, sourceHints, children, productType };
 }
 
 function addNodeDeepTerms(termMap: Map<string, string>, category: CategoryNode) {

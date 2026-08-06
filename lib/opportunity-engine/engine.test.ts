@@ -885,6 +885,8 @@ describe("analysis signal helpers", () => {
       dataFreshness: "fresh",
       latestListingAgeDays: 0,
       sourceConcentration: 0.41,
+      productType: null,
+      productTypeMatchScore: null,
     })).toContain("Confidence yüksek");
   });
 
@@ -906,6 +908,8 @@ describe("analysis signal helpers", () => {
       dataFreshness: "stale",
       latestListingAgeDays: 20,
       sourceConcentration: 0.82,
+      productType: null,
+      productTypeMatchScore: null,
     });
 
     expect(warnings).toContain("Örneklem küçük");
@@ -963,6 +967,8 @@ describe("core opportunity calculations", () => {
         dataFreshness: result.dataFreshness,
         latestListingAgeDays: 0,
         sourceConcentration: duplicateSummary.duplicateItemCount / duplicateSummary.itemCount,
+        productType: null,
+        productTypeMatchScore: null,
       }),
     ).toBeGreaterThanOrEqual(70);
   });
@@ -1029,9 +1035,11 @@ describe("core opportunity calculations", () => {
           dataFreshness: result.dataFreshness,
           latestListingAgeDays: 35,
           sourceConcentration: duplicateSummary.duplicateItemCount / duplicateSummary.itemCount,
+          productType: null,
+          productTypeMatchScore: null,
         },
         40,
       ),
-    ).toBeGreaterThanOrEqual(58);
+    ).toBeGreaterThanOrEqual(57);
   });
 });

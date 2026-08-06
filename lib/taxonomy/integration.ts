@@ -5,7 +5,7 @@ export type CategoryResolutionResult = {
   categoryLabel: string;
   subCategoryId?: string;
   subCategoryLabel?: string;
-  source: "new-engine" | "legacy" | "default";
+  source: "new-engine" | "default";
   confidence: "high" | "medium" | "low";
   fullPath?: CategoryPathResolution;
 };
@@ -21,12 +21,10 @@ export type CategoryResolverFactory = {
   createResolverSync(): ICategoryResolver;
 };
 
-class FallbackCategoryResolver implements ICategoryResolver {
+class DirectCategoryResolver implements ICategoryResolver {
   private newEngineResolver: ICategoryResolver | null = null;
-  private legacyResolver: ICategoryResolver;
 
-  constructor(legacyResolver: ICategoryResolver, newEngineResolver: ICategoryResolver | null = null) {
-    this.legacyResolver = legacyResolver;
+  constructor(newEngineResolver: ICategoryResolver | null = null) {
     this.newEngineResolver = newEngineResolver;
   }
 
@@ -38,17 +36,8 @@ class FallbackCategoryResolver implements ICategoryResolver {
           return newResult;
         }
       } catch {
-        // Fallback to legacy
+        // Fallback to default
       }
-    }
-
-    try {
-      const legacyResult = await this.legacyResolver.resolve(input, context);
-      if (legacyResult) {
-        return legacyResult;
-      }
-    } catch {
-      // Fallback to default
     }
 
     return {
@@ -67,17 +56,8 @@ class FallbackCategoryResolver implements ICategoryResolver {
           return newResult;
         }
       } catch {
-        // Fallback to legacy
+        // Fallback to default
       }
-    }
-
-    try {
-      const legacyResult = this.legacyResolver.resolveSync(input, context);
-      if (legacyResult) {
-        return legacyResult;
-      }
-    } catch {
-      // Fallback to default
     }
 
     return {
@@ -92,15 +72,14 @@ class FallbackCategoryResolver implements ICategoryResolver {
     if (this.newEngineResolver && (await this.newEngineResolver.canResolve(input))) {
       return true;
     }
-    return this.legacyResolver.canResolve(input);
+    return false;
   }
 }
 
 export function createCategoryResolver(
-  legacyResolver: ICategoryResolver,
   newEngineResolver?: ICategoryResolver,
 ): ICategoryResolver {
-  return new FallbackCategoryResolver(legacyResolver, newEngineResolver || null);
+  return new DirectCategoryResolver(newEngineResolver || null);
 }
 
 export type { ICategoryResolver as CategoryResolver };

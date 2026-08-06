@@ -2,6 +2,8 @@ import { normalizeSearchText, getTokens } from '../normalization';
 import {
   calculateDuplicateScore,
   aggregateScores,
+  calculateProductUnderstandingScore,
+  isProductTypeConflict,
 } from './scoring';
 import type {
   DuplicateFingerprint,
@@ -23,7 +25,8 @@ export function createDuplicateFingerprint(
   storage?: string | null,
   ram?: string | null,
   variant?: string | null,
-  category?: string | null
+  category?: string | null,
+  productType?: string | null
 ): DuplicateFingerprint {
   const normalized = normalizeSearchText(title);
   const tokens = new Set(getTokens(normalized));
@@ -35,6 +38,7 @@ export function createDuplicateFingerprint(
     ram: ram || null,
     variant: variant || null,
     category: category || null,
+    productType: productType || null,
     normalized,
     tokens,
   };
@@ -44,6 +48,33 @@ export function calculateDuplicateScoreForInputs(
   input1: ComparisonInput,
   input2: ComparisonInput
 ): DuplicateResult {
+  // Early rejection: product type conflict → score 0
+  if (isProductTypeConflict(input1.productType, input2.productType)) {
+    return {
+      score: 0,
+      confidence: 'different',
+      signals: {
+        normalization: 0,
+        brand: 0,
+        model: 0,
+        storage: 0,
+        ram: 0,
+        variant: 0,
+        condition: 0,
+        price: 0,
+        titleSimilarity: 0,
+        sourceDiversity: 0,
+        categoryScore: 0,
+        productTypeScore: 0,
+        productUnderstandingScore: 0,
+      },
+      reasoning: [`Ürün tipleri uyumsuz: ${input1.productType} vs ${input2.productType}`],
+      confidenceScore: 0,
+      confidenceLevel: 'very-low',
+      confidenceReasons: ['Product type conflict'],
+    };
+  }
+
   const normalized1 = normalizeSearchText(input1.title);
   const normalized2 = normalizeSearchText(input2.title);
 
@@ -57,12 +88,17 @@ export function calculateDuplicateScoreForInputs(
   const aggregate = aggregateScores(scores);
   const confidence = determineConfidence(aggregate);
   const reasoning = generateReasoning(scores, aggregate);
+  const puScore = calculateProductUnderstandingScore(
+    input1.productType,
+    input2.productType,
+  );
   const confidenceResult = calculateConfidence(
     buildDuplicateConfidenceInput({
       duplicateScore: aggregate,
       signals: scores,
       sourceCount: resolveSourceCount(input1.sourceId, input2.sourceId),
       sourceReliability: resolveSourceReliability(input1.sourceId, input2.sourceId),
+      productUnderstandingScore: puScore,
     })
   );
 

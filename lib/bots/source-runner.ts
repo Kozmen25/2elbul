@@ -5,7 +5,7 @@ import {
   SCRAPE_READY_SLUGS,
   getStandardSourceAdapter,
 } from "@/lib/bots/connectors";
-import { isRecord } from "@/lib/records";
+import { isMissingColumnArray } from "@/lib/listing-status";
 import {
   normalizeSyncStatus,
   syncListingsForSource,
@@ -13,6 +13,7 @@ import {
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
 import type { BotAdapterListing } from "@/lib/bots/types";
 import { RecoveryMetricsService } from "@/lib/recovery";
+import { CATEGORY_LABELS } from "@/lib/taxonomy/product-type-mapping";
 import { EASYCEP_ACCESSORY_CATEGORY_URL } from "@/lib/bots/adapters/easycep";
 import { GETMOBIL_ACCESSORY_CATEGORY_URL } from "@/lib/bots/adapters/getmobil";
 
@@ -211,7 +212,7 @@ export async function runSourceScrapeBot(
 
   if (
     runUpdate.error &&
-    isMissingColumn(runUpdate.error, [
+    isMissingColumnArray(runUpdate.error, [
       "updated_count",
       "inactive_count",
       "reactivated_count",
@@ -308,7 +309,7 @@ async function updateSourceStats(
   };
   let result = await supabase.from("sources").update(payload).eq("id", source.id);
 
-  if (result.error && isMissingColumn(result.error, ["last_success"])) {
+  if (result.error && isMissingColumnArray(result.error, ["last_success"])) {
     const { last_success: _lastSuccess, ...legacyPayload } = payload;
     result = await supabase
       .from("sources")
@@ -367,22 +368,8 @@ function getErrorMessage(error: unknown) {
   return "Bilinmeyen bot hatası";
 }
 
-function isMissingColumn(error: unknown, columns: string[]) {
-  if (!isRecord(error)) return false;
-  const record = error;
-  const code = typeof record.code === "string" ? record.code : undefined;
-  const message = typeof record.message === "string" ? record.message : "";
-  const details = typeof record.details === "string" ? record.details : "";
-  const text = `${message} ${details}`.toLowerCase();
-  return (
-    code === "42703" ||
-    code === "PGRST204" ||
-    columns.some((column) => text.includes(column))
-  );
-}
-
 function resolveScrapeUrl(source: SourceRunRecord, category?: string): string | null {
-  if (category === "Aksesuar") {
+  if (category === CATEGORY_LABELS.ACCESSORY) {
     switch (source.slug) {
       case "easycep":
         return EASYCEP_ACCESSORY_CATEGORY_URL;

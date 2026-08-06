@@ -1,16 +1,17 @@
 import { createCategoryResolver } from "./integration";
-import { createLegacyAdapter } from "./legacy-adapter";
 import { createNewEngineAdapter } from "./new-adapter";
+import treeBuilder from "./tree";
+import { CATEGORY_TAXONOMY } from "../category-taxonomy";
 import type { ICategoryResolver } from "./integration";
 
 let globalResolver: ICategoryResolver | null = null;
 
 export function initializeCategoryResolver(): ICategoryResolver {
   if (!globalResolver) {
-    globalResolver = createCategoryResolver(
-      createLegacyAdapter(),
-      createNewEngineAdapter(),
-    );
+    // Populate TaxonomyRegistry from CATEGORY_TAXONOMY before creating resolvers
+    treeBuilder.buildFromLegacy(CATEGORY_TAXONOMY);
+
+    globalResolver = createCategoryResolver(createNewEngineAdapter());
   }
   return globalResolver;
 }

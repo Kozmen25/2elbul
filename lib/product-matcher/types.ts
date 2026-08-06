@@ -33,6 +33,12 @@ export type ComparisonListing = {
   source: string;
   sourceId?: number;
   condition?: string;
+  productType?: string | null;
+  accessoryType?: string | null;
+  sparePartType?: string | null;
+  serviceType?: string | null;
+  deviceFamily?: string | null;
+  compatibleDevice?: string | null;
 };
 
 export type ListingDuplicateDetectionResult = {
@@ -77,6 +83,7 @@ export type BatchMatcherInput = {
   productName?: string | null;
   category?: string | null;
   source?: string | null;
+  attributes?: unknown;
 };
 
 export type BatchMatchCandidate = {
@@ -91,4 +98,5 @@ export type FindOrCreateMatchedProductInput = {
   category?: string | null;
   source?: string | null;
   resolver?: ICategoryResolver;
+  attributes?: unknown;
 };

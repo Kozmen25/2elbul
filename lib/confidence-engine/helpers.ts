@@ -69,7 +69,7 @@ export function scoreSourceReliability(
     .map((candidate) => resolveSourceReliabilityFromName(candidate))
     .filter((value): value is number => typeof value === "number");
 
-  if (!scores.length) return 50;
+  if (!scores.length) return 0;
 
   return clampScore(Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length));
 }
@@ -127,6 +127,7 @@ export function buildDuplicateConfidenceInput({
   taxonomyAttributeCount,
   normalizedTitle,
   canonicalTitle,
+  productUnderstandingScore,
 }: {
   duplicateScore: number;
   signals: DuplicateScoreLike;
@@ -140,6 +141,7 @@ export function buildDuplicateConfidenceInput({
   taxonomyAttributeCount?: number;
   normalizedTitle?: string | null;
   canonicalTitle?: string | null;
+  productUnderstandingScore?: number | null;
 }): ConfidenceInput {
   return {
     signals: {
@@ -161,10 +163,14 @@ export function buildDuplicateConfidenceInput({
       titleSimilarity: signals.titleSimilarity,
       sourceCount: scoreSourceCount(sourceCount ?? inferSourceCountFromDiversity(signals.sourceDiversity)),
       sourceReliability: scoreSourceReliability(
-        sourceReliability ?? (sourceName || sourceNames?.length ? undefined : 50),
+        sourceReliability ?? (sourceName || sourceNames?.length ? undefined : 0),
         sourceName,
         sourceNames,
       ),
+      productUnderstandingScore:
+        typeof productUnderstandingScore === "number" && Number.isFinite(productUnderstandingScore)
+          ? productUnderstandingScore
+          : signals.productUnderstandingScore,
     },
     context: {
       normalizedTitle,
@@ -192,6 +198,7 @@ export function buildProductMatcherConfidenceInput({
   categoryConfidence,
   taxonomyHasFullPath,
   taxonomyAttributeCount,
+  productUnderstandingScore,
 }: {
   signals: ProductSignalsLike;
   normalizedTitle?: string | null;
@@ -203,6 +210,7 @@ export function buildProductMatcherConfidenceInput({
   categoryConfidence?: ConfidenceContext["taxonomyConfidence"];
   taxonomyHasFullPath?: boolean;
   taxonomyAttributeCount?: number;
+  productUnderstandingScore?: number | null;
 }): ConfidenceInput {
   const presentSignalCount = [signals.brand, signals.model, signals.storage, signals.ram].filter(Boolean).length;
   const normalizationScore =
@@ -230,10 +238,14 @@ export function buildProductMatcherConfidenceInput({
       titleSimilarity: scoreTitleSimilarity(normalizedTitle, canonicalTitle),
       sourceCount: scoreSourceCount(sourceCount ?? 1),
       sourceReliability: scoreSourceReliability(
-        sourceReliability ?? (sourceName || sourceNames?.length ? undefined : 50),
+        sourceReliability ?? (sourceName || sourceNames?.length ? undefined : 0),
         sourceName,
         sourceNames,
       ),
+      productUnderstandingScore:
+        typeof productUnderstandingScore === "number" && Number.isFinite(productUnderstandingScore)
+          ? productUnderstandingScore
+          : signals.productUnderstandingScore,
     },
     context: {
       normalizedTitle,
@@ -402,7 +414,7 @@ function resolveSourceReliabilityValue(
 
   if (!names.length) {
     if (typeof context?.sourceCount === "number" && Number.isFinite(context.sourceCount)) {
-      return 50;
+      return 0;
     }
     return null;
   }

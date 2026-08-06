@@ -1,5 +1,6 @@
 import type { ICategoryResolver } from "@/lib/taxonomy/integration";
 import type { ListingCondition } from "@/lib/listings";
+import { CATEGORY_LABELS } from "@/lib/taxonomy/product-type-mapping";
 export interface NormalizationOptions {
   lowercase?: boolean;
   trim?: boolean;
@@ -473,7 +474,7 @@ export function extractProductSignals(
   const category = resolver
     ? resolver.resolveSync(title).categoryLabel
     : detectCategory(normalized, brand);
-  const keyParts = [category, brand, model, storage, ram && category !== "Telefon" ? ram : null].filter(Boolean);
+  const keyParts = [category, brand, model, storage, ram && category !== CATEGORY_LABELS.PHONE ? ram : null].filter(Boolean);
   const normalizedKey = keyParts.length
     ? keyParts.join("-").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
     : normalized.replace(/\s+/g, "-");
@@ -581,11 +582,39 @@ function detectColor(tokens: string[]) {
   return tokens.find((token) => colors.includes(token)) ?? null;
 }
 
-export function detectCategory(normalized: string, brand: string | null) {
-  // Accessory check FIRST — catches "iphone 15 kilif" before it matches Telefon
+function detectCategory(normalized: string, brand: string | null) {
+  // Service check FIRST — highest priority
+  const serviceKeywords = [
+    "tamir", "onarim", "servis", "degisim", "yenileme",
+    "bakim", "kurtarma", "sifirlama", "format",
+    "ekran degisimi", "batarya degisimi", "sarj soketi degisimi",
+    "hoparlor degisimi", "ana kart tamir", "kamera tamir",
+    "ekran yenileme", "batarya yenileme",
+  ];
+  if (serviceKeywords.some((kw) => normalized.includes(kw))) {
+    return CATEGORY_LABELS.SERVICE;
+  }
+
+  // GPU/Graphics Card ("ekran kartı") — NOT a spare part, must be checked before sparePartKeywords
+  if (/ekran kart[ıi]/.test(normalized)) {
+    return "Ekran Kartı";
+  }
+
+  // Spare part check — before accessory (battery is a spare part, not accessory)
+  const sparePartKeywords = [
+    "ekran", "batarya", "sarj soketi", "kamera modulu",
+    "hoparlor", "ana kart", "ekran paneli", "dokunmatik",
+    "kuvartz", "vibrator motoru", "yan tus", "home tus",
+    "ariza", "arizali", "kirik", "cizik",
+  ];
+  if (sparePartKeywords.some((kw) => normalized.includes(kw))) {
+    return CATEGORY_LABELS.SPARE_PART;
+  }
+
+  // Accessory check — catches "iphone 15 kilif" before it matches Telefon
   const accessoryKeywords = [
     "kilif", "sarj", "kablo", "powerbank", "ekran koruyucu",
-    "adaptr", "tutucu", "kizak", "lens", "batarya", "hub",
+    "adaptr", "tutucu", "kizak", "lens", "hub",
     "mause", "mouse", "klavye", "kulaklik", "saat",
     "airpods", "şarj aleti", "sarj aleti",
     "usb", "hdmi", "donusturucu", "aksesuar",
@@ -594,20 +623,20 @@ export function detectCategory(normalized: string, brand: string | null) {
     "temperli cam", "koruyucu film", "ekran koruma",
   ];
   if (accessoryKeywords.some((kw) => normalized.includes(kw))) {
-    return "Aksesuar";
+    return CATEGORY_LABELS.ACCESSORY;
   }
   // Galaxy Buds / Buds+ / Buds2 / Buds Pro
-  if (normalized.includes("buds")) return "Aksesuar";
+  if (normalized.includes("buds")) return CATEGORY_LABELS.ACCESSORY;
   // Accessory brands — purely accessory makers, not phone brands
   const accessoryBrands = ["omix", "anker", "logitech", "jbl"];
-  if (brand && accessoryBrands.includes(brand)) return "Aksesuar";
+  if (brand && accessoryBrands.includes(brand)) return CATEGORY_LABELS.ACCESSORY;
 
   // Device detection follows
   if (
     brand === "apple" &&
     (normalized.includes("iphone") || isBareIphoneModel(normalized))
   ) {
-    return "Telefon";
+    return CATEGORY_LABELS.PHONE;
   }
   // Tablet check BEFORE Samsung galaxy check (prevents Tab misclassification)
   if (
@@ -615,16 +644,16 @@ export function detectCategory(normalized: string, brand: string | null) {
     normalized.includes("ipad") ||
     normalized.includes("tablet")
   ) {
-    return "Tablet";
+    return CATEGORY_LABELS.TABLET;
   }
   if (brand === "samsung" && /\b(galaxy|s\d{2}|a\d{2})\b/.test(normalized)) {
-    return "Telefon";
+    return CATEGORY_LABELS.PHONE;
   }
   if (normalized.includes("macbook") || normalized.includes("laptop")) {
-    return "Laptop";
+    return CATEGORY_LABELS.LAPTOP;
   }
   if (normalized.includes("playstation") || normalized.includes("ps5")) {
-    return "Oyun Konsolu";
+    return CATEGORY_LABELS.CONSOLE;
   }
   if (normalized.includes("rtx") || normalized.includes("ekran karti")) {
     return "Ekran Kartı";
@@ -704,12 +733,12 @@ function getSourceCondition(source: string): { value: ListingCondition; confiden
 function getCategoryModifier(category: string | undefined): number {
   if (!category) return 1.0;
   switch (category) {
-    case "Telefon": return 1.0;
-    case "Tablet": return 1.0;
-    case "Laptop": return 0.9;
-    case "Oyun Konsolu": return 0.9;
+    case CATEGORY_LABELS.PHONE: return 1.0;
+    case CATEGORY_LABELS.TABLET: return 1.0;
+    case CATEGORY_LABELS.LAPTOP: return 0.9;
+    case CATEGORY_LABELS.CONSOLE: return 0.9;
     case "Ekran Kartı": return 0.85;
-    case "Aksesuar": return 0.7;
+    case CATEGORY_LABELS.ACCESSORY: return 0.7;
     default: return 1.0;
   }
 }

@@ -11,6 +11,12 @@ export function createComparisonInput(
     price?: number | null;
     sourceId?: number | null;
     category?: string | null;
+    productType?: string | null;
+    accessoryType?: string | null;
+    sparePartType?: string | null;
+    serviceType?: string | null;
+    deviceFamily?: string | null;
+    compatibleDevice?: string | null;
   }
 ): ComparisonInput {
   return {
@@ -23,6 +29,12 @@ export function createComparisonInput(
     price: options?.price || null,
     sourceId: options?.sourceId || null,
     category: options?.category || null,
+    productType: options?.productType || null,
+    accessoryType: options?.accessoryType || null,
+    sparePartType: options?.sparePartType || null,
+    serviceType: options?.serviceType || null,
+    deviceFamily: options?.deviceFamily || null,
+    compatibleDevice: options?.compatibleDevice || null,
   };
 }
 
