@@ -147,7 +147,7 @@ export async function importListings(
         // Store product understanding result in products.attributes JSONB
         const { error: attrError } = await supabase
           .from("products")
-          .update({ attributes: understanding })
+          .update({ attributes: { productUnderstanding: understanding } })
           .eq("id", matchedProduct.id);
 
         if (attrError) {

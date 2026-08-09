@@ -206,7 +206,7 @@ async function ensureProductUnderstanding(
 
   const { error } = await supabase
     .from("products")
-    .update({ attributes: understanding })
+    .update({ attributes: { productUnderstanding: understanding } })
     .eq("id", productId);
 
   if (error) {

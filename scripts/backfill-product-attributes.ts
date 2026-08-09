@@ -76,7 +76,7 @@ async function main() {
 
         const { error: updateError } = await sb
           .from("products")
-          .update({ attributes: understanding })
+          .update({ attributes: { productUnderstanding: understanding } })
           .eq("id", product.id);
 
         if (updateError) {
