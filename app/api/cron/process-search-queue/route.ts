@@ -18,7 +18,7 @@ import type {
 } from "@/lib/unified-source-engine";
 import { DeadLetterQueue, classifyError } from "@/lib/recovery";
 import { hasValidSecret } from "@/lib/auth/cron-auth";
-import { ensureProductLegacy, normalizeProductName } from "@/lib/search/product-legacy";
+import { normalizeProductName } from "@/lib/search/product-legacy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

@@ -18,7 +18,6 @@ import type {
 } from "@/lib/unified-source-engine";
 import { getGlobalContext } from "@/lib/taxonomy/context";
 import type { createCategoryResolver } from "@/lib/taxonomy/integration";
-import { ensureProductLegacy } from "@/lib/search/product-legacy";
 import { verifySearchRequest } from "@/lib/auth/search-auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 

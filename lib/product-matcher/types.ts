@@ -11,6 +11,7 @@ export type MatchedProduct = {
   name: string;
   signals: ProductSignals;
   created: boolean;
+  attributes?: unknown;
 } & ConfidenceMetadata;
 
 export type ProductMatcherDryRunResult = {

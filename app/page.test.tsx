@@ -292,6 +292,7 @@ function makeListing(overrides: Partial<HomeListing> = {}): HomeListing {
     imageUrl: null,
     createdAt: "2026-07-05T08:15:00.000Z",
     category: null,
+    productType: null,
     ...overrides,
   };
 }

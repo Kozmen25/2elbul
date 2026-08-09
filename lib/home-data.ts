@@ -20,6 +20,7 @@ export type HomeListing = {
   imageUrl: string | null;
   createdAt: string;
   category: string | null;
+  productType: string | null;
 };
 
 export type PopularProduct = {
@@ -221,6 +222,7 @@ export async function getHomeData(): Promise<HomeData> {
         condition: listing.condition,
         imageUrl: listing.image_url ? String(listing.image_url) : null,
         createdAt: listing.created_at,
+        productType: pueProductType,
         previousPrice:
           listing.previous_price == null
             ? null
@@ -231,6 +233,12 @@ export async function getHomeData(): Promise<HomeData> {
     .filter((listing): listing is NonNullable<typeof listing> => Boolean(listing));
   const publicListings = normalizedListings.filter(
     (listing) => !isPublicDemoListing(listing),
+  );
+
+  const NON_PRIMARY_TYPES = new Set(["accessory", "spare_part", "service"]);
+  const primaryListings = publicListings.filter(
+    (listing) =>
+      !listing.productType || !NON_PRIMARY_TYPES.has(listing.productType),
   );
 
   const productLookup = new Map(
@@ -273,10 +281,9 @@ export async function getHomeData(): Promise<HomeData> {
     string,
     { count: number; total: number; lowest: number }
   >();
-  for (const listing of publicListings) {
+  for (const listing of primaryListings) {
     const product = productLookup.get(listing.productName);
-    const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
-    if (pt !== "primary_product") continue;
+    if (!product) continue;
     const current = listedProductStats.get(listing.productName) ?? {
       count: 0,
       total: 0,
@@ -295,7 +302,7 @@ export async function getHomeData(): Promise<HomeData> {
     string,
     { count: number; total: number; lowest: number }
   >();
-  for (const listing of publicListings) {
+  for (const listing of primaryListings) {
     const key = `${listing.productName}||${listing.category ?? ""}`;
     const current = productCategoryStats.get(key) ?? {
       count: 0,
@@ -325,16 +332,16 @@ export async function getHomeData(): Promise<HomeData> {
     .slice(0, 8);
 
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const refurbishedListings = publicListings
+  const refurbishedListings = primaryListings
     .filter((listing) => listing.condition === "Yenilenmiş")
     .slice(0, 8);
-  const last24HourMatches = publicListings.filter(
+  const last24HourMatches = primaryListings.filter(
     (listing) => new Date(listing.createdAt).getTime() >= oneDayAgo,
   );
   const last24HourListings = (
-    last24HourMatches.length > 0 ? last24HourMatches : publicListings
+    last24HourMatches.length > 0 ? last24HourMatches : primaryListings
   ).slice(0, 8);
-  const analyzedPriceOpportunities = publicListings
+  const analyzedPriceOpportunities = primaryListings
     .map((listing) => {
       const key = `${listing.productName}||${listing.category ?? ""}`;
       const stats = productCategoryStats.get(key);
@@ -364,7 +371,7 @@ export async function getHomeData(): Promise<HomeData> {
   const opportunityIds = new Set(
     analyzedPriceOpportunities.map((listing) => listing.id),
   );
-  const fallbackOpportunities: PriceOpportunity[] = publicListings
+  const fallbackOpportunities: PriceOpportunity[] = primaryListings
     .filter((listing) => !opportunityIds.has(listing.id))
     .sort(
       (a, b) =>
@@ -388,18 +395,8 @@ export async function getHomeData(): Promise<HomeData> {
     ...analyzedPriceOpportunities,
     ...fallbackOpportunities,
   ]
-    .filter((listing) => {
-      const product = productLookup.get(listing.productName);
-      const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
-      return pt === "primary_product";
-    })
     .slice(0, 8);
-  const priceDrops = publicListings
-    .filter((listing) => {
-      const product = productLookup.get(listing.productName);
-      const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
-      return pt === "primary_product";
-    })
+  const priceDrops = primaryListings
     .filter(
       (listing) =>
         listing.previousPrice !== null &&
@@ -451,7 +448,7 @@ export async function getHomeData(): Promise<HomeData> {
   }
 
   return {
-    latestListings: publicListings.slice(0, 6),
+    latestListings: primaryListings.slice(0, 6),
     refurbishedListings,
     priceOpportunities,
     last24HourListings,
@@ -471,12 +468,7 @@ export async function getHomeData(): Promise<HomeData> {
         id: product.id,
         name: String(product.name),
       })),
-      listings: publicListings
-        .filter((listing) => {
-          const product = productLookup.get(listing.productName);
-          const pt = product ? extractProductTypeFromAttributes(product.attributes) : null;
-          return pt === "primary_product";
-        })
+      listings: primaryListings
         .map((listing) => ({
           productName: listing.productName,
           price: listing.price,

@@ -5,14 +5,27 @@ export async function batchFindExistingMatchedProducts(
   supabase: SupabaseClient,
   candidates: BatchMatchCandidate[],
 ): Promise<
-  Map<string, { id: string | number; name: string; category: string | null } | null>
+  Map<
+    string,
+    {
+      id: string | number;
+      name: string;
+      category: string | null;
+      attributes?: unknown;
+    } | null
+  >
 > {
   if (candidates.length === 0) return new Map();
 
   // Initialize result map: all candidates start as null (unmatched)
   const resultMap = new Map<
     string,
-    { id: string | number; name: string; category: string | null } | null
+    {
+      id: string | number;
+      name: string;
+      category: string | null;
+      attributes?: unknown;
+    } | null
   >();
   for (const c of candidates) {
     resultMap.set(c.canonicalName, null);
@@ -21,7 +34,7 @@ export async function batchFindExistingMatchedProducts(
   // Phase 1: Batch exact name match
   const { data: exactProducts, error: exactError } = await supabase
     .from("products")
-    .select("id, name, category")
+    .select("id, name, category, attributes")
     .in(
       "name",
       candidates.map((c) => c.canonicalName),
@@ -31,7 +44,12 @@ export async function batchFindExistingMatchedProducts(
 
   const exactByName = new Map<
     string,
-    { id: string | number; name: string; category: string | null }
+    {
+      id: string | number;
+      name: string;
+      category: string | null;
+      attributes?: unknown;
+    }
   >();
   if (exactProducts) {
     for (const p of exactProducts) {
@@ -41,6 +59,7 @@ export async function batchFindExistingMatchedProducts(
           id: p.id,
           name,
           category: p.category ? String(p.category) : null,
+          attributes: "attributes" in p ? (p as { attributes?: unknown }).attributes : undefined,
         });
       }
     }
@@ -66,7 +85,7 @@ export async function batchFindExistingMatchedProducts(
 
   const { data: keyProducts, error: keyError } = await supabase
     .from("products")
-    .select("id, name, category, normalized_key")
+    .select("id, name, category, normalized_key, attributes")
     .in("normalized_key", uniqueKeys);
 
   if (keyError) throw keyError;
@@ -81,6 +100,7 @@ export async function batchFindExistingMatchedProducts(
           id: product.id,
           name: String(product.name),
           category: product.category ? String(product.category) : null,
+          attributes: "attributes" in product ? (product as { attributes?: unknown }).attributes : undefined,
         };
         const names = keyToNames.get(pKey) ?? [];
         for (const cn of names) {

@@ -10,6 +10,7 @@ import {
 } from "./repository";
 import { isDuplicateError } from "./helpers";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
+import { analyzeProduct } from "@/lib/product-understanding";
 import type {
   BatchMatchCandidate,
   BatchMatcherInput,
@@ -90,11 +91,19 @@ export async function findOrCreateMatchedProduct({
     state.canonicalKey,
   );
   if (matchedProduct) {
+    const ensuredAttributes = await ensureProductUnderstanding(
+      supabase,
+      matchedProduct.id,
+      matchedProduct.attributes,
+      title,
+      category,
+    );
     return {
       id: matchedProduct.id,
       name: matchedProduct.name,
       signals: state.signals,
       created: false,
+      attributes: ensuredAttributes,
       ...confidence,
     };
   }
@@ -114,16 +123,26 @@ export async function findOrCreateMatchedProduct({
   if (insertError && isDuplicateError(insertError)) {
     const duplicateLookup = await supabase
       .from("products")
-      .select("id, name")
+      .select("id, name, attributes")
       .eq("name", state.canonicalName)
       .maybeSingle();
     if (duplicateLookup.error) throw duplicateLookup.error;
     if (duplicateLookup.data) {
+      const ensuredAttributes = await ensureProductUnderstanding(
+        supabase,
+        duplicateLookup.data.id,
+        "attributes" in duplicateLookup.data
+          ? (duplicateLookup.data as { attributes?: unknown }).attributes
+          : undefined,
+        title,
+        category,
+      );
       return {
         id: duplicateLookup.data.id,
         name: String(duplicateLookup.data.name),
         signals: state.signals,
         created: false,
+        attributes: ensuredAttributes,
         ...confidence,
       };
     }
@@ -137,6 +156,13 @@ export async function findOrCreateMatchedProduct({
     name: String(createdProduct.name),
     signals: state.signals,
     created: true,
+    attributes: await ensureProductUnderstanding(
+      supabase,
+      createdProduct.id,
+      undefined,
+      title,
+      category,
+    ),
     ...confidence,
   };
 }
@@ -161,6 +187,42 @@ function prepareMatcherState(
     canonicalKey,
     productType,
   };
+}
+
+async function ensureProductUnderstanding(
+  supabase: SupabaseClient,
+  productId: string | number,
+  existingAttributes: unknown,
+  title: string,
+  category: string | null | undefined,
+) {
+  const hasUnderstanding = hasProductUnderstanding(existingAttributes);
+  if (hasUnderstanding) return existingAttributes;
+
+  const understanding = analyzeProduct({
+    title,
+    marketplaceCategory: category ?? undefined,
+  });
+
+  const { error } = await supabase
+    .from("products")
+    .update({ attributes: understanding })
+    .eq("id", productId);
+
+  if (error) {
+    console.warn(
+      `[Product Matcher] Failed to backfill attributes for product ${productId}: ${error.message}`,
+    );
+    return existingAttributes ?? understanding;
+  }
+
+  return understanding;
+}
+
+function hasProductUnderstanding(attributes: unknown) {
+  if (!attributes || typeof attributes !== "object") return false;
+  const record = attributes as Record<string, unknown>;
+  return "productUnderstanding" in record;
 }
 
 export async function batchFindOrCreateMatchedProducts(
@@ -200,11 +262,19 @@ export async function batchFindOrCreateMatchedProducts(
     const existing = matchedMap.get(state.canonicalName);
 
     if (existing) {
+      const ensuredAttributes = await ensureProductUnderstanding(
+        supabase,
+        existing.id,
+        existing.attributes,
+        inputs[i].title,
+        inputs[i].category || state.signals.category,
+      );
       results.push({
         id: existing.id,
         name: existing.name,
         signals: state.signals,
         created: false,
+        attributes: ensuredAttributes,
         ...confidence,
       });
     } else {
@@ -262,11 +332,19 @@ export async function batchFindOrCreateMatchedProducts(
       const { state, confidence } = confidenceResults[i];
       const product = retryByName.get(state.canonicalName);
       if (product) {
+        const ensuredAttributes = await ensureProductUnderstanding(
+          supabase,
+          product.id,
+          "attributes" in product ? (product as { attributes?: unknown }).attributes : undefined,
+          inputs[i].title,
+          inputs[i].category || state.signals.category,
+        );
         results[i] = {
           id: product.id,
           name: product.name,
           signals: state.signals,
           created: false,
+          attributes: ensuredAttributes,
           ...confidence,
         };
       }
@@ -279,11 +357,19 @@ export async function batchFindOrCreateMatchedProducts(
       const { state, confidence } = confidenceResults[i];
       const cp = createdProducts[j];
       if (cp) {
+        const ensuredAttributes = await ensureProductUnderstanding(
+          supabase,
+          cp.id,
+          "attributes" in cp ? (cp as { attributes?: unknown }).attributes : undefined,
+          inputs[i].title,
+          inputs[i].category || state.signals.category,
+        );
         results[i] = {
           id: cp.id,
           name: String(cp.name),
           signals: state.signals,
           created: true,
+          attributes: ensuredAttributes,
           ...confidence,
         };
       }
