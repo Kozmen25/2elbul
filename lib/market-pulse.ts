@@ -6,6 +6,7 @@ import {
 } from "./intelligence-engine";
 import { createProductSlug } from "./product-slug";
 import { normalizeSearchDemandQuery } from "./search-demand";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 
 export type MarketPulseProductInput = {
   id?: string | number | null;
@@ -55,6 +56,8 @@ type BuildMarketPulseInput = {
   listings: MarketPulseListingInput[];
   searches?: MarketPulseSearchInput[];
   limit?: number;
+  expectedProductType?: string | null;
+  productLookup?: Map<string, { attributes?: unknown }>;
 };
 
 const emptyPulse: MarketPulse = {
@@ -70,15 +73,31 @@ export function buildMarketPulse({
   listings,
   searches = [],
   limit = 6,
+  expectedProductType,
+  productLookup,
 }: BuildMarketPulseInput): MarketPulse {
   if (!products.length && !listings.length) return emptyPulse;
 
+  // Centralized productType filtering — only primary_product products enter
+  // market pulse aggregation. Accessory/spare_part/service product names
+  // would contaminate search counts via fuzzy token matching in countSearches().
+  const filteredProducts = expectedProductType && productLookup
+    ? products.filter((p) => {
+        if (p.id == null) return false;
+        const product = productLookup.get(String(p.id));
+        if (!product) return false;
+        const pt = extractProductTypeFromAttributes(product.attributes);
+        if (!pt) return true;
+        return pt === expectedProductType;
+      })
+    : products;
+
   const productNamesById = new Map(
-    products
+    filteredProducts
       .filter((product) => product.id !== null && product.id !== undefined)
       .map((product) => [String(product.id), product.name]),
   );
-  const productNames = new Set(products.map((product) => product.name));
+  const productNames = new Set(filteredProducts.map((product) => product.name));
   for (const listing of listings) {
     if (listing.productName) productNames.add(listing.productName);
   }

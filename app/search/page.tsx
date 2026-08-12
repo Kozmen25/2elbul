@@ -8,8 +8,10 @@ import type {
 import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
 import { buildProductPriceStats } from "@/lib/price-analysis";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { detectQueryIntent } from "@/lib/search/query-intent-detector";
 import { rankListingsByPue } from "@/lib/search/pue-ranking";
+import { getExpandedSearchTerms } from "@/lib/category-taxonomy";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getMetadataBase, getAbsoluteUrl } from "@/lib/site-url";
@@ -98,34 +100,36 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     loadError =
       "Supabase bağlantısı yapılandırılmamış. Ortam değişkenlerini kontrol edin.";
   } else if (query) {
+    const expandedTerms = [...new Set(
+      getExpandedSearchTerms(query)
+        .map(t => t.toLowerCase().trim())
+        .filter(Boolean)
+    )];
+    const searchTerms = expandedTerms.length > 0 ? expandedTerms : [query.toLowerCase().trim()];
+
+    const productOrFilter = searchTerms.map(t => "name.ilike.%25" + t + "%25").join(",");
+    const titleOrFilter = searchTerms.map(t => "title.ilike.%25" + t + "%25").join(",");
+
     const [matchingProductsResults, titleListingsResults] = await Promise.all([
-      Promise.all(
-        [query].map((term) => {
-          const cacheKey = cacheKeyFrom({ type: "product-search", term });
-          const cached = cacheGet<{ id: string | number; name: string; category: string | null }[]>(cacheKey);
-          if (cached) return { data: cached, error: null };
-          return supabase
-            .from("products")
-            .select("id, name, category")
-            .ilike("name", `%${term}%`)
-            .then((result) => {
-              if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
-              return result;
-            });
-        }),
-      ),
-      Promise.all(
-        [query].map((term) => {
-          const cacheKey = cacheKeyFrom({ type: "listing-title-search", term });
-          const cached = cacheGet<{ id: string | number; title: string; product_id: string | number; price: string | number; city: string; source: ListingSource; url: string; condition: ListingCondition; image_url: string | null; created_at: string }[]>(cacheKey);
-          if (cached) return { data: cached, error: null };
-          return searchPublishedListingsByTitle(supabase, `%${term}%`)
-            .then((result) => {
-              if (!result.error) cacheSet(cacheKey, result.data ?? [], 15_000);
-              return result;
-            });
-        }),
-      ),
+      (async () => {
+        const cacheKey = cacheKeyFrom({ type: "product-search", terms: searchTerms });
+        const cached = cacheGet<{ id: string | number; name: string; category: string | null }[]>(cacheKey);
+        if (cached) return [{ data: cached, error: null }];
+        const result = await supabase
+          .from("products")
+          .select("id, name, category")
+          .or(productOrFilter);
+        if (!result.error) cacheSet(cacheKey, result.data ?? [], 30_000);
+        return [result];
+      })(),
+      (async () => {
+        const cacheKey = cacheKeyFrom({ type: "listing-title-search", terms: searchTerms });
+        const cached = cacheGet<{ id: string | number; title: string; product_id: string | number; price: string | number; city: string; source: ListingSource; url: string; condition: ListingCondition; image_url: string | null; created_at: string }[]>(cacheKey);
+        if (cached) return [{ data: cached, error: null }];
+        const result = await searchPublishedListingsByTitle(supabase, titleOrFilter);
+        if (!result.error) cacheSet(cacheKey, result.data ?? [], 15_000);
+        return [result];
+      })(),
     ]);
     const productSearchError = matchingProductsResults.find((result) => result.error)
       ?.error;
@@ -348,19 +352,19 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
 async function searchPublishedListingsByTitle(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
-  pattern: string,
+  orFilter: string,
 ) {
   const result = await supabase
     .from("listings")
     .select(listingColumns)
     .in("status", ["published", "active"])
-    .ilike("title", pattern);
+    .or(orFilter);
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
   return supabase
     .from("listings")
     .select(listingColumns)
-    .ilike("title", pattern);
+    .or(orFilter);
 }
 
 async function searchPublishedListingsByProduct(

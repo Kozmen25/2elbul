@@ -205,10 +205,10 @@ export function filterListingsByProductType(
       if (pid == null) return null;
 
       const product = productLookup.get(String(pid));
-      if (!product) return null;
+      if (!product) return listing;
 
       const actualType = extractProductTypeFromAttributes(product.attributes);
-      if (!actualType) return null;
+      if (!actualType) return listing;
 
       if (actualType !== expectedProductType) return null;
 

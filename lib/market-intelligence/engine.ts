@@ -12,6 +12,7 @@ import { buildMarketSummary } from "./market-summary";
 import {
   normalizeAnalysisTimestamp,
   roundDecimal,
+  filterListingsByProductType,
 } from "./helpers";
 import { buildOpportunityAnalysis } from "@/lib/opportunity-engine";
 
@@ -19,10 +20,24 @@ export function buildMarketIntelligence(
   input: MarketIntelligenceInput,
 ): MarketIntelligence {
   const analysisGeneratedAt = normalizeAnalysisTimestamp(input.analyzedAt);
-  const priceAnalysis = buildMarketPriceAnalysis(input.listings);
+
+  // Centralized productType partition — every aggregation downstream sees only
+  // listings matching the expected productType. This prevents cross-type
+  // contamination (e.g. phone accessories polluting phone market averages).
+  // Requires a productLookup to resolve productType from PUE attributes;
+  // when unavailable (legacy callers, tests), all listings pass through.
+  const filteredListings = input.productLookup
+    ? filterListingsByProductType(
+        input.listings,
+        input.expectedProductType ?? input.scope.productType ?? null,
+        input.productLookup,
+      )
+    : input.listings;
+
+  const priceAnalysis = buildMarketPriceAnalysis(filteredListings);
   const marketSummary = buildMarketSummary({
     scope: input.scope,
-    listings: input.listings,
+    listings: filteredListings,
     priceAnalysis,
     intelligence: input.intelligence ?? null,
     decisionInsight: input.decisionInsight ?? null,

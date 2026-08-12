@@ -212,7 +212,7 @@ export const CATEGORY_ROUTES: CategoryRoute[] = [
       "oneplus",
       "google pixel",
     ],
-    excludeKeywords: ["tablet", "ipad", "watch", "saat", "kulaklik", "airpods", "konsol", "laptop", "bilgisayar"],
+    excludeKeywords: ["tablet", "ipad", "watch", "saat", "kulaklik", "airpods", "konsol", "laptop", "bilgisayar", "ekran koruyucu", "kılıf", "kilif", "sarj aleti", "şarj aleti", "kablo", "powerbank", "batarya", "tutucu", "adaptr", "adapter", "lens", "selfie çubuğu", "monopod", "kizak", "kızak", "hub", "mause", "mouse", "klavye", "aksesuar"],
     expectedProductType: "primary_product",
   },
   {
@@ -628,7 +628,7 @@ export const getCategoryPageData = cache(
     const listings = buildCategoryListings(listingRows, productLookup);
     const dominantType = dominantProductType(categoryProducts);
     const filteredListings = dominantType
-      ? filterListingsByProductType(listings, dominantType, productLookup)
+      ? (filterListingsByProductType(listings, dominantType, productLookup) as CategoryListingRecord[])
       : listings;
 
     if (!categoryProducts.length && !listings.length) {
@@ -638,7 +638,7 @@ export const getCategoryPageData = cache(
     const latestListingAt = getLatestListingTimestamp(listings);
     const categoryUrl = getAbsoluteUrl(`/category/${route.slug}`);
     const duplicateSummary = resolveProductDetailDuplicateSummary(
-      listings.map((listing) => ({
+      filteredListings.map((listing) => ({
         id: listing.id,
         title: listing.title,
         price: listing.price,
@@ -647,14 +647,14 @@ export const getCategoryPageData = cache(
       })),
     );
     const intelligence = calculateProductIntelligence({
-      listings: listings.map((listing) => ({
+      listings: filteredListings.map((listing) => ({
         price: listing.price,
         createdAt: listing.createdAt,
       })),
     });
     const decisionInsight = buildProductDecisionInsight(
       route.label,
-      listings.map((listing) => ({
+      filteredListings.map((listing) => ({
         id: listing.id,
         productId: listing.productId,
         title: listing.title,
@@ -695,6 +695,7 @@ export const getCategoryPageData = cache(
         confidenceScore: listing.confidenceScore,
         confidenceLevel: listing.confidenceLevel,
       })),
+      productLookup,
       intelligence,
       decisionInsight: {
         confidence: toConfidenceResult(
@@ -718,27 +719,29 @@ export const getCategoryPageData = cache(
         id: product.id,
         name: product.name,
       })),
-      listings: listings.map((listing) => ({
+      listings: filteredListings.map((listing) => ({
         productId: listing.productId,
         productName: listing.productName,
         price: listing.price,
         createdAt: listing.createdAt,
       })),
       searches: buildCategorySearches(searchEvents, searchDemands),
+      expectedProductType: route.expectedProductType,
+      productLookup: new Map(categoryProducts.map((p) => [p.id, { attributes: p.attributes }])),
     });
     const topOpportunities = marketPulse.topOpportunities.slice(0, 6);
     const popularProducts =
       marketPulse.mostSearchedProducts.length > 0
         ? marketPulse.mostSearchedProducts.slice(0, 6)
         : marketPulse.mostListedProducts.slice(0, 6);
-    const latestListings = [...listings]
+    const latestListings = [...filteredListings]
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
           a.productName.localeCompare(b.productName, "tr"),
       )
       .slice(0, 6);
-    const brandDistribution = buildBrandDistribution(categoryProducts, listings);
+    const brandDistribution = buildBrandDistribution(categoryProducts, filteredListings);
     const faqItems = buildCategoryFaqItems({
       categoryName: route.label,
       shortDescription: route.shortDescription,

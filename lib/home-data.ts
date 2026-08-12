@@ -417,20 +417,9 @@ export async function getHomeData(): Promise<HomeData> {
     .slice(0, 6);
 
   const categoryCounts = new Map<string, number>();
-  if (!categoriesResult.error) {
-    for (const listing of listings) {
-      const product = productMap.get(String(listing.product_id));
-      if (
-        !product ||
-        isPublicDemoListing({ ...listing, productName: product.name })
-      ) {
-        continue;
-      }
-      const category =
-        product.category?.trim() ||
-        "Diğer";
-      categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
-    }
+  for (const listing of primaryListings) {
+    const category = listing.category?.trim() || "Diğer";
+    categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
   }
   const summarizedSources = [
     "Sahibinden",
@@ -446,6 +435,10 @@ export async function getHomeData(): Promise<HomeData> {
       (sourceCounts.get(listing.source) ?? 0) + 1,
     );
   }
+
+  const productLookupByAttributes = new Map<string, { attributes?: unknown }>(
+    products.map((product) => [String(product.id), { attributes: product.attributes }]),
+  );
 
   return {
     latestListings: primaryListings.slice(0, 6),
@@ -476,6 +469,7 @@ export async function getHomeData(): Promise<HomeData> {
         })),
       searches: marketPulseSearches,
       limit: 5,
+      productLookup: productLookupByAttributes,
     }),
     error: "",
   };

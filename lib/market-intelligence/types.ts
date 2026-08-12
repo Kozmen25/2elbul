@@ -130,4 +130,6 @@ export type MarketIntelligenceInput = {
   duplicateSummary?: DuplicateBatchSummary | null;
   analyzedAt?: string | Date | null;
   attributes?: unknown;
+  expectedProductType?: string | null;
+  productLookup?: Map<string, { attributes?: unknown }>;
 };
