@@ -52,6 +52,7 @@ import {
   filterListingsByProductType,
 } from "@/lib/market-intelligence/helpers";
 import { getCompatibleProducts } from "@/lib/taxonomy/compatibility";
+import { ACCESSORY_PATTERNS } from "@/lib/product-understanding/accessory-patterns";
 
 export type ProductRecord = {
   id: string;
@@ -380,10 +381,25 @@ function buildProductDetailListings(
   listings: Listing[];
   marketIntelligenceListings: MarketIntelligenceListing[];
 } {
+  const productType = extractProductTypeFromAttributes(product.attributes);
+
+  // Title-based accessory detection for contaminated listings:
+  // when a primary_product's listing has an accessory title, exclude it.
+  // This catches old data where the matcher bound accessory listings to phone products
+  // before PUE cross-type guards existed.
+  function hasAccessoryInTitle(title: string): boolean {
+    return ACCESSORY_PATTERNS.some((entry) =>
+      entry.patterns.some((pattern) => pattern.test(title)),
+    );
+  }
+
   const pairs = listingRows
     .map((listing) => {
       const price = Number(listing.price);
       if (!Number.isFinite(price)) return null;
+
+      // Exclude accessory-titled listings from primary product pages
+      if (productType === "primary_product" && hasAccessoryInTitle(String(listing.title))) return null;
 
       const confidenceScore = normalizeConfidenceScore(listing.confidence_score);
       const confidenceLevel =
