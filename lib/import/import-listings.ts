@@ -84,12 +84,20 @@ export async function importListings(
   }
 
   // Phase 1: Batch-resolve all product matches
-  const inputs: BatchMatcherInput[] = normalizedListings.map(({ listing }) => ({
-    title: listing.title,
-    productName: listing.productName,
-    category: listing.category,
-    source,
-  }));
+  const inputs: BatchMatcherInput[] = normalizedListings.map(({ listing }) => {
+    const understanding = analyzeProduct({
+      title: listing.title,
+      price: listing.price,
+      marketplaceCategory: listing.category ?? undefined,
+    });
+    return {
+      title: listing.title,
+      productName: listing.productName,
+      category: listing.category,
+      source,
+      attributes: { productUnderstanding: understanding },
+    };
+  });
 
   const matchedProducts = await batchFindOrCreateMatchedProducts(
     supabase,

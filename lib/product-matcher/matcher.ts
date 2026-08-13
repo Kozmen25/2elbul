@@ -91,21 +91,27 @@ export async function findOrCreateMatchedProduct({
     state.canonicalKey,
   );
   if (matchedProduct) {
-    const ensuredAttributes = await ensureProductUnderstanding(
-      supabase,
-      matchedProduct.id,
-      matchedProduct.attributes,
-      title,
-      category,
-    );
-    return {
-      id: matchedProduct.id,
-      name: matchedProduct.name,
-      signals: state.signals,
-      created: false,
-      attributes: ensuredAttributes,
-      ...confidence,
-    };
+    // ProductType compatibility guard: prevent cross-type binding
+    const existingPt = extractProductTypeFromAttributes(matchedProduct.attributes);
+    if (state.productType && existingPt && existingPt !== state.productType) {
+      // Type mismatch — skip match and create new product below
+    } else {
+      const ensuredAttributes = await ensureProductUnderstanding(
+        supabase,
+        matchedProduct.id,
+        matchedProduct.attributes,
+        title,
+        category,
+      );
+      return {
+        id: matchedProduct.id,
+        name: matchedProduct.name,
+        signals: state.signals,
+        created: false,
+        attributes: ensuredAttributes,
+        ...confidence,
+      };
+    }
   }
 
   const insertPayload: Record<string, unknown> = {
@@ -128,6 +134,17 @@ export async function findOrCreateMatchedProduct({
       .maybeSingle();
     if (duplicateLookup.error) throw duplicateLookup.error;
     if (duplicateLookup.data) {
+      // ProductType compatibility guard on duplicate retry
+      const dupPt = extractProductTypeFromAttributes(
+        "attributes" in duplicateLookup.data
+          ? (duplicateLookup.data as { attributes?: unknown }).attributes
+          : undefined,
+      );
+      if (state.productType && dupPt && dupPt !== state.productType) {
+        throw new Error(
+          `Product type mismatch: "${state.canonicalName}" exists as ${dupPt} but incoming is ${state.productType}`,
+        );
+      }
       const ensuredAttributes = await ensureProductUnderstanding(
         supabase,
         duplicateLookup.data.id,
@@ -262,21 +279,35 @@ export async function batchFindOrCreateMatchedProducts(
     const existing = matchedMap.get(state.canonicalName);
 
     if (existing) {
-      const ensuredAttributes = await ensureProductUnderstanding(
-        supabase,
-        existing.id,
-        existing.attributes,
-        inputs[i].title,
-        inputs[i].category || state.signals.category,
-      );
-      results.push({
-        id: existing.id,
-        name: existing.name,
-        signals: state.signals,
-        created: false,
-        attributes: ensuredAttributes,
-        ...confidence,
-      });
+      const existingPt = extractProductTypeFromAttributes(existing.attributes);
+      if (state.productType && existingPt && existingPt !== state.productType) {
+        // ProductType mismatch — treat as unmatched to create new product
+        results.push(null);
+        unmatchedIndices.push(i);
+        const payload: Record<string, unknown> = {
+          name: state.canonicalName,
+          normalized_key: state.canonicalKey,
+        };
+        const category = inputs[i].category || state.signals.category;
+        if (category) payload.category = category;
+        unmatchedPayloads.push(payload);
+      } else {
+        const ensuredAttributes = await ensureProductUnderstanding(
+          supabase,
+          existing.id,
+          existing.attributes,
+          inputs[i].title,
+          inputs[i].category || state.signals.category,
+        );
+        results.push({
+          id: existing.id,
+          name: existing.name,
+          signals: state.signals,
+          created: false,
+          attributes: ensuredAttributes,
+          ...confidence,
+        });
+      }
     } else {
       results.push(null);
       unmatchedIndices.push(i);
@@ -313,16 +344,23 @@ export async function batchFindOrCreateMatchedProducts(
     const dedupedNames = dedupedPayloads.map((d) => states[d.originalIndex].canonicalName);
     const { data: retryProducts, error: retryError } = await supabase
       .from("products")
-      .select("id, name")
+      .select("id, name, attributes")
       .in("name", dedupedNames);
     if (retryError) throw retryError;
 
-    const retryByName = new Map<string, { id: string | number; name: string }>();
+    const retryByName = new Map<
+      string,
+      { id: string | number; name: string; attributes?: unknown }
+    >();
     if (retryProducts) {
       for (const p of retryProducts) {
         const pn = String(p.name);
         if (!retryByName.has(pn)) {
-          retryByName.set(pn, { id: p.id, name: pn });
+          retryByName.set(pn, {
+            id: p.id,
+            name: pn,
+            attributes: "attributes" in p ? (p as { attributes?: unknown }).attributes : undefined,
+          });
         }
       }
     }
@@ -332,6 +370,14 @@ export async function batchFindOrCreateMatchedProducts(
       const { state, confidence } = confidenceResults[i];
       const product = retryByName.get(state.canonicalName);
       if (product) {
+        // ProductType compatibility check on retry
+        const retryPt = extractProductTypeFromAttributes(
+          "attributes" in product ? (product as { attributes?: unknown }).attributes : undefined,
+        );
+        if (state.productType && retryPt && retryPt !== state.productType) {
+          // Type mismatch — don't bind to this product; leave as null
+          continue;
+        }
         const ensuredAttributes = await ensureProductUnderstanding(
           supabase,
           product.id,
