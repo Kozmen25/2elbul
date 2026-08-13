@@ -5,6 +5,7 @@ import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-
 import { createSupabaseClient } from "@/lib/supabase";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { getCategoryForProductType } from "@/lib/taxonomy/product-type-mapping";
+import { ACCESSORY_PATTERNS } from "@/lib/product-understanding/accessory-patterns";
 
 export type { MarketPulseItem } from "@/lib/market-pulse";
 
@@ -238,10 +239,32 @@ export async function getHomeData(): Promise<HomeData> {
   );
 
   const NON_PRIMARY_TYPES = new Set(["accessory", "spare_part", "service"]);
-  const primaryListings = publicListings.filter(
-    (listing) =>
-      !listing.productType || !NON_PRIMARY_TYPES.has(listing.productType),
-  );
+
+  // Title-based accessory detection: catches old contaminated listings whose
+  // productId points to a phone product but whose title clearly indicates an
+  // accessory. This is a secondary defense — the primary defense is the PUE
+  // productType gate above.
+  function hasAccessoryInTitle(title: string): boolean {
+    return ACCESSORY_PATTERNS.some((entry) =>
+      entry.patterns.some((pattern) => pattern.test(title)),
+    );
+  }
+
+  const primaryListings = publicListings.filter((listing) => {
+    // Exclude known non-primary product types (accessory, spare_part, service)
+    if (listing.productType && NON_PRIMARY_TYPES.has(listing.productType)) {
+      return false;
+    }
+
+    // Secondary defense: for old contaminated data where the listing's productId
+    // points to a phone product (PUE says "primary_product") but the listing
+    // title clearly indicates an accessory, exclude it anyway.
+    if (listing.productType === "primary_product" && hasAccessoryInTitle(listing.title)) {
+      return false;
+    }
+
+    return true;
+  });
 
   const productLookup = new Map(
     products.map((product) => [String(product.name), product]),
