@@ -104,10 +104,7 @@ export function buildMarketPulse({
 
   const listingsByProduct = new Map<string, MarketPulseListingInput[]>();
   for (const listing of listings) {
-    const name =
-      (listing.productId != null
-        ? productNamesById.get(String(listing.productId))
-        : null) || listing.productName;
+    const name = listing.productName;
     if (!name) continue;
     listingsByProduct.set(name, [...(listingsByProduct.get(name) ?? []), listing]);
   }
