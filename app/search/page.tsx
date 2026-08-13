@@ -107,8 +107,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     )];
     const searchTerms = expandedTerms.length > 0 ? expandedTerms : [query.toLowerCase().trim()];
 
-    const productOrFilter = searchTerms.map(t => "name.ilike.%25" + t + "%25").join(",");
-    const titleOrFilter = searchTerms.map(t => "title.ilike.%25" + t + "%25").join(",");
+    const productOrFilter = searchTerms.map(t => "name.ilike.%" + t + "%").join(",");
+    const titleOrFilter = searchTerms.map(t => "title.ilike.%" + t + "%").join(",");
 
     const [matchingProductsResults, titleListingsResults] = await Promise.all([
       (async () => {
