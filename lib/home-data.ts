@@ -10,6 +10,7 @@ export type { MarketPulseItem } from "@/lib/market-pulse";
 
 export type HomeListing = {
   id: string;
+  productId: string;
   productName: string;
   title: string;
   price: number;
@@ -212,6 +213,7 @@ export async function getHomeData(): Promise<HomeData> {
 
       return {
         id: String(listing.id),
+        productId: String(product.id),
         productName: product.name,
         category,
         title: listing.title,
@@ -463,12 +465,14 @@ export async function getHomeData(): Promise<HomeData> {
       })),
       listings: primaryListings
         .map((listing) => ({
+          productId: listing.productId,
           productName: listing.productName,
           price: listing.price,
           createdAt: listing.createdAt,
         })),
       searches: marketPulseSearches,
       limit: 5,
+      expectedProductType: "primary_product",
       productLookup: productLookupByAttributes,
     }),
     error: "",

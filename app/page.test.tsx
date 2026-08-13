@@ -282,6 +282,7 @@ const baseHomeData = {
 function makeListing(overrides: Partial<HomeListing> = {}): HomeListing {
   return {
     id: "listing-1",
+    productId: "product-1",
     productName: "iPhone 15 Pro",
     title: "iPhone 15 Pro 256 GB",
     price: 57900,

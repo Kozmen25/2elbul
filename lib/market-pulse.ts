@@ -106,6 +106,21 @@ export function buildMarketPulse({
   for (const listing of listings) {
     const name = listing.productName;
     if (!name) continue;
+
+    // Listing-level productType gate: skip listings whose product PUE type
+    // doesn't match the expected type. This prevents cross-type contamination
+    // even when listing.productName matches a different product type's name
+    // (e.g. an accessory listing whose productName is "iPhone 14 Pro Max").
+    // Only fires when both expectedProductType and productLookup are available.
+    // null productType listings pass through (graceful degradation).
+    if (expectedProductType && productLookup && listing.productId != null) {
+      const product = productLookup.get(String(listing.productId));
+      if (product) {
+        const pt = extractProductTypeFromAttributes(product.attributes);
+        if (pt && pt !== expectedProductType) continue;
+      }
+    }
+
     listingsByProduct.set(name, [...(listingsByProduct.get(name) ?? []), listing]);
   }
 
