@@ -18,6 +18,7 @@ export const ACCESSORY_PATTERNS: AccessoryPatternEntry[] = [
       /temperli\s*cam/i,
       /screen\s*protector/i,
       /full\s*cover\s*(?:cam|glass)/i,
+      /cam\s*koruyucu/i,
       /nano\s*film/i,
       /mat\s*ekran/i,
       /priv(?:acy)?\s*(?:cam|film)/i,
