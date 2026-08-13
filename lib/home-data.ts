@@ -121,7 +121,6 @@ export async function getHomeData(): Promise<HomeData> {
     listingsResult,
     categoriesResult,
     priceDataResult,
-    searchEventsResult,
     searchDemandsResult,
   ] =
     await Promise.all([
@@ -131,11 +130,6 @@ export async function getHomeData(): Promise<HomeData> {
       supabase
         .from("listings")
         .select("id, previous_price, price_updated_at"),
-      supabase
-        .from("search_events")
-        .select("product_id, created_at")
-        .order("created_at", { ascending: false })
-        .limit(1000),
       supabase
         .from("search_demands")
         .select("query, normalized_query, requested_at")
@@ -271,19 +265,17 @@ export async function getHomeData(): Promise<HomeData> {
   );
 
   const searchCounts = new Map<string, number>();
-  for (const event of searchEventsResult.error
+  for (const demand of searchDemandsResult.error
     ? []
-    : (searchEventsResult.data ?? [])) {
-    const productId = String(event.product_id);
-    searchCounts.set(productId, (searchCounts.get(productId) ?? 0) + 1);
+    : (searchDemandsResult.data ?? [])) {
+    const query = String(demand.normalized_query ?? "").toLowerCase().trim();
+    if (!query || query.length < 2) continue;
+    // Count normalized query frequency as a proxy for search popularity.
+    // The old search_events table had product_id; search_demands uses
+    // normalized_query, so we match queries to product names heuristically.
+    searchCounts.set(query, (searchCounts.get(query) ?? 0) + 1);
   }
   const marketPulseSearches = [
-    ...(searchEventsResult.error
-      ? []
-      : (searchEventsResult.data ?? []).map((event) => ({
-          productId: String(event.product_id),
-          createdAt: String(event.created_at ?? ""),
-        }))),
     ...(searchDemandsResult.error
       ? []
       : (searchDemandsResult.data ?? []).map((demand) => ({
@@ -294,10 +286,15 @@ export async function getHomeData(): Promise<HomeData> {
   ];
 
   const popularProducts = [...searchCounts.entries()]
-    .map(([productId, searchCount]) => ({
-      productName: productMap.get(productId)?.name ?? "",
-      searchCount,
-    }))
+    .map(([query, searchCount]) => {
+      const matchedProduct = [...productMap.values()].find(
+        (p) => p.name.toLowerCase().includes(query),
+      );
+      return {
+        productName: matchedProduct?.name ?? query,
+        searchCount,
+      };
+    })
     .filter((product) => product.productName)
     .sort((a, b) => b.searchCount - a.searchCount)
     .slice(0, 8);
