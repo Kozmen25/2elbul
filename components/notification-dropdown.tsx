@@ -65,6 +65,7 @@ export function NotificationDropdown({ initialUnreadCount = 0 }: { initialUnread
   function getLink(notif: Notification): string {
     const meta = notif.metadata;
     if (meta?.product_id) return `/product/${meta.product_id}`;
+    if (notif.type === "new_listing" && meta?.query) return `/search?q=${encodeURIComponent(String(meta.query))}`;
     if (meta?.listing_id) return `/listing/${meta.listing_id}`;
     return "/bildirimler";
   }
