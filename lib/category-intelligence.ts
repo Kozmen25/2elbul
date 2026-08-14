@@ -54,11 +54,6 @@ export type CategoryProductRecord = {
   createdAt: string | null;
 };
 
-export type CategorySearchEventRecord = {
-  productId: string | number | null;
-  createdAt: string | null;
-};
-
 export type CategorySearchDemandRecord = {
   query: string | null;
   normalizedQuery: string | null;
@@ -623,7 +618,6 @@ export const getCategoryPageData = cache(
     const productLookup = new Map(categoryProducts.map((product) => [product.id, product]));
     const productIds = [...productLookup.keys()];
     const listingRows = await fetchCategoryListings(supabase, productIds);
-    const searchEvents = await fetchSearchEvents(supabase);
     const searchDemands = await fetchSearchDemands(supabase);
     const listings = buildCategoryListings(listingRows, productLookup);
     const dominantType = dominantProductType(categoryProducts);
@@ -725,7 +719,7 @@ export const getCategoryPageData = cache(
         price: listing.price,
         createdAt: listing.createdAt,
       })),
-      searches: buildCategorySearches(searchEvents, searchDemands),
+      searches: buildCategorySearches(searchDemands),
       expectedProductType: route.expectedProductType,
       productLookup: new Map(categoryProducts.map((p) => [p.id, { attributes: p.attributes }])),
     });
@@ -1259,29 +1253,6 @@ async function fetchCategoryListingBatch(
   return [];
 }
 
-async function fetchSearchEvents(
-  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
-) {
-  const result = await supabase
-    .from("search_events")
-    .select("product_id, created_at")
-    .order("created_at", { ascending: false })
-    .limit(SEARCH_LIMIT);
-
-  if (result.error) {
-    console.error("Category search events query failed:", result.error);
-    return [] as CategorySearchEventRecord[];
-  }
-
-  return ((result.data ?? []) as Array<{
-    product_id: string | number | null;
-    created_at: string | null;
-  }>).map((row) => ({
-    productId: row.product_id,
-    createdAt: row.created_at ? String(row.created_at) : null,
-  }));
-}
-
 async function fetchSearchDemands(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
 ) {
@@ -1316,20 +1287,13 @@ function chunkArray<T>(values: T[], size: number) {
 }
 
 function buildCategorySearches(
-  events: CategorySearchEventRecord[],
   demands: CategorySearchDemandRecord[],
 ) {
-  return [
-    ...events.map((event) => ({
-      productId: event.productId,
-      createdAt: event.createdAt,
-    })),
-    ...demands.map((demand) => ({
-      query: demand.query,
-      normalizedQuery: demand.normalizedQuery,
-      createdAt: demand.createdAt,
-    })),
-  ];
+  return demands.map((demand) => ({
+    query: demand.query,
+    normalizedQuery: demand.normalizedQuery,
+    createdAt: demand.createdAt,
+  }));
 }
 
 type CategoryProductRow = {

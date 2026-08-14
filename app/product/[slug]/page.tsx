@@ -19,7 +19,7 @@ import { SafeShoppingBanner } from "@/components/safe-shopping-banner";
 import { PriceAlertForm } from "@/components/price-alert-form";
 import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { Listing } from "@/lib/listings";
-import { calculateMarketStats } from "@/lib/price-insights";
+import { calculateMarketStats, calculateOpportunityRating } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import {
   analyzeListingPrice,
@@ -55,6 +55,7 @@ import {
   ListingPriceHistoryChart,
   type ListingPriceHistoryPoint,
 } from "./listing-price-history-chart";
+import { PriceBandPanel } from "./price-band-panel";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -299,6 +300,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <PriceAnalysisBox
           stats={productPriceStats}
           analysis={bestListingAnalysis}
+        />
+
+        <PriceBandPanel
+          marketStats={marketStats}
+          listingPriceHistory={listingPriceHistory}
+          currentPrice={bestDealListing?.price ?? 0}
         />
 
         <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">

@@ -20,52 +20,117 @@ import { formatCurrencyTRY } from "@/lib/formatters";
 import {
   buildCompareDecision,
   getComparePageData,
+  findExtremeIndex,
   type CompareCandidateSummary,
   type CompareReason,
 } from "@/lib/compare-engine";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { ListingImage } from "@/components/listing-image";
 
 type ComparePageProps = {
-  searchParams: Promise<{ a?: string; b?: string }>;
+  searchParams: Promise<{ ids?: string; a?: string; b?: string }>;
 };
 
 export const dynamic = "force-dynamic";
 
-function readListingId(value: string | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed;
+/** Parse ?ids=id1,id2,id3,id4 or legacy ?a=id1&b=id2 into an ID array. */
+function parseListingIds(params: {
+  ids?: string;
+  a?: string;
+  b?: string;
+}): string[] | null {
+  if (params.ids) {
+    const ids = params.ids.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length < 2 || ids.length > 4) return null;
+    if (new Set(ids).size !== ids.length) return null;
+    return ids;
+  }
+  if (params.a && params.b) {
+    return [params.a.trim(), params.b.trim()];
+  }
+  return null;
+}
+
+/** Detect duplicate IDs in the URL for the error message. */
+function hasDuplicateIds(params: {
+  ids?: string;
+  a?: string;
+  b?: string;
+}): boolean {
+  if (params.ids) {
+    const ids = params.ids.split(",").map((s) => s.trim()).filter(Boolean);
+    return new Set(ids).size !== ids.length;
+  }
+  if (params.a && params.b && params.a.trim() === params.b.trim()) {
+    return true;
+  }
+  return false;
+}
+
+/** Lightweight check: were listings found but with different product types? */
+async function detectCrossTypeConflict(
+  listingIds: string[],
+): Promise<boolean> {
+  const { createSupabaseClient } = await import("@/lib/supabase");
+  const supabase = createSupabaseClient();
+  if (!supabase) return false;
+
+  const productTypes: string[] = [];
+  for (const id of listingIds) {
+    const { data: listing } = await supabase
+      .from("listings")
+      .select("product_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!listing?.product_id) return false;
+
+    const { data: product } = await supabase
+      .from("products")
+      .select("attributes")
+      .eq("id", String(listing.product_id))
+      .maybeSingle();
+    if (!product?.attributes) continue;
+
+    const pt = extractProductTypeFromAttributes(
+      product.attributes as Record<string, unknown>,
+    );
+    if (pt) productTypes.push(pt);
+  }
+
+  return new Set(productTypes).size > 1;
 }
 
 export async function generateMetadata({
   searchParams,
 }: ComparePageProps): Promise<Metadata> {
-  const { a, b } = await searchParams;
-  const listingIdA = readListingId(a);
-  const listingIdB = readListingId(b);
+  const params = await searchParams;
+  const listingIds = parseListingIds(params);
 
-  if (!listingIdA || !listingIdB || listingIdA === listingIdB) {
+  if (!listingIds) {
     return {
       title: "İlan karşılaştır | 2ElBul",
       description:
-        "İki ikinci el ilanı yan yana karşılaştır ve hangisini alman gerektiğine AI karar desteğiyle ulaş.",
+        "İkinci el ilanları yan yana karşılaştır ve hangisini alman gerektiğine AI karar desteğiyle ulaş.",
       robots: { index: false, follow: false },
     };
   }
 
-  const data = await getComparePageData(listingIdA, listingIdB);
+  const data = await getComparePageData(listingIds);
   if (!data) {
     return {
       title: "İlan karşılaştır | 2ElBul",
       description:
-        "İki ikinci el ilanı yan yana karşılaştır ve hangisini alman gerektiğine AI karar desteğiyle ulaş.",
+        "İkinci el ilanları yan yana karşılaştır ve hangisini alman gerektiğine AI karar desteğiyle ulaş.",
       robots: { index: false, follow: false },
     };
   }
 
-  const title = `${data.candidateA.productName} mi ${data.candidateB.productName} mi? | 2ElBul`;
-  const description = `${data.candidateA.productName} ve ${data.candidateB.productName} ikinci el ilanları için AI karşılaştırması: fiyat, opportunity, risk, confidence ve duplicate sinyalleri.`;
+  const productNames = data.candidates.map((c) => c.productName);
+  const title =
+    productNames.length === 2
+      ? `${productNames[0]} vs ${productNames[1]} | 2ElBul`
+      : `${productNames.join(", ")} karşılaştırma | 2ElBul`;
+  const description = `${productNames.join(", ")} ikinci el ilanları için AI karşılaştırması: fiyat, opportunity, risk, confidence ve duplicate sinyalleri.`;
 
   return {
     title,
@@ -90,23 +155,24 @@ export async function generateMetadata({
 }
 
 export default async function ComparePage({ searchParams }: ComparePageProps) {
-  const { a, b } = await searchParams;
-  const listingIdA = readListingId(a);
-  const listingIdB = readListingId(b);
+  const params = await searchParams;
+  const listingIds = parseListingIds(params);
+  const duplicates = hasDuplicateIds(params);
 
-  const missingSelection = !listingIdA || !listingIdB;
-  const sameSelection = Boolean(listingIdA && listingIdB && listingIdA === listingIdB);
-
-  if (missingSelection || sameSelection) {
-    return <CompareEmptyState sameSelection={sameSelection} />;
+  if (!listingIds || duplicates) {
+    return <CompareEmptyState sameSelection={duplicates} />;
   }
 
-  const data = await getComparePageData(listingIdA, listingIdB);
+  const data = await getComparePageData(listingIds);
   if (!data) {
-    return <CompareNotFound listingIdA={listingIdA!} listingIdB={listingIdB!} />;
+    const isCrossType = await detectCrossTypeConflict(listingIds);
+    if (isCrossType) {
+      return <CrossTypeError />;
+    }
+    return <CompareNotFound listingIds={listingIds} />;
   }
 
-  const { candidateA, candidateB, decision, jsonLd, canonicalUrl } = data;
+  const { candidates, decision, jsonLd, canonicalUrl } = data;
 
   return (
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
@@ -133,46 +199,42 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
         </nav>
 
         <DecisionCard
-          candidateA={candidateA}
-          candidateB={candidateB}
+          candidates={candidates}
           decision={decision}
           canonicalUrl={canonicalUrl}
         />
 
-        <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
-          <CandidateCard candidate={candidateA} highlight={decision.recommendedKey === "a"} />
-          <VsDivider />
-          <CandidateCard candidate={candidateB} highlight={decision.recommendedKey === "b"} />
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+          {candidates.map((candidate) => (
+            <CandidateCard
+              key={candidate.key}
+              candidate={candidate}
+              highlight={decision.recommendedKey === candidate.key}
+            />
+          ))}
         </section>
 
-        <ComparisonTable
-          candidateA={candidateA}
-          candidateB={candidateB}
-          decision={decision}
-        />
+        <ComparisonTable candidates={candidates} decision={decision} />
 
-        <BestDealSection
-          candidateA={candidateA}
-          candidateB={candidateB}
-          decision={decision}
-        />
+        <BestDealSection candidates={candidates} decision={decision} />
       </div>
     </main>
   );
 }
 
 function DecisionCard({
-  candidateA,
-  candidateB,
+  candidates,
   decision,
   canonicalUrl,
 }: {
-  candidateA: CompareCandidateSummary;
-  candidateB: CompareCandidateSummary;
+  candidates: CompareCandidateSummary[];
   decision: ReturnType<typeof buildCompareDecision>;
   canonicalUrl: string;
 }) {
-  const recommended = decision.recommendedKey === "a" ? candidateA : candidateB;
+  const recommended =
+    decision.recommendedKey !== null
+      ? candidates[decision.recommendedKey]
+      : null;
   const isTied = decision.tied;
   const isInsufficient = decision.insufficientData;
 
@@ -213,7 +275,7 @@ function DecisionCard({
               {decision.headline}
             </p>
           </div>
-          {!isInsufficient && !isTied ? (
+          {!isInsufficient && !isTied && recommended ? (
             <Link
               href={recommended.url}
               target="_blank"
@@ -231,31 +293,22 @@ function DecisionCard({
             <ReasonRow
               key={`${reason.label}-${index}`}
               reason={reason}
-              candidateA={candidateA}
-              candidateB={candidateB}
             />
           ))}
         </div>
       </div>
 
       <p className="mt-4 text-xs font-semibold leading-6 text-black/40">
-        Bu karar, mevcut Product Intelligence, Market Intelligence, Opportunity Engine,
-        Confidence ve Duplicate Engine çıktılarından üretilir. Karar notu ilanlar
-        güncellendikçe otomatik değişir. Kanonik URL: {canonicalUrl}
+        Bu karar, mevcut Product Intelligence, Market Intelligence, Opportunity
+        Engine, Confidence ve Duplicate Engine çıktılarından üretilir. Karar
+        notu ilanlar güncellendikçe otomatik değişir. Kanonik URL:{" "}
+        {canonicalUrl}
       </p>
     </section>
   );
 }
 
-function ReasonRow({
-  reason,
-  candidateA,
-  candidateB,
-}: {
-  reason: CompareReason;
-  candidateA: CompareCandidateSummary;
-  candidateB: CompareCandidateSummary;
-}) {
+function ReasonRow({ reason }: { reason: CompareReason }) {
   const isNeutral = reason.winnerKey === null;
   const Icon = isNeutral ? Minus : CheckCircle2;
 
@@ -269,16 +322,13 @@ function ReasonRow({
     >
       <Icon
         size={18}
-        className={isNeutral ? "mt-0.5 shrink-0 text-black/30" : "mt-0.5 shrink-0 text-green-600"}
+        className={
+          isNeutral
+            ? "mt-0.5 shrink-0 text-black/30"
+            : "mt-0.5 shrink-0 text-green-600"
+        }
       />
-      <span className="min-w-0">
-        {reason.label}
-        {!isNeutral ? (
-          <span className="ml-1 text-xs font-black text-green-700">
-            ({reason.winnerKey === "a" ? candidateA.productName : candidateB.productName})
-          </span>
-        ) : null}
-      </span>
+      <span className="min-w-0">{reason.label}</span>
     </div>
   );
 }
@@ -293,12 +343,14 @@ function CandidateCard({
   return (
     <article
       className={`flex flex-col rounded-3xl border bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-6 ${
-        highlight ? "border-[#ff6b00]/40 ring-1 ring-[#ff6b00]/30" : "border-black/8"
+        highlight
+          ? "border-[#ff6b00]/40 ring-1 ring-[#ff6b00]/30"
+          : "border-black/8"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
         <span className="rounded-full border border-black/10 bg-[#fafaf8] px-3 py-1 text-xs font-black text-black/55">
-          {candidate.key === "a" ? "İlan A" : "İlan B"}
+          İlan {candidate.key + 1}
         </span>
         {highlight ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-[#ff6b00]/30 bg-[#fff7f1] px-3 py-1 text-xs font-black text-[#d95700]">
@@ -315,13 +367,19 @@ function CandidateCard({
         />
       </Link>
 
-      <p className="mt-4 text-xs font-bold text-[#ff6b00]">{candidate.productName}</p>
-      <h2 className="mt-2 break-words text-lg font-black leading-6">{candidate.title}</h2>
+      <p className="mt-4 text-xs font-bold text-[#ff6b00]">
+        {candidate.productName}
+      </p>
+      <h2 className="mt-2 break-words text-lg font-black leading-6">
+        {candidate.title}
+      </h2>
 
       <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-[#ff6b00]">
         {formatPrice(candidate.price)}
       </p>
-      <p className="mt-1 text-xs font-semibold text-black/45">{candidate.condition}</p>
+      <p className="mt-1 text-xs font-semibold text-black/45">
+        {candidate.condition}
+      </p>
 
       <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/7 pt-4 text-xs font-semibold text-black/50">
         <span>{candidate.source}</span>
@@ -341,90 +399,74 @@ function CandidateCard({
   );
 }
 
-function VsDivider() {
-  return (
-    <div className="hidden items-center justify-center lg:flex">
-      <span className="grid size-12 place-items-center rounded-full border border-black/10 bg-white text-sm font-black text-black/50 shadow-sm">
-        VS
-      </span>
-    </div>
-  );
-}
-
 function ComparisonTable({
-  candidateA,
-  candidateB,
+  candidates,
   decision,
 }: {
-  candidateA: CompareCandidateSummary;
-  candidateB: CompareCandidateSummary;
+  candidates: CompareCandidateSummary[];
   decision: ReturnType<typeof buildCompareDecision>;
 }) {
   const rows: Array<{
     label: string;
-    valueA: string;
-    valueB: string;
-    winnerKey: CompareReason["winnerKey"];
+    values: string[];
+    winnerIndex: number | null;
   }> = [
     {
       label: "Fiyat",
-      valueA: formatPrice(candidateA.price),
-      valueB: formatPrice(candidateB.price),
-      winnerKey: lowerPriceWinner(candidateA, candidateB),
+      values: candidates.map((c) => formatPrice(c.price)),
+      winnerIndex: lowerPriceWinner(candidates),
     },
     {
       label: "Risk",
-      valueA: formatOpportunityLevel(candidateA.riskLevel),
-      valueB: formatOpportunityLevel(candidateB.riskLevel),
-      winnerKey: riskWinner(candidateA, candidateB),
+      values: candidates.map((c) => formatOpportunityLevel(c.riskLevel)),
+      winnerIndex: riskWinner(candidates),
     },
     {
       label: "Confidence",
-      valueA: `${candidateA.confidenceScore}/100 · ${formatMarketConfidenceLevel(candidateA.confidenceLevel)}`,
-      valueB: `${candidateB.confidenceScore}/100 · ${formatMarketConfidenceLevel(candidateB.confidenceLevel)}`,
-      winnerKey: confidenceWinner(candidateA, candidateB),
+      values: candidates.map(
+        (c) =>
+          `${c.confidenceScore}/100 · ${formatMarketConfidenceLevel(c.confidenceLevel)}`,
+      ),
+      winnerIndex: confidenceWinner(candidates),
     },
     {
       label: "Opportunity",
-      valueA: `${candidateA.opportunityScore}/100`,
-      valueB: `${candidateB.opportunityScore}/100`,
-      winnerKey: opportunityWinner(candidateA, candidateB),
+      values: candidates.map((c) => `${c.opportunityScore}/100`),
+      winnerIndex: opportunityWinner(candidates),
     },
     {
       label: "Kaynak",
-      valueA: `${candidateA.sourceCount} kaynak`,
-      valueB: `${candidateB.sourceCount} kaynak`,
-      winnerKey: sourceWinner(candidateA, candidateB),
+      values: candidates.map((c) => `${c.sourceCount} kaynak`),
+      winnerIndex: sourceWinner(candidates),
     },
     {
       label: "Duplicate",
-      valueA: `%${Math.round(candidateA.duplicateDensity * 100)}`,
-      valueB: `%${Math.round(candidateB.duplicateDensity * 100)}`,
-      winnerKey: duplicateWinner(candidateA, candidateB),
+      values: candidates.map(
+        (c) => `%${Math.round(c.duplicateDensity * 100)}`,
+      ),
+      winnerIndex: duplicateWinner(candidates),
     },
     {
       label: "Fiyat avantajı",
-      valueA: formatAdvantageCell(candidateA.priceAdvantagePercent),
-      valueB: formatAdvantageCell(candidateB.priceAdvantagePercent),
-      winnerKey: advantageWinner(candidateA, candidateB),
+      values: candidates.map((c) => formatAdvantageCell(c.priceAdvantagePercent)),
+      winnerIndex: advantageWinner(candidates),
     },
     {
       label: "Trend",
-      valueA: formatTrend(candidateA.trendDirection, candidateA.trendChangePercent),
-      valueB: formatTrend(candidateB.trendDirection, candidateB.trendChangePercent),
-      winnerKey: null,
+      values: candidates.map((c) =>
+        formatTrend(c.trendDirection, c.trendChangePercent),
+      ),
+      winnerIndex: null,
     },
     {
       label: "Data Freshness",
-      valueA: formatOpportunityFreshness(candidateA.dataFreshness),
-      valueB: formatOpportunityFreshness(candidateB.dataFreshness),
-      winnerKey: freshnessWinner(candidateA, candidateB),
+      values: candidates.map((c) => formatOpportunityFreshness(c.dataFreshness)),
+      winnerIndex: freshnessWinner(candidates),
     },
     {
       label: "Recommendation",
-      valueA: candidateA.recommendation.label,
-      valueB: candidateB.recommendation.label,
-      winnerKey: recommendationWinner(candidateA, candidateB),
+      values: candidates.map((c) => c.recommendation.label),
+      winnerIndex: recommendationWinner(candidates),
     },
   ];
 
@@ -438,7 +480,9 @@ function ComparisonTable({
           <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#ff6b00]">
             Karşılaştırma tablosu
           </p>
-          <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">Sinyal Sinyal</h2>
+          <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
+            Sinyal Sinyal
+          </h2>
         </div>
       </div>
 
@@ -446,9 +490,15 @@ function ComparisonTable({
         <table className="w-full min-w-[640px] border-collapse text-sm">
           <thead>
             <tr className="text-left text-xs font-black uppercase tracking-[0.06em] text-black/45">
-              <th className="w-1/3 border-b border-black/8 px-4 py-3">Sinyal</th>
-              <th className="w-1/3 border-b border-black/8 px-4 py-3">{candidateA.productName}</th>
-              <th className="w-1/3 border-b border-black/8 px-4 py-3">{candidateB.productName}</th>
+              <th className="border-b border-black/8 px-4 py-3">Sinyal</th>
+              {candidates.map((c) => (
+                <th
+                  key={c.key}
+                  className="border-b border-black/8 px-4 py-3"
+                >
+                  {c.productName}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -457,12 +507,17 @@ function ComparisonTable({
                 <td className="border-b border-black/5 px-4 py-3 font-bold text-black/55">
                   {row.label}
                 </td>
-                <td className="border-b border-black/5 px-4 py-3">
-                  <ComparisonCell value={row.valueA} isWinner={row.winnerKey === "a"} />
-                </td>
-                <td className="border-b border-black/5 px-4 py-3">
-                  <ComparisonCell value={row.valueB} isWinner={row.winnerKey === "b"} />
-                </td>
+                {candidates.map((c, i) => (
+                  <td
+                    key={c.key}
+                    className="border-b border-black/5 px-4 py-3"
+                  >
+                    <ComparisonCell
+                      value={row.values[i]}
+                      isWinner={row.winnerIndex === i}
+                    />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -478,7 +533,13 @@ function ComparisonTable({
   );
 }
 
-function ComparisonCell({ value, isWinner }: { value: string; isWinner: boolean }) {
+function ComparisonCell({
+  value,
+  isWinner,
+}: {
+  value: string;
+  isWinner: boolean;
+}) {
   return (
     <span
       className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${
@@ -493,18 +554,16 @@ function ComparisonCell({ value, isWinner }: { value: string; isWinner: boolean 
 }
 
 function BestDealSection({
-  candidateA,
-  candidateB,
+  candidates,
   decision,
 }: {
-  candidateA: CompareCandidateSummary;
-  candidateB: CompareCandidateSummary;
+  candidates: CompareCandidateSummary[];
   decision: ReturnType<typeof buildCompareDecision>;
 }) {
-  if (decision.insufficientData || decision.tied || !decision.recommendedKey) {
+  if (decision.insufficientData || decision.tied || decision.recommendedKey === null) {
     return null;
   }
-  const best = decision.recommendedKey === "a" ? candidateA : candidateB;
+  const best = candidates[decision.recommendedKey];
 
   return (
     <section className="mt-6 rounded-3xl border border-[#ff6b00]/25 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-8 lg:p-10">
@@ -517,11 +576,13 @@ function BestDealSection({
             {best.productName}
           </h2>
           <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-black/60">
-            {best.title} · {formatPrice(best.price)} · {best.source} · {best.city}
+            {best.title} · {formatPrice(best.price)} · {best.source} ·{" "}
+            {best.city}
           </p>
           <p className="mt-3 text-sm font-semibold text-black/55">
             Fırsat skoru {best.opportunityScore}/100 · Risk{" "}
-            {formatOpportunityLevel(best.riskLevel)} · Confidence {best.confidenceScore}/100
+            {formatOpportunityLevel(best.riskLevel)} · Confidence{" "}
+            {best.confidenceScore}/100
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-3">
@@ -567,16 +628,21 @@ function CompareEmptyState({ sameSelection }: { sameSelection: boolean }) {
             <Sparkles size={24} />
           </span>
           <h1 className="mt-5 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
-            İki ilanı karşılaştır
+            İlanları karşılaştır
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-black/55">
-            URL&apos;e <code className="rounded bg-[#fafaf8] px-1.5 py-0.5 text-xs font-bold">?a=&lt;ilanId&gt;&amp;b=&lt;ilanId&gt;</code> ekleyerek
-            iki ilanı yan yana getir ve AI karar desteğini gör.
+            URL&apos;e{" "}
+            <code className="rounded bg-[#fafaf8] px-1.5 py-0.5 text-xs font-bold">
+              ?ids=ilanId1,ilanId2
+            </code>{" "}
+            ekleyerek 2-4 ilanı yan yana getir ve AI karar desteğini gör.
           </p>
           {sameSelection ? (
             <div className="mt-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
               <TriangleAlert className="mt-0.5 shrink-0" size={17} />
-              <span>Aynı ilan ID iki kez seçildi. Farklı iki ilan seçmelisin.</span>
+              <span>
+                Aynı ilan ID tekrar ediyor. Farklı ilanlar seçmelisin.
+              </span>
             </div>
           ) : null}
           <div className="mt-6 flex flex-wrap gap-3">
@@ -600,13 +666,7 @@ function CompareEmptyState({ sameSelection }: { sameSelection: boolean }) {
   );
 }
 
-function CompareNotFound({
-  listingIdA,
-  listingIdB,
-}: {
-  listingIdA: string;
-  listingIdB: string;
-}) {
+function CompareNotFound({ listingIds }: { listingIds: string[] }) {
   return (
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
       <div className="container-shell min-w-0">
@@ -629,14 +689,17 @@ function CompareNotFound({
             İlanlar karşılaştırılamadı
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-black/55">
-            Seçilen ilanlardan biri veya ikisi bulunamadı, yayından kalkmış veya
-            ürün eşleşmesi kurulamamış olabilir.
+            Seçilen ilanlardan biri veya birkaçı bulunamadı, yayından kalkmış
+            veya ürün eşleşmesi kurulamamış olabilir.
           </p>
           <p className="mt-2 text-xs font-semibold text-black/40">
-            İlan A: {listingIdA} · İlan B: {listingIdB}
+            İlan ID: {listingIds.join(", ")}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/search" className="orange-button justify-center px-5 py-3">
+            <Link
+              href="/search"
+              className="orange-button justify-center px-5 py-3"
+            >
               Yeni arama yap
               <ArrowUpRight size={17} />
             </Link>
@@ -653,61 +716,138 @@ function CompareNotFound({
   );
 }
 
-function lowerPriceWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  if (a.price === b.price) return null;
-  return a.price < b.price ? "a" : "b";
+function CrossTypeError() {
+  return (
+    <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
+      <div className="container-shell min-w-0">
+        <nav
+          aria-label="breadcrumb"
+          className="flex flex-wrap items-center gap-2 text-xs font-bold text-black/45"
+        >
+          <Link href="/" className="transition hover:text-[#d95700]">
+            Ana Sayfa
+          </Link>
+          <ChevronRight size={12} />
+          <span>İlan Karşılaştır</span>
+        </nav>
+
+        <section className="mt-4 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-10">
+          <span className="grid size-12 place-items-center rounded-2xl bg-amber-50 text-amber-600">
+            <TriangleAlert size={24} />
+          </span>
+          <h1 className="mt-5 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
+            Farklı ürün türleri karşılaştırılamaz
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-black/55">
+            Seçilen ilanlar farklı ürün kategorilerine ait. Yalnızca aynı ürün
+            türündeki ilanlar karşılaştırılabilir (örn. telefon ile telefon).
+            Lütfen seçimini güncelle.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/search"
+              className="orange-button justify-center px-5 py-3"
+            >
+              Yeni arama yap
+              <ArrowUpRight size={17} />
+            </Link>
+            <Link
+              href="/market"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+            >
+              Piyasa merkezi
+            </Link>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }
 
-function riskWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  const rankA = riskRank(a.riskLevel);
-  const rankB = riskRank(b.riskLevel);
-  if (rankA === rankB) return null;
-  return rankA < rankB ? "a" : "b";
+/* ── Winner Helpers ─────────────────────────────────────────────── */
+
+function lowerPriceWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => c.price),
+    true,
+  );
 }
 
-function confidenceWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  if (a.confidenceScore === b.confidenceScore) return null;
-  return a.confidenceScore > b.confidenceScore ? "a" : "b";
+function riskWinner(candidates: CompareCandidateSummary[]): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => riskRank(c.riskLevel)),
+    true,
+  );
 }
 
-function opportunityWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  if (a.opportunityScore === b.opportunityScore) return null;
-  return a.opportunityScore > b.opportunityScore ? "a" : "b";
+function confidenceWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => c.confidenceScore),
+    false,
+  );
 }
 
-function sourceWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  if (a.sourceCount === b.sourceCount) return null;
-  return a.sourceCount > b.sourceCount ? "a" : "b";
+function opportunityWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => c.opportunityScore),
+    false,
+  );
 }
 
-function duplicateWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  if (a.duplicateDensity === b.duplicateDensity) return null;
-  return a.duplicateDensity < b.duplicateDensity ? "a" : "b";
+function sourceWinner(candidates: CompareCandidateSummary[]): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => c.sourceCount),
+    false,
+  );
 }
 
-function advantageWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  const va = a.priceAdvantagePercent ?? null;
-  const vb = b.priceAdvantagePercent ?? null;
-  if (va === null && vb === null) return null;
-  if (va === null) return "b";
-  if (vb === null) return "a";
-  if (va === vb) return null;
-  return va > vb ? "a" : "b";
+function duplicateWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => c.duplicateDensity),
+    true,
+  );
 }
 
-function freshnessWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  const rankA = freshnessRank(a.dataFreshness);
-  const rankB = freshnessRank(b.dataFreshness);
-  if (rankA === rankB) return null;
-  return rankA < rankB ? "a" : "b";
+function advantageWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  const values = candidates.map((c) => c.priceAdvantagePercent ?? -Infinity);
+  const winnerIndex = findExtremeIndex(values, false);
+  if (
+    winnerIndex === null ||
+    candidates[winnerIndex].priceAdvantagePercent === null
+  )
+    return null;
+  return winnerIndex;
 }
 
-function recommendationWinner(a: CompareCandidateSummary, b: CompareCandidateSummary) {
-  const rankA = recommendationRank(a.recommendation.action);
-  const rankB = recommendationRank(b.recommendation.action);
-  if (rankA === rankB) return null;
-  return rankA < rankB ? "a" : "b";
+function freshnessWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => freshnessRank(c.dataFreshness)),
+    true,
+  );
 }
+
+function recommendationWinner(
+  candidates: CompareCandidateSummary[],
+): number | null {
+  return findExtremeIndex(
+    candidates.map((c) => recommendationRank(c.recommendation.action)),
+    true,
+  );
+}
+
+/* ── Ranking Helpers ────────────────────────────────────────────── */
 
 function riskRank(level: string) {
   if (level === "very-low") return 0;
@@ -732,6 +872,8 @@ function recommendationRank(action: string) {
   return 4;
 }
 
+/* ── Formatting Helpers ─────────────────────────────────────────── */
+
 function formatAdvantageCell(value: number | null) {
   if (value === null) return "—";
   return `%${Math.max(0, Math.round(value))}`;
@@ -748,7 +890,9 @@ function formatTrend(
       : direction === "rising"
         ? "Yükseliyor"
         : "Stabil";
-  return changePercent === null ? label : `${label} %${Math.abs(changePercent)}`;
+  return changePercent === null
+    ? label
+    : `${label} %${Math.abs(changePercent)}`;
 }
 
 function formatPrice(value: number) {

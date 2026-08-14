@@ -11,6 +11,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/compare-context", () => ({
+  MAX_SELECTION: 4,
+  MIN_SELECTION: 2,
   useCompare: () => compareStub(),
 }));
 
@@ -38,18 +40,16 @@ const entry = (listingId: string, productName = listingId): CompareSelectionEntr
 });
 
 function buildStub(selection: CompareSelectionEntry[]) {
+  const ids = selection.map((e) => e.listingId).join(",");
   return {
     selection,
     hasSelection: selection.length > 0,
-    isFull: selection.length >= 2,
+    isFull: selection.length >= 4,
     isSelected: (id: string) => selection.some((e) => e.listingId === id),
     addToSelection: vi.fn(),
     removeFromSelection: vi.fn(),
     clearSelection: vi.fn(),
-    compareUrl:
-      selection.length === 2
-        ? `/compare?a=${selection[0].listingId}&b=${selection[1].listingId}`
-        : null,
+    compareUrl: selection.length >= 2 ? `/compare?ids=${ids}` : null,
   };
 }
 
@@ -68,28 +68,65 @@ describe("CompareBar", () => {
     expect(html).not.toContain("ilan seçildi");
   });
 
-  it("shows one selected listing and a disabled compare button", () => {
+  it("shows one selected listing, disabled button, and helper text", () => {
     compareStub.mockReturnValue(buildStub([entry("listing-1", "iPhone 13")]));
 
     const html = renderToStaticMarkup(<CompareBar />);
 
     expect(html).toContain("Karşılaştırma");
-    expect(html).toContain("1/2 ilan seçildi");
+    expect(html).toContain("1/4 ilan seçildi");
     expect(html).toContain("1. iPhone 13");
-    expect(html).toContain("disabled");
+    expect(html).toContain("disabled=\"\"");
     expect(html).toContain("bir ilan daha seç");
   });
 
-  it("enables the compare button and hides the helper when two listings are selected", () => {
+  it("enables the compare button and shows extra-slot helper when two are selected", () => {
     compareStub.mockReturnValue(
       buildStub([entry("listing-1", "iPhone 13"), entry("listing-2", "Galaxy S22")]),
     );
 
     const html = renderToStaticMarkup(<CompareBar />);
 
-    expect(html).toContain("2/2 ilan seçildi");
+    expect(html).toContain("2/4 ilan seçildi");
     expect(html).toContain("1. iPhone 13");
     expect(html).toContain("2. Galaxy S22");
+    expect(html).not.toContain('disabled=""');
+    expect(html).toContain("Daha fazla ilan ekleyebilirsin");
+  });
+
+  it("shows 3 selected items and still shows helper text", () => {
+    compareStub.mockReturnValue(
+      buildStub([
+        entry("listing-1", "iPhone 13"),
+        entry("listing-2", "Galaxy S22"),
+        entry("listing-3", "Pixel 8"),
+      ]),
+    );
+
+    const html = renderToStaticMarkup(<CompareBar />);
+
+    expect(html).toContain("3/4 ilan seçildi");
+    expect(html).toContain("Daha fazla ilan ekleyebilirsin");
+  });
+
+  it("hides helper text and shows 4 items with no empty slots when full", () => {
+    compareStub.mockReturnValue(
+      buildStub([
+        entry("listing-1", "iPhone 13"),
+        entry("listing-2", "Galaxy S22"),
+        entry("listing-3", "Pixel 8"),
+        entry("listing-4", "Redmi Note 12"),
+      ]),
+    );
+
+    const html = renderToStaticMarkup(<CompareBar />);
+
+    expect(html).toContain("4/4 ilan seçildi");
+    expect(html).toContain("1. iPhone 13");
+    expect(html).toContain("2. Galaxy S22");
+    expect(html).toContain("3. Pixel 8");
+    expect(html).toContain("4. Redmi Note 12");
+    expect(html).not.toContain("Daha fazla ilan ekleyebilirsin");
     expect(html).not.toContain("bir ilan daha seç");
   });
 
@@ -117,11 +154,13 @@ describe("CompareBar", () => {
     expect(html).toContain("Karşılaştır");
   });
 
-  it("renders empty placeholder slots when only one listing is selected", () => {
+  it("renders 3 empty placeholder slots when only one listing is selected", () => {
     compareStub.mockReturnValue(buildStub([entry("listing-1", "iPhone 13")]));
 
     const html = renderToStaticMarkup(<CompareBar />);
 
     expect(html).toContain("2. ilan");
+    expect(html).toContain("3. ilan");
+    expect(html).toContain("4. ilan");
   });
 });

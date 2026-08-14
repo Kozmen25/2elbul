@@ -5,6 +5,10 @@ import type { ComparePageData } from "@/lib/compare-engine";
 import { buildCompareDecision, buildCompareJsonLd } from "@/lib/compare-engine";
 import { getAbsoluteUrl } from "@/lib/site-url";
 
+vi.mock("@/lib/supabase", () => ({
+  createSupabaseClient: () => null,
+}));
+
 const getComparePageDataMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/link", () => ({
@@ -41,12 +45,10 @@ vi.mock("@/lib/compare-engine", async () => {
 
 const { default: ComparePage, generateMetadata } = await import("./page");
 
-const canonicalUrl = getAbsoluteUrl(
-  `/compare?a=${encodeURIComponent("listing-1")}&b=${encodeURIComponent("listing-2")}`,
-);
+const canonicalUrl = getAbsoluteUrl("/compare?ids=listing-1,listing-2");
 
-const candidateA = {
-  key: "a" as const,
+const candidate0 = {
+  key: 0,
   listingId: "listing-1",
   productName: "iPhone 13",
   productSlug: "iphone-13",
@@ -63,22 +65,23 @@ const candidateA = {
   medianPrice: 25500,
   minPrice: 23000,
   confidenceScore: 90,
-  confidenceLevel: "high" as const,
+  confidenceLevel: "high",
   opportunityScore: 88,
-  opportunityLevel: "high" as const,
-  riskLevel: "low" as const,
+  opportunityLevel: "high",
+  riskLevel: "low",
   recommendation: { action: "buy_now", label: "Şimdi al", description: "Fiyat avantajlı." },
   duplicateDensity: 0.05,
   sourceCount: 3,
   sampleSize: 12,
-  dataFreshness: "fresh" as const,
+  dataFreshness: "fresh",
   priceAdvantagePercent: 9,
-  trendDirection: "falling" as const,
+  trendDirection: "falling",
   trendChangePercent: -4,
-};
+  productType: null,
+} as const;
 
-const candidateB = {
-  key: "b" as const,
+const candidate1 = {
+  key: 1,
   listingId: "listing-2",
   productName: "Samsung Galaxy S22",
   productSlug: "samsung-galaxy-s22",
@@ -95,46 +98,47 @@ const candidateB = {
   medianPrice: 27000,
   minPrice: 25000,
   confidenceScore: 78,
-  confidenceLevel: "medium" as const,
+  confidenceLevel: "medium",
   opportunityScore: 70,
-  opportunityLevel: "medium" as const,
-  riskLevel: "medium" as const,
+  opportunityLevel: "medium",
+  riskLevel: "medium",
   recommendation: { action: "watch", label: "Takip et", description: "Sinyaller olumlu." },
   duplicateDensity: 0.18,
   sourceCount: 2,
   sampleSize: 10,
-  dataFreshness: "recent" as const,
+  dataFreshness: "recent",
   priceAdvantagePercent: 3,
-  trendDirection: "stable" as const,
+  trendDirection: "stable",
   trendChangePercent: null,
-};
+  productType: null,
+} as const;
 
-const decision = buildCompareDecision(candidateA, candidateB);
+const decision = buildCompareDecision([candidate0, candidate1]);
 
 const baseCompareData = {
-  candidateA,
-  candidateB,
+  candidates: [candidate0, candidate1],
   decision,
-  jsonLd: buildCompareJsonLd({
-    candidateA,
-    candidateB,
-    canonicalUrl,
-  }),
+  jsonLd: buildCompareJsonLd({ candidates: [candidate0, candidate1], canonicalUrl }),
   canonicalUrl,
 } as unknown as ComparePageData;
 
-const insufficientDecision = buildCompareDecision(
-  { ...candidateA, sampleSize: 2 },
-  candidateB,
-);
+const insufficientDecision = buildCompareDecision([
+  { ...candidate0, sampleSize: 2 },
+  candidate1,
+]);
 
 const insufficientCompareData = {
   ...structuredClone(baseCompareData),
-  candidateA: { ...structuredClone(candidateA), sampleSize: 2 },
+  candidates: [
+    { ...structuredClone(candidate0), sampleSize: 2 },
+    candidate1,
+  ],
   decision: insufficientDecision,
   jsonLd: buildCompareJsonLd({
-    candidateA: { ...candidateA, sampleSize: 2 } as never,
-    candidateB,
+    candidates: [
+      { ...candidate0, sampleSize: 2 } as never,
+      candidate1,
+    ],
     canonicalUrl,
   }),
 } as unknown as ComparePageData;
@@ -148,7 +152,7 @@ describe("compare page metadata", () => {
     getComparePageDataMock.mockResolvedValueOnce(baseCompareData);
 
     const metadata = await generateMetadata({
-      searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+      searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
     });
 
     expect(metadata.title).toContain("iPhone 13");
@@ -159,7 +163,7 @@ describe("compare page metadata", () => {
 
   it("returns noindex metadata when listings are missing", async () => {
     const metadata = await generateMetadata({
-      searchParams: Promise.resolve({ a: undefined, b: undefined }),
+      searchParams: Promise.resolve({ ids: undefined }),
     });
 
     const robots = metadata.robots;
@@ -169,7 +173,7 @@ describe("compare page metadata", () => {
 
   it("returns noindex metadata when the same listing id is selected twice", async () => {
     const metadata = await generateMetadata({
-      searchParams: Promise.resolve({ a: "listing-1", b: "listing-1" }),
+      searchParams: Promise.resolve({ ids: "listing-1,listing-1" }),
     });
 
     const robots = metadata.robots;
@@ -180,7 +184,7 @@ describe("compare page metadata", () => {
     getComparePageDataMock.mockResolvedValueOnce(null);
 
     const metadata = await generateMetadata({
-      searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+      searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
     });
 
     const robots = metadata.robots;
@@ -198,7 +202,7 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
@@ -215,7 +219,7 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
@@ -231,7 +235,7 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
@@ -240,18 +244,18 @@ describe("compare page render", () => {
     expect(html).toContain("ItemList");
   });
 
-  it("renders the VS layout with both candidates", async () => {
+  it("renders the N-column grid with 2 candidates (no VS divider)", async () => {
     getComparePageDataMock.mockResolvedValueOnce(baseCompareData);
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
-    expect(html).toContain("İlan A");
-    expect(html).toContain("İlan B");
-    expect(html).toContain("VS");
+    expect(html).toContain("İlan 1");
+    expect(html).toContain("İlan 2");
+    expect(html).not.toContain("VS");
     expect(html).toContain("Bu ilanı incele");
   });
 
@@ -260,7 +264,7 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
@@ -282,7 +286,7 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
@@ -294,22 +298,22 @@ describe("compare page render", () => {
   it("renders an empty state when no listings are provided", async () => {
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: undefined, b: undefined }),
+        searchParams: Promise.resolve({ ids: undefined }),
       }),
     );
 
-    expect(html).toContain("İki ilanı karşılaştır");
-    expect(html).toContain("?a=&lt;ilanId&gt;&amp;b=&lt;ilanId&gt;");
+    expect(html).toContain("İlanları karşılaştır");
+    expect(html).toContain("?ids=ilanId1,ilanId2");
   });
 
   it("warns when the same listing id is selected twice", async () => {
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-1" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-1" }),
       }),
     );
 
-    expect(html).toContain("Aynı ilan ID iki kez seçildi");
+    expect(html).toContain("Aynı ilan ID tekrar ediyor");
   });
 
   it("renders a not found fallback when listings cannot be resolved", async () => {
@@ -317,13 +321,12 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
     expect(html).toContain("İlanlar karşılaştırılamadı");
-    expect(html).toContain("listing-1");
-    expect(html).toContain("listing-2");
+    expect(html).toContain("listing-1, listing-2");
   });
 
   it("renders the insufficient data fallback in the decision card", async () => {
@@ -331,7 +334,7 @@ describe("compare page render", () => {
 
     const html = renderToStaticMarkup(
       await ComparePage({
-        searchParams: Promise.resolve({ a: "listing-1", b: "listing-2" }),
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
       }),
     );
 
@@ -340,18 +343,32 @@ describe("compare page render", () => {
   });
 
   it("regression: identical candidates render the tie state without a best deal CTA", async () => {
-    const tiedDecision = buildCompareDecision(candidateA, {
-      ...candidateA,
-      key: "b" as const,
-      listingId: "listing-2",
-      productName: "iPhone 13",
-    });
+    const tiedDecision = buildCompareDecision([
+      candidate0,
+      { ...candidate0, key: 1, listingId: "listing-2", productName: "iPhone 13" },
+    ]);
     const tiedData = {
       ...structuredClone(baseCompareData),
-      candidateB: { ...structuredClone(candidateA), key: "b" as const, listingId: "listing-2" },
+      candidates: [
+        candidate0,
+        { ...structuredClone(candidate0), key: 1, listingId: "listing-2" },
+      ],
       decision: tiedDecision,
     } as unknown as ComparePageData;
     getComparePageDataMock.mockResolvedValueOnce(tiedData);
+
+    const html = renderToStaticMarkup(
+      await ComparePage({
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2" }),
+      }),
+    );
+
+    expect(html).toContain("Başabaş");
+    expect(html).not.toContain("En iyi ilan");
+  });
+
+  it("backward compat: ?a=&b= query params still work", async () => {
+    getComparePageDataMock.mockResolvedValueOnce(baseCompareData);
 
     const html = renderToStaticMarkup(
       await ComparePage({
@@ -359,7 +376,155 @@ describe("compare page render", () => {
       }),
     );
 
-    expect(html).toContain("Başabaş");
-    expect(html).not.toContain("En iyi ilan");
+    expect(html).toContain("İlan 1");
+    expect(html).toContain("İlan 2");
+    expect(html).toContain("iPhone 13");
+    expect(html).toContain("Samsung Galaxy S22");
+  });
+
+  it("renders 3 candidates in a grid", async () => {
+    const candidate2 = {
+      key: 2,
+      listingId: "listing-3",
+      productName: "Google Pixel 8",
+      productSlug: "google-pixel-8",
+      productUrl: getAbsoluteUrl("/product/google-pixel-8"),
+      title: "Pixel 8 128 GB",
+      price: 22000,
+      city: "İzmir",
+      source: "Mediamarkt",
+      url: "https://example.com/listing-3",
+      condition: "Yeni",
+      imageUrl: null,
+      createdAt: "2026-07-03T00:00:00.000Z",
+      averagePrice: 23500,
+      medianPrice: 23000,
+      minPrice: 21000,
+      confidenceScore: 70,
+      confidenceLevel: "medium",
+      opportunityScore: 65,
+      opportunityLevel: "medium",
+      riskLevel: "medium",
+      recommendation: { action: "watch", label: "Takip et", description: "Orta sinyaller." },
+      duplicateDensity: 0.1,
+      sourceCount: 2,
+      sampleSize: 8,
+      dataFreshness: "recent",
+      priceAdvantagePercent: 6,
+      trendDirection: "falling",
+      trendChangePercent: -2,
+      productType: null,
+    } as const;
+
+    const canonicalUrl3 = getAbsoluteUrl("/compare?ids=listing-1,listing-2,listing-3");
+    const threeData = {
+      candidates: [candidate0, candidate1, candidate2],
+      decision: buildCompareDecision([candidate0, candidate1, candidate2]),
+      jsonLd: buildCompareJsonLd({ candidates: [candidate0, candidate1, candidate2], canonicalUrl: canonicalUrl3 }),
+      canonicalUrl: canonicalUrl3,
+    } as unknown as ComparePageData;
+    getComparePageDataMock.mockResolvedValueOnce(threeData);
+
+    const html = renderToStaticMarkup(
+      await ComparePage({
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2,listing-3" }),
+      }),
+    );
+
+    expect(html).toContain("İlan 1");
+    expect(html).toContain("İlan 2");
+    expect(html).toContain("İlan 3");
+    expect(html).toContain("Google Pixel 8");
+    expect(html).toContain("iPhone 13");
+    expect(html).toContain("Samsung Galaxy S22");
+  });
+
+  it("renders 4 candidates in a grid", async () => {
+    const candidate2 = {
+      key: 2,
+      listingId: "listing-3",
+      productName: "Google Pixel 8",
+      productSlug: "google-pixel-8",
+      productUrl: getAbsoluteUrl("/product/google-pixel-8"),
+      title: "Pixel 8 128 GB",
+      price: 22000,
+      city: "İzmir",
+      source: "Mediamarkt",
+      url: "https://example.com/listing-3",
+      condition: "Yeni",
+      imageUrl: null,
+      createdAt: "2026-07-03T00:00:00.000Z",
+      averagePrice: 23500,
+      medianPrice: 23000,
+      minPrice: 21000,
+      confidenceScore: 70,
+      confidenceLevel: "medium",
+      opportunityScore: 65,
+      opportunityLevel: "medium",
+      riskLevel: "medium",
+      recommendation: { action: "watch", label: "Takip et", description: "Orta sinyaller." },
+      duplicateDensity: 0.1,
+      sourceCount: 2,
+      sampleSize: 8,
+      dataFreshness: "recent",
+      priceAdvantagePercent: 6,
+      trendDirection: "falling",
+      trendChangePercent: -2,
+      productType: null,
+    } as const;
+
+    const candidate3 = {
+      key: 3,
+      listingId: "listing-4",
+      productName: "Xiaomi Redmi Note 12",
+      productSlug: "xiaomi-redmi-note-12",
+      productUrl: getAbsoluteUrl("/product/xiaomi-redmi-note-12"),
+      title: "Redmi Note 12 256 GB",
+      price: 18000,
+      city: "Bursa",
+      source: "Teknosa",
+      url: "https://example.com/listing-4",
+      condition: "İkinci El",
+      imageUrl: null,
+      createdAt: "2026-07-04T00:00:00.000Z",
+      averagePrice: 19500,
+      medianPrice: 19000,
+      minPrice: 17500,
+      confidenceScore: 60,
+      confidenceLevel: "medium",
+      opportunityScore: 55,
+      opportunityLevel: "medium",
+      riskLevel: "high",
+      recommendation: { action: "wait", label: "Bekle", description: "Daha iyi fırsat olabilir." },
+      duplicateDensity: 0.25,
+      sourceCount: 1,
+      sampleSize: 6,
+      dataFreshness: "stale",
+      priceAdvantagePercent: 8,
+      trendDirection: "stable",
+      trendChangePercent: null,
+      productType: null,
+    } as const;
+
+    const canonicalUrl4 = getAbsoluteUrl("/compare?ids=listing-1,listing-2,listing-3,listing-4");
+    const fourData = {
+      candidates: [candidate0, candidate1, candidate2, candidate3],
+      decision: buildCompareDecision([candidate0, candidate1, candidate2, candidate3]),
+      jsonLd: buildCompareJsonLd({ candidates: [candidate0, candidate1, candidate2, candidate3], canonicalUrl: canonicalUrl4 }),
+      canonicalUrl: canonicalUrl4,
+    } as unknown as ComparePageData;
+    getComparePageDataMock.mockResolvedValueOnce(fourData);
+
+    const html = renderToStaticMarkup(
+      await ComparePage({
+        searchParams: Promise.resolve({ ids: "listing-1,listing-2,listing-3,listing-4" }),
+      }),
+    );
+
+    expect(html).toContain("İlan 1");
+    expect(html).toContain("İlan 2");
+    expect(html).toContain("İlan 3");
+    expect(html).toContain("İlan 4");
+    expect(html).toContain("Xiaomi Redmi Note 12");
   });
 });

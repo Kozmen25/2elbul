@@ -7,8 +7,9 @@ import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { Listing } from "@/lib/listings";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { calculatePriceAdvantagePercent } from "@/lib/opportunity-engine";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 
-export type CompareCandidateKey = "a" | "b";
+export type CompareCandidateKey = number;
 
 export type CompareCandidate = {
   key: CompareCandidateKey;
@@ -47,6 +48,7 @@ export type CompareCandidateSummary = {
   priceAdvantagePercent: number | null;
   trendDirection: ProductIntelligence["trend"]["direction"];
   trendChangePercent: number | null;
+  productType: string | null;
 };
 
 export type CompareReason = {
@@ -111,43 +113,37 @@ export type CompareJsonLdDocument =
   | CompareItemListJsonLd;
 
 export type ComparePageData = {
-  candidateA: CompareCandidateSummary;
-  candidateB: CompareCandidateSummary;
+  candidates: CompareCandidateSummary[];
   decision: CompareDecision;
   jsonLd: CompareJsonLdDocument[];
   canonicalUrl: string;
 };
 
 export async function getComparePageData(
-  listingIdA: string,
-  listingIdB: string,
+  listingIds: string[],
 ): Promise<ComparePageData | null> {
-  const [candidateAResult, candidateBResult] = await Promise.all([
-    buildCompareCandidate("a", listingIdA),
-    buildCompareCandidate("b", listingIdB),
-  ]);
+  if (listingIds.length < 2 || listingIds.length > 4) return null;
+  if (new Set(listingIds).size !== listingIds.length) return null;
 
-  if (!candidateAResult || !candidateBResult) return null;
-
-  const candidateA = summarizeCandidate(candidateAResult);
-  const candidateB = summarizeCandidate(candidateBResult);
-  const decision = buildCompareDecision(candidateA, candidateB);
-  const canonicalUrl = getAbsoluteUrl(
-    `/compare?a=${encodeURIComponent(listingIdA)}&b=${encodeURIComponent(listingIdB)}`,
+  const results = await Promise.all(
+    listingIds.map((id, i) => buildCompareCandidate(i, id)),
   );
-  const jsonLd = buildCompareJsonLd({
-    candidateA,
-    candidateB,
-    canonicalUrl,
-  });
 
-  return {
-    candidateA,
-    candidateB,
-    decision,
-    jsonLd,
-    canonicalUrl,
-  };
+  if (results.some((c) => c === null)) return null;
+
+  const candidates = results.map((c) => summarizeCandidate(c!));
+
+  const productTypes = candidates.map((s) => s.productType);
+  const uniqueTypes = new Set(productTypes.filter(Boolean));
+  if (uniqueTypes.size > 1) return null;
+
+  const decision = buildCompareDecision(candidates);
+  const canonicalUrl = getAbsoluteUrl(
+    `/compare?ids=${listingIds.map(encodeURIComponent).join(",")}`,
+  );
+  const jsonLd = buildCompareJsonLd({ candidates, canonicalUrl });
+
+  return { candidates, decision, jsonLd, canonicalUrl };
 }
 
 async function buildCompareCandidate(
@@ -243,55 +239,53 @@ export function summarizeCandidate(candidate: CompareCandidate): CompareCandidat
     ),
     trendDirection: intelligence.trend.direction,
     trendChangePercent: intelligence.trend.changePercent,
+    productType: extractProductTypeFromAttributes(product.attributes),
   };
 }
 
 export function buildCompareDecision(
-  candidateA: CompareCandidateSummary,
-  candidateB: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareDecision {
-  const insufficientData =
-    candidateA.sampleSize < 3 || candidateB.sampleSize < 3;
+  const insufficientData = candidates.some((c) => c.sampleSize < 3);
 
   if (insufficientData) {
     return {
       recommendedKey: null,
       recommendedLabel: "Karar için yetersiz veri",
       headline:
-        "İki ilan için de yeterli piyasa verisi yok. Karar notu ilanlar çoğaldıkça güçlenecek.",
-      reasons: buildInsufficientReasons(candidateA, candidateB),
+        "İlanlar için yeterli piyasa verisi yok. Karar notu ilanlar çoğaldıkça güçlenecek.",
+      reasons: buildInsufficientReasons(candidates),
       tied: false,
       insufficientData: true,
     };
   }
 
   const reasons: CompareReason[] = [
-    buildLowerPriceReason(candidateA, candidateB),
-    buildOpportunityReason(candidateA, candidateB),
-    buildConfidenceReason(candidateA, candidateB),
-    buildRiskReason(candidateA, candidateB),
-    buildDuplicateReason(candidateA, candidateB),
-    buildSampleSizeReason(candidateA, candidateB),
-    buildSourceCountReason(candidateA, candidateB),
-    buildFreshnessReason(candidateA, candidateB),
-    buildPriceAdvantageReason(candidateA, candidateB),
+    buildLowerPriceReason(candidates),
+    buildOpportunityReason(candidates),
+    buildConfidenceReason(candidates),
+    buildRiskReason(candidates),
+    buildDuplicateReason(candidates),
+    buildSampleSizeReason(candidates),
+    buildSourceCountReason(candidates),
+    buildFreshnessReason(candidates),
+    buildPriceAdvantageReason(candidates),
   ].filter((reason): reason is CompareReason => reason !== null);
 
-  const scoreA = tallyWinnerVotes(reasons, "a");
-  const scoreB = tallyWinnerVotes(reasons, "b");
-  const tied = scoreA === scoreB;
-  const recommendedKey: CompareCandidateKey | null = tied
-    ? null
-    : scoreA > scoreB
-      ? "a"
-      : "b";
+  const counts = candidates.map((_, i) => tallyWinnerVotes(reasons, i));
+  const maxVotes = Math.max(...counts);
+  const winners = counts
+    .map((count, i) => (count === maxVotes ? i : -1))
+    .filter((i) => i >= 0);
+  const tied = winners.length > 1;
+  const recommendedKey = tied ? null : winners[0];
   const recommendedLabel = tied
     ? "Başabaş"
-    : recommendedKey === "a"
-      ? candidateA.productName
-      : candidateB.productName;
+    : recommendedKey !== null
+      ? candidates[recommendedKey].productName
+      : "";
   const headline = tied
-    ? "İki ilan birbirine yakın sinyaller veriyor. Fiyat ve güven detaylarını birlikte değerlendir."
+    ? "İlanlar birbirine yakın sinyaller veriyor. Fiyat ve güven detaylarını birlikte değerlendir."
     : `Önerilen ilan: ${recommendedLabel}`;
 
   return {
@@ -304,161 +298,160 @@ export function buildCompareDecision(
   };
 }
 
-function tallyWinnerVotes(reasons: CompareReason[], key: CompareCandidateKey) {
+function tallyWinnerVotes(reasons: CompareReason[], key: number): number {
   return reasons.reduce(
     (total, reason) => (reason.winnerKey === key ? total + 1 : total),
     0,
   );
 }
 
+export function findExtremeIndex(values: number[], preferLow: boolean): number | null {
+  if (values.length === 0) return null;
+  const allEqual = values.every((v, _, arr) => v === arr[0]);
+  if (allEqual) return null;
+  const extreme = preferLow ? Math.min(...values) : Math.max(...values);
+  return values.indexOf(extreme);
+}
+
 function buildLowerPriceReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  if (a.price === b.price) return null;
-  const winnerKey = a.price < b.price ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
-  const loser = winnerKey === "a" ? b : a;
-  const diff = Math.round(((loser.price - winner.price) / loser.price) * 100);
+  const prices = candidates.map((c) => c.price);
+  const winnerKey = findExtremeIndex(prices, true);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
+  const maxPrice = Math.max(...prices);
+  const diff = maxPrice > 0
+    ? Math.round(((maxPrice - winner.price) / maxPrice) * 100)
+    : 0;
   return {
-    label: `Daha düşük fiyat (${formatPrice(winner.price)} · ~%${Math.max(0, diff)} ucuz)`,
+    label: `Daha düşük fiyat (${formatPrice(winner.price)} · ~%${Math.max(0, diff)} ucuz) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildOpportunityReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  if (a.opportunityScore === b.opportunityScore) return null;
-  const winnerKey = a.opportunityScore > b.opportunityScore ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const scores = candidates.map((c) => c.opportunityScore);
+  const winnerKey = findExtremeIndex(scores, false);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Opportunity skoru daha yüksek (${winner.opportunityScore}/100)`,
+    label: `Opportunity skoru daha yüksek (${winner.opportunityScore}/100) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildConfidenceReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  if (a.confidenceScore === b.confidenceScore) return null;
-  const winnerKey = a.confidenceScore > b.confidenceScore ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const scores = candidates.map((c) => c.confidenceScore);
+  const winnerKey = findExtremeIndex(scores, false);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Confidence daha yüksek (${winner.confidenceScore}/100)`,
+    label: `Confidence daha yüksek (${winner.confidenceScore}/100) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildRiskReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  const rankA = riskRank(a.riskLevel);
-  const rankB = riskRank(b.riskLevel);
-  if (rankA === rankB) return null;
-  const winnerKey = rankA < rankB ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const ranks = candidates.map((c) => riskRank(c.riskLevel));
+  const winnerKey = findExtremeIndex(ranks, true);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Risk seviyesi daha düşük (${formatRiskLabel(winner.riskLevel)})`,
+    label: `Risk seviyesi daha düşük (${formatRiskLabel(winner.riskLevel)}) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildDuplicateReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  if (a.duplicateDensity === b.duplicateDensity) return null;
-  const winnerKey = a.duplicateDensity < b.duplicateDensity ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const densities = candidates.map((c) => c.duplicateDensity);
+  const winnerKey = findExtremeIndex(densities, true);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Duplicate yoğunluğu daha düşük (%${Math.round(winner.duplicateDensity * 100)})`,
+    label: `Duplicate yoğunluğu daha düşük (%${Math.round(winner.duplicateDensity * 100)}) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildSampleSizeReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  if (a.sampleSize === b.sampleSize) return null;
-  const winnerKey = a.sampleSize > b.sampleSize ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const sizes = candidates.map((c) => c.sampleSize);
+  const winnerKey = findExtremeIndex(sizes, false);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Daha fazla veri var (${winner.sampleSize} ilan)`,
+    label: `Daha fazla veri var (${winner.sampleSize} ilan) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildSourceCountReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  if (a.sourceCount === b.sourceCount) return null;
-  const winnerKey = a.sourceCount > b.sourceCount ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const counts = candidates.map((c) => c.sourceCount);
+  const winnerKey = findExtremeIndex(counts, false);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Daha fazla kaynak doğruladı (${winner.sourceCount} kaynak)`,
+    label: `Daha fazla kaynak doğruladı (${winner.sourceCount} kaynak) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildFreshnessReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  const rankA = freshnessRank(a.dataFreshness);
-  const rankB = freshnessRank(b.dataFreshness);
-  if (rankA === rankB) return null;
-  const winnerKey = rankA < rankB ? "a" : "b";
-  const winner = winnerKey === "a" ? a : b;
+  const ranks = candidates.map((c) => freshnessRank(c.dataFreshness));
+  const winnerKey = findExtremeIndex(ranks, true);
+  if (winnerKey === null) return null;
+  const winner = candidates[winnerKey];
   return {
-    label: `Veri daha güncel (${formatFreshnessLabel(winner.dataFreshness)})`,
+    label: `Veri daha güncel (${formatFreshnessLabel(winner.dataFreshness)}) — ${winner.productName}`,
     winnerKey,
   };
 }
 
 function buildPriceAdvantageReason(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason | null {
-  const advantageA = a.priceAdvantagePercent ?? null;
-  const advantageB = b.priceAdvantagePercent ?? null;
-  if (advantageA === null && advantageB === null) return null;
-  if (advantageA === null) return { label: `Piyasa ortalamasının altında (${formatAdvantage(advantageB)})`, winnerKey: "b" };
-  if (advantageB === null) return { label: `Piyasa ortalamasının altında (${formatAdvantage(advantageA)})`, winnerKey: "a" };
-  if (advantageA === advantageB) return null;
-  const winnerKey = advantageA > advantageB ? "a" : "b";
-  const winner = winnerKey === "a" ? advantageA : advantageB;
+  const advantages = candidates.map((c) => c.priceAdvantagePercent ?? null);
+  // Replace null with -Infinity so findExtremeIndex treats null as non-winning
+  const winnerKey = findExtremeIndex(
+    advantages.map((a) => a ?? -Infinity),
+    false,
+  );
+  if (winnerKey === null || advantages[winnerKey] === null) return null;
   return {
-    label: `Piyasa ortalamasının %${formatAdvantage(winner)} altında`,
+    label: `Piyasa ortalamasının %${formatAdvantage(advantages[winnerKey])} altında — ${candidates[winnerKey].productName}`,
     winnerKey,
   };
 }
 
 function buildInsufficientReasons(
-  a: CompareCandidateSummary,
-  b: CompareCandidateSummary,
+  candidates: CompareCandidateSummary[],
 ): CompareReason[] {
   const reasons: CompareReason[] = [];
-  if (a.sampleSize < 3) {
-    reasons.push({
-      label: `${a.productName} için örneklem yetersiz (${a.sampleSize} ilan)`,
-      winnerKey: null,
-    });
-  }
-  if (b.sampleSize < 3) {
-    reasons.push({
-      label: `${b.productName} için örneklem yetersiz (${b.sampleSize} ilan)`,
-      winnerKey: null,
-    });
+  for (const c of candidates) {
+    if (c.sampleSize < 3) {
+      reasons.push({
+        label: `${c.productName} için örneklem yetersiz (${c.sampleSize} ilan)`,
+        winnerKey: null,
+      });
+    }
   }
   if (!reasons.length) {
     reasons.push({
-      label: "İki ilan için de güvenli karşılaştırma için yeterli veri bekleniyor.",
+      label: "İlanlar için güvenli karşılaştırma için yeterli veri bekleniyor.",
       winnerKey: null,
     });
   }
@@ -466,23 +459,28 @@ function buildInsufficientReasons(
 }
 
 export function buildCompareJsonLd({
-  candidateA,
-  candidateB,
+  candidates,
   canonicalUrl,
 }: {
-  candidateA: CompareCandidateSummary;
-  candidateB: CompareCandidateSummary;
+  candidates: CompareCandidateSummary[];
   canonicalUrl: string;
 }): CompareJsonLdDocument[] {
   const breadcrumbId = `${canonicalUrl}#breadcrumb`;
   const itemListId = `${canonicalUrl}#compared-listings`;
 
+  const productNames = candidates.map((c) => c.productName);
+  const name =
+    candidates.length === 2
+      ? `${productNames[0]} ve ${productNames[1]} karşılaştırma — 2ElBul`
+      : `${productNames.slice(0, -1).join(", ")} ve ${productNames[productNames.length - 1]} karşılaştırma — 2ElBul`;
+  const description = `İkinci el ${productNames.join(", ")} ilanları için AI karar destek karşılaştırması.`;
+
   return [
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
-      name: "İlan karşılaştırma — 2ElBul",
-      description: `${candidateA.productName} ve ${candidateB.productName} ikinci el ilanları için AI karar destek karşılaştırması.`,
+      name,
+      description,
       url: canonicalUrl,
       breadcrumb: {
         "@id": breadcrumbId,
@@ -513,30 +511,17 @@ export function buildCompareJsonLd({
       "@id": itemListId,
       name: "Karşılaştırılan ilanlar",
       itemListOrder: "https://schema.org/ItemListOrderAscending",
-      itemListElement: [
-        {
-          "@type": "ListItem",
-          position: 1,
-          name: candidateA.productName,
-          url: candidateA.productUrl,
-          item: {
-            "@type": "Product",
-            name: candidateA.productName,
-            url: candidateA.productUrl,
-          },
+      itemListElement: candidates.map((c, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: c.productName,
+        url: c.productUrl,
+        item: {
+          "@type": "Product",
+          name: c.productName,
+          url: c.productUrl,
         },
-        {
-          "@type": "ListItem",
-          position: 2,
-          name: candidateB.productName,
-          url: candidateB.productUrl,
-          item: {
-            "@type": "Product",
-            name: candidateB.productName,
-            url: candidateB.productUrl,
-          },
-        },
-      ],
+      })),
     },
   ];
 }

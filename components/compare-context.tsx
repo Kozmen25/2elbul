@@ -11,7 +11,8 @@ import {
 } from "react";
 
 const STORAGE_KEY = "2elbul-compare-selection";
-const MAX_SELECTION = 2;
+export const MAX_SELECTION = 4;
+export const MIN_SELECTION = 2;
 
 export type CompareSelectionEntry = {
   listingId: string;
@@ -125,9 +126,9 @@ export function useCompare(): CompareContextValue {
 export function buildCompareUrl(
   selection: CompareSelectionEntry[],
 ): string | null {
-  if (selection.length !== MAX_SELECTION) return null;
-  const [first, second] = selection;
-  return `/compare?a=${encodeURIComponent(first.listingId)}&b=${encodeURIComponent(second.listingId)}`;
+  if (selection.length < MIN_SELECTION) return null;
+  const ids = selection.map((entry) => encodeURIComponent(entry.listingId)).join(",");
+  return `/compare?ids=${ids}`;
 }
 
 export function selectNextEntry(

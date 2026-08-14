@@ -25,12 +25,42 @@ describe("selectNextEntry", () => {
     expect(result.overflow).toBe(false);
   });
 
-  it("drops the oldest entry and marks overflow on the third selection", () => {
-    const current = [entry("listing-1", "iPhone 13"), entry("listing-2", "Galaxy S22")];
+  it("adds a third entry without overflow", () => {
+    const current = [
+      entry("listing-1", "iPhone 13"),
+      entry("listing-2", "Galaxy S22"),
+    ];
     const result = selectNextEntry(current, entry("listing-3", "Pixel 8"));
-    expect(result.selection).toHaveLength(2);
+    expect(result.selection).toHaveLength(3);
+    expect(result.selection[2].listingId).toBe("listing-3");
+    expect(result.overflow).toBe(false);
+  });
+
+  it("adds a fourth entry without overflow", () => {
+    const current = [
+      entry("listing-1", "iPhone 13"),
+      entry("listing-2", "Galaxy S22"),
+      entry("listing-3", "Pixel 8"),
+    ];
+    const result = selectNextEntry(current, entry("listing-4", "Redmi Note 12"));
+    expect(result.selection).toHaveLength(4);
+    expect(result.selection[3].listingId).toBe("listing-4");
+    expect(result.overflow).toBe(false);
+  });
+
+  it("drops the oldest entry and marks overflow on the fifth selection", () => {
+    const current = [
+      entry("listing-1", "iPhone 13"),
+      entry("listing-2", "Galaxy S22"),
+      entry("listing-3", "Pixel 8"),
+      entry("listing-4", "Redmi Note 12"),
+    ];
+    const result = selectNextEntry(current, entry("listing-5", "OnePlus 12"));
+    expect(result.selection).toHaveLength(4);
     expect(result.selection[0].listingId).toBe("listing-2");
     expect(result.selection[1].listingId).toBe("listing-3");
+    expect(result.selection[2].listingId).toBe("listing-4");
+    expect(result.selection[3].listingId).toBe("listing-5");
     expect(result.overflow).toBe(true);
   });
 
@@ -48,19 +78,37 @@ describe("buildCompareUrl", () => {
     expect(buildCompareUrl([entry("listing-1")])).toBeNull();
   });
 
-  it("builds the compare URL from two selected listings", () => {
+  it("builds the compare URL from two selected listings (comma-separated)", () => {
     const url = buildCompareUrl([entry("listing-1"), entry("listing-2")]);
-    expect(url).toBe("/compare?a=listing-1&b=listing-2");
+    expect(url).toBe("/compare?ids=listing-1,listing-2");
+  });
+
+  it("builds the compare URL from three selected listings", () => {
+    const url = buildCompareUrl([
+      entry("listing-1"),
+      entry("listing-2"),
+      entry("listing-3"),
+    ]);
+    expect(url).toBe("/compare?ids=listing-1,listing-2,listing-3");
+  });
+
+  it("builds the compare URL from four selected listings", () => {
+    const url = buildCompareUrl([
+      entry("listing-1"),
+      entry("listing-2"),
+      entry("listing-3"),
+      entry("listing-4"),
+    ]);
+    expect(url).toBe("/compare?ids=listing-1,listing-2,listing-3,listing-4");
   });
 
   it("encodes special characters in listing ids", () => {
     const url = buildCompareUrl([entry("a&b"), entry("c d")]);
-    expect(url).toBe("/compare?a=a%26b&b=c%20d");
+    expect(url).toBe("/compare?ids=a%26b,c%20d");
   });
 
-  it("returns null when more than two entries exist", () => {
-    expect(
-      buildCompareUrl([entry("a"), entry("b"), entry("c")]),
-    ).toBeNull();
+  it("still works for exactly 2 entries (no longer returns null)", () => {
+    const url = buildCompareUrl([entry("a"), entry("b")]);
+    expect(url).toBe("/compare?ids=a,b");
   });
 });

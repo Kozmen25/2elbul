@@ -43,11 +43,6 @@ export type BrandProductRecord = {
   createdAt: string | null;
 };
 
-export type BrandSearchEventRecord = {
-  productId: string | number | null;
-  createdAt: string | null;
-};
-
 export type BrandSearchDemandRecord = {
   query: string | null;
   normalizedQuery: string | null;
@@ -213,7 +208,6 @@ export const getBrandPageData = cache(
     const productLookup = new Map(brandProducts.map((product) => [product.id, product]));
     const productIds = [...productLookup.keys()];
     const listingRows = await fetchBrandListings(supabase, productIds);
-    const searchEvents = await fetchSearchEvents(supabase);
     const searchDemands = await fetchSearchDemands(supabase);
     const listings = buildBrandListings(listingRows, productLookup);
     const latestListingAt = getLatestListingTimestamp(listings);
@@ -309,7 +303,7 @@ export const getBrandPageData = cache(
         price: listing.price,
         createdAt: listing.createdAt,
       })),
-      searches: buildBrandSearches(searchEvents, searchDemands),
+      searches: buildBrandSearches(searchDemands),
     });
     const topOpportunities = marketPulse.topOpportunities.slice(0, 6);
     const popularProducts = marketPulse.mostSearchedProducts.length > 0
@@ -736,29 +730,6 @@ async function fetchBrandListingBatch(
   return [];
 }
 
-async function fetchSearchEvents(
-  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
-) {
-  const result = await supabase
-    .from("search_events")
-    .select("product_id, created_at")
-    .order("created_at", { ascending: false })
-    .limit(SEARCH_LIMIT);
-
-  if (result.error) {
-    console.error("Brand search events query failed:", result.error);
-    return [] as BrandSearchEventRecord[];
-  }
-
-  return ((result.data ?? []) as Array<{
-    product_id: string | number | null;
-    created_at: string | null;
-  }>).map((row) => ({
-    productId: row.product_id,
-    createdAt: row.created_at ? String(row.created_at) : null,
-  }));
-}
-
 async function fetchSearchDemands(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
 ) {
@@ -793,18 +764,11 @@ function chunkArray<T>(values: T[], size: number) {
 }
 
 function buildBrandSearches(
-  events: BrandSearchEventRecord[],
   demands: BrandSearchDemandRecord[],
 ) {
-  return [
-    ...events.map((event) => ({
-      productId: event.productId,
-      createdAt: event.createdAt,
-    })),
-    ...demands.map((demand) => ({
-      query: demand.query,
-      normalizedQuery: demand.normalizedQuery,
-      createdAt: demand.createdAt,
-    })),
-  ];
+  return demands.map((demand) => ({
+    query: demand.query,
+    normalizedQuery: demand.normalizedQuery,
+    createdAt: demand.createdAt,
+  }));
 }

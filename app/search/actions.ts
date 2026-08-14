@@ -10,28 +10,14 @@ export async function recordSearch(query: string) {
 
   if (!supabase || !normalizedQuery) return;
 
-  const searchPattern = `%${normalizedQuery}%`;
-  const { data: products, error: productError } = await supabase
-    .from("products")
-    .select("id, name")
-    .ilike("name", searchPattern)
-    .limit(1);
-
-  if (productError) {
-    console.error("Supabase search tracking product query failed:", productError);
-    return;
-  }
-
-  const product = products?.[0];
-  if (!product) return;
-
-  const { error } = await supabase.from("search_events").insert({
-    product_id: product.id,
+  const { error } = await supabase.from("search_demands").insert({
     query: normalizedQuery,
+    normalized_query: normalizedQuery,
+    requested_at: new Date().toISOString(),
   });
 
   if (error) {
-    console.error("Supabase search event insert failed:", error);
+    console.error("Supabase search demand insert failed:", error);
   }
 }
 

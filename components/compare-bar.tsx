@@ -2,11 +2,11 @@
 
 import { ArrowRight, Check, Scale, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCompare } from "@/components/compare-context";
+import { useCompare, MAX_SELECTION, MIN_SELECTION } from "@/components/compare-context";
 
 export function CompareBar() {
   const router = useRouter();
-  const { selection, hasSelection, isFull, compareUrl, removeFromSelection, clearSelection } =
+  const { selection, hasSelection, compareUrl, removeFromSelection, clearSelection } =
     useCompare();
 
   if (!hasSelection) return null;
@@ -29,7 +29,7 @@ export function CompareBar() {
                 Karşılaştırma
               </p>
               <p className="truncate text-sm font-black leading-5">
-                {selection.length}/2 ilan seçildi
+                {selection.length}/{MAX_SELECTION} ilan seçildi
               </p>
             </div>
           </div>
@@ -57,8 +57,8 @@ export function CompareBar() {
               </div>
             ))}
 
-            {selection.length < 2
-              ? Array.from({ length: 2 - selection.length }, (_, index) => (
+            {selection.length < MAX_SELECTION
+              ? Array.from({ length: MAX_SELECTION - selection.length }, (_, index) => (
                   <span
                     key={`empty-${index}`}
                     className="inline-flex items-center gap-2 rounded-full border border-dashed border-black/15 bg-transparent px-3 py-1.5 text-xs font-semibold text-black/35"
@@ -80,7 +80,7 @@ export function CompareBar() {
             <button
               type="button"
               onClick={handleCompare}
-              disabled={!isFull}
+              disabled={selection.length < MIN_SELECTION}
               className="orange-button justify-center px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               Karşılaştır
@@ -89,10 +89,13 @@ export function CompareBar() {
           </div>
         </div>
 
-        {!isFull ? (
+        {selection.length < MAX_SELECTION ? (
           <p className="mt-2 text-xs font-semibold text-black/45">
-            Karşılaştırmak için bir ilan daha seç. Üçüncü ilan eklersen en eski
-            seçim otomatik kalkar.
+            {selection.length === 0
+              ? "Karşılaştırmak için en az 2 ilan seç."
+              : selection.length === 1
+                ? "Karşılaştırmak için bir ilan daha seç."
+                : "Daha fazla ilan ekleyebilirsin. En fazla 4 ilan karşılaştırılabilir."}
           </p>
         ) : null}
       </div>

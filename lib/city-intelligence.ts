@@ -46,11 +46,6 @@ export type CityProductRecord = {
   attributes?: unknown;
 };
 
-export type CitySearchEventRecord = {
-  productId: string | number | null;
-  createdAt: string | null;
-};
-
 export type CitySearchDemandRecord = {
   query: string | null;
   normalizedQuery: string | null;
@@ -332,7 +327,6 @@ export const getCityPageData = cache(
       productIds.includes(product.id),
     );
 
-    const searchEvents = await fetchSearchEvents(supabase);
     const searchDemands = await fetchSearchDemands(supabase);
     const listings = buildCityListings(cityRows, productLookup, cityName);
 
@@ -343,7 +337,6 @@ export const getCityPageData = cache(
       cityName,
       products: cityProducts,
       listings,
-      searchEvents,
       searchDemands,
     });
   },
@@ -354,14 +347,12 @@ function buildCityPageDataFromRecords({
   cityName,
   products,
   listings,
-  searchEvents,
   searchDemands,
 }: {
   citySlug: string;
   cityName: string;
   products: CityProductRecord[];
   listings: CityListingRecord[];
-  searchEvents: CitySearchEventRecord[];
   searchDemands: CitySearchDemandRecord[];
 }): CityPageData {
   const cityUrl = getAbsoluteUrl(`/city/${citySlug}`);
@@ -458,7 +449,7 @@ function buildCityPageDataFromRecords({
       price: listing.price,
       createdAt: listing.createdAt,
     })),
-    searches: buildCitySearches(searchEvents, searchDemands),
+    searches: buildCitySearches(searchDemands),
   });
   const topOpportunities = marketPulse.topOpportunities.slice(0, 6);
   const popularProducts =
@@ -876,29 +867,6 @@ async function fetchCityProducts(
   return [];
 }
 
-async function fetchSearchEvents(
-  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
-) {
-  const result = await supabase
-    .from("search_events")
-    .select("product_id, created_at")
-    .order("created_at", { ascending: false })
-    .limit(SEARCH_LIMIT);
-
-  if (result.error) {
-    console.error("City search events query failed:", result.error);
-    return [] as CitySearchEventRecord[];
-  }
-
-  return ((result.data ?? []) as Array<{
-    product_id: string | number | null;
-    created_at: string | null;
-  }>).map((row) => ({
-    productId: row.product_id,
-    createdAt: row.created_at ? String(row.created_at) : null,
-  }));
-}
-
 async function fetchSearchDemands(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
 ) {
@@ -925,20 +893,13 @@ async function fetchSearchDemands(
 }
 
 function buildCitySearches(
-  events: CitySearchEventRecord[],
   demands: CitySearchDemandRecord[],
 ) {
-  return [
-    ...events.map((event) => ({
-      productId: event.productId,
-      createdAt: event.createdAt,
-    })),
-    ...demands.map((demand) => ({
-      query: demand.query,
-      normalizedQuery: demand.normalizedQuery,
-      createdAt: demand.createdAt,
-    })),
-  ];
+  return demands.map((demand) => ({
+    query: demand.query,
+    normalizedQuery: demand.normalizedQuery,
+    createdAt: demand.createdAt,
+  }));
 }
 
 export { CITY_LISTING_BATCH_SIZE };

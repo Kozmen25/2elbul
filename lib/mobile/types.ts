@@ -218,3 +218,20 @@ export type MobileFavoritesListResponse = {
 export type MobileFavoriteCreatedResponse = {
   favoriteId: string;
 };
+
+// ─── Create Listing ───
+
+export type MobileCreateListingRequest = {
+  title: string;
+  price: number;
+  city: string;
+  condition: string;
+  source: string;
+  url: string;
+  imageUrl?: string;
+};
+
+export type MobileCreateListingResponse = {
+  listingId: string;
+  productId: string;
+};
