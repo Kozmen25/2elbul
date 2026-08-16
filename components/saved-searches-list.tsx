@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { deleteSavedSearch } from "@/app/saved-searches/actions";
@@ -39,7 +40,13 @@ export function SavedSearchesList({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Bell size={16} className="shrink-0 text-[#ff6b00]" />
-              <p className="truncate font-black">{search.query}</p>
+              <Link
+                href={`/search?q=${encodeURIComponent(search.query)}`}
+                className="truncate font-black transition hover:text-[#ff6b00] hover:underline"
+                title={search.query}
+              >
+                {search.query}
+              </Link>
               <span className="rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
                 {frequencyLabel(search.frequency)}
               </span>

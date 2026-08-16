@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { hasValidSecret } from "@/lib/auth/cron-auth";
+import { detectQueryIntent } from "@/lib/search/query-intent-detector";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
+import { isMissingAttributesColumn } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
       // Build ILIKE query: search for new listings matching the saved query
       let listingsQuery = supabase
         .from("listings")
-        .select("id")
+        .select("id, product_id")
         .in("status", ["published", "active"])
         .ilike("title", `%${search.query.trim()}%`);
 
@@ -89,11 +92,67 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      const count = newListings?.length ?? 0;
+      const rawListings = (newListings ?? []) as {
+        id: string | number;
+        product_id: string | number | null;
+      }[];
+
+      // PUE-aware filtering: when the saved query carries primary-product intent
+      // (no accessory/spare/service terms), exclude accessory, spare_part and
+      // service listings so they don't trigger an alarm for the primary product.
+      const intent = detectQueryIntent(search.query);
+      let filteredListings = rawListings;
+
+      if (intent.productType === null && rawListings.length > 0) {
+        const productIds = [
+          ...new Set(
+            rawListings
+              .map((l) => (l.product_id != null ? String(l.product_id) : null))
+              .filter((id): id is string => id !== null),
+          ),
+        ];
+
+        let productTypes = new Map<string, string | null>();
+        if (productIds.length > 0) {
+          const productsResult = await supabase
+            .from("products")
+            .select("id, attributes")
+            .in("id", productIds);
+          const products =
+            !productsResult.error || !isMissingAttributesColumn(productsResult.error)
+              ? (productsResult.data ?? [])
+              : await (async () => {
+                  const fallback = await supabase
+                    .from("products")
+                    .select("id")
+                    .in("id", productIds);
+                  return fallback.data ?? [];
+                })();
+
+          productTypes = new Map(
+            products.map((p) => [
+              String(p.id),
+              extractProductTypeFromAttributes(
+                "attributes" in p ? (p as { attributes?: unknown }).attributes : null,
+              ),
+            ]),
+          );
+        }
+
+        const excluded = new Set(["accessory", "spare_part", "service"]);
+        filteredListings = rawListings.filter((l) => {
+          const pt = l.product_id != null ? productTypes.get(String(l.product_id)) : null;
+          // Unknown product type passes through (graceful degradation, not force-typed)
+          if (pt == null) return true;
+          return !excluded.has(pt);
+        });
+      }
+
+      const count = filteredListings.length;
 
       if (count > 0) {
         // Create notification for the user
-        const listingId = String(newListings![0].id);
+        const listingId = String(filteredListings[0].id);
         const body =
           count === 1
             ? `"${search.query}" için 1 yeni ilan bulundu.`
