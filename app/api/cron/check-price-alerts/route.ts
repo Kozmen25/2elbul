@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { hasValidSecret } from "@/lib/auth/cron-auth";
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
+import { isMissingAttributesColumn } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * Minimum relative price reduction (percent) before a price drop is reported.
+ * Below this bound genuine price changes are too small to act on; the market
+ * pulse trend engine treats ~4% as the falling-direction boundary, so a drop
+ * boundary slightly above it avoids firing on noise while still catching real
+ * reductions that never cross an absolute target price.
+ */
+const PRICE_DROP_MIN_PERCENT = 5;
+
+// Accessory / spare part / service listings must never be reported as a price
+// drop for the primary product they attach to. This is the same exclusion set
+// used by the PUE-aware saved-search alarm; null (unknown) product types pass
+// through unchanged rather than being force-typed.
+const NON_PRIMARY_PRODUCT_TYPES = new Set([
+  "accessory",
+  "spare_part",
+  "service",
+]);
 
 type PriceAlertRow = {
   id: string | number;
@@ -11,6 +32,7 @@ type PriceAlertRow = {
   product_id: number | null;
   listing_id: number | null;
   target_price: number | string;
+  current_price: number | string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -39,7 +61,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("price_alerts")
-    .select("id, user_id, product_id, listing_id, target_price")
+    .select("id, user_id, product_id, listing_id, target_price, current_price")
     .eq("status", "active")
     .limit(500);
 
@@ -56,11 +78,57 @@ export async function GET(request: NextRequest) {
   }
 
   const alerts = (data ?? []) as PriceAlertRow[];
+
+  // PUE-aware product type lookup for product-linked alerts. Accessory /
+  // spare_part / service alerts are left unmatched so their price drop is
+  // suppressed; alerts whose product type is unknown still pass through.
+  const productIds = [
+    ...new Set(
+      alerts
+        .map((alert) =>
+          alert.listing_id == null && alert.product_id != null
+            ? String(alert.product_id)
+            : null,
+        )
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  let excludedProductIds = new Set<number>();
+  if (productIds.length > 0) {
+    const productsResult = await supabase
+      .from("products")
+      .select("id, attributes")
+      .in("id", productIds);
+    const products =
+      !productsResult.error || !isMissingAttributesColumn(productsResult.error)
+        ? (productsResult.data ?? [])
+        : [];
+    excludedProductIds = new Set(
+      products
+        .filter(
+          (product) =>
+            NON_PRIMARY_PRODUCT_TYPES.has(
+              extractProductTypeFromAttributes(
+                "attributes" in product
+                  ? (product as { attributes?: unknown }).attributes
+                  : null,
+              ) ?? "",
+            ),
+        )
+        .map((product) => Number(product.id)),
+    );
+  }
+
+  const now = new Date().toISOString();
   let checked = 0;
   let triggered = 0;
+  let priceDrops = 0;
   let failed = 0;
   let notificationsCreated = 0;
-  const now = new Date().toISOString();
+
+  // Within a single run, an alert should only report a price drop once even if
+  // the cron runs repeatedly while the new (lower) price is still in effect.
+  const deliveredDropAlerts = new Set<string>();
 
   for (const alert of alerts) {
     try {
@@ -80,7 +148,30 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      if (currentPrice <= targetPrice) {
+      const previousPrice =
+        currentPrice !== null && alert.current_price != null
+          ? Number(alert.current_price)
+          : null;
+
+      // Relative price drop detection — a distinct responsibility from the
+      // absolute target-price alarm below. Fires when the price fell by at
+      // least PRICE_DROP_MIN_PERCENT versus the last observed price. The
+      // accessory exclusion prevents a dropped accessory price from being
+      // reported as a drop for the primary product.
+      const isSuppressedAccessory =
+        alert.listing_id == null &&
+        alert.product_id != null &&
+        excludedProductIds.has(Number(alert.product_id));
+      const didDrop =
+        previousPrice != null &&
+        previousPrice > 0 &&
+        currentPrice < previousPrice &&
+        ((previousPrice - currentPrice) / previousPrice) * 100 >=
+          PRICE_DROP_MIN_PERCENT;
+
+      const absoluteTriggered = currentPrice <= targetPrice;
+
+      if (absoluteTriggered) {
         await supabase
           .from("price_alerts")
           .update({
@@ -108,12 +199,56 @@ export async function GET(request: NextRequest) {
 
         notificationsCreated += 1;
         triggered += 1;
-      } else {
+        checked += 1;
+        continue;
+      }
+
+      if (didDrop && !isSuppressedAccessory) {
+        const alertKey = String(alert.id);
+        if (deliveredDropAlerts.has(alertKey)) {
+          priceDrops += 1;
+          checked += 1;
+          continue;
+        }
+        deliveredDropAlerts.add(alertKey);
+
         await supabase
           .from("price_alerts")
           .update({ current_price: currentPrice, last_checked_at: now })
           .eq("id", alert.id);
+
+        const productName =
+          alert.listing_id != null
+            ? "Ürün"
+            : await resolveProductName(supabase, alert.product_id);
+        const dropPercent = Math.round(
+          ((previousPrice - currentPrice) / previousPrice) * 100,
+        );
+        await supabase.from("user_notifications").insert({
+          user_id: alert.user_id,
+          type: "price_drop",
+          title: "Fiyat Düştü",
+          body: `${productName} için fiyat düştü! Önceki: ${previousPrice} TL, Güncel: ${currentPrice} TL (%${dropPercent} düşüş)`,
+          metadata: {
+            price_alert_id: alert.id,
+            product_id: alert.product_id,
+            listing_id: alert.listing_id,
+            previous_price: previousPrice,
+            current_price: currentPrice,
+            drop_percent: dropPercent,
+          },
+        });
+
+        notificationsCreated += 1;
+        priceDrops += 1;
+        checked += 1;
+        continue;
       }
+
+      await supabase
+        .from("price_alerts")
+        .update({ current_price: currentPrice, last_checked_at: now })
+        .eq("id", alert.id);
 
       checked += 1;
     } catch (alertError) {
@@ -126,6 +261,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     checked,
     triggered,
+    priceDrops,
     failed,
     notificationsCreated,
   });
