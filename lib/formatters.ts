@@ -49,3 +49,29 @@ function stableOptionsKey(options: Intl.DateTimeFormatOptions) {
     .map(([key, value]) => `${key}:${String(value)}`)
     .join("|");
 }
+
+export function formatRelativeAge(
+  value: DateInput | null | undefined,
+  now = Date.now(),
+): string {
+  if (value == null) return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const diffMs = now - date.getTime();
+  if (diffMs < 0) return "—";
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Az önce";
+  if (diffMin < 60) return `${diffMin} dk önce`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} saat önce`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay === 1) return "Dün";
+  if (diffDay < 7) return `${diffDay} gün önce`;
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+

@@ -16,7 +16,7 @@ import {
 import {
   formatMarketConfidenceLevel,
 } from "@/app/product/[slug]/market-intelligence-panel";
-import { formatCurrencyTRY } from "@/lib/formatters";
+import { formatCurrencyTRY, formatRelativeAge } from "@/lib/formatters";
 import {
   buildCompareDecision,
   getComparePageData,
@@ -447,6 +447,11 @@ function ComparisonTable({
       winnerIndex: duplicateWinner(candidates),
     },
     {
+      label: "İlan yaşı",
+      values: candidates.map((c) => formatRelativeAge(c.createdAt)),
+      winnerIndex: ageWinner(candidates),
+    },
+    {
       label: "Fiyat avantajı",
       values: candidates.map((c) => formatAdvantageCell(c.priceAdvantagePercent)),
       winnerIndex: advantageWinner(candidates),
@@ -826,6 +831,17 @@ function advantageWinner(
     candidates[winnerIndex].priceAdvantagePercent === null
   )
     return null;
+  return winnerIndex;
+}
+
+function ageWinner(candidates: CompareCandidateSummary[]): number | null {
+  // Newest listing wins: lowest age (ms since createdAt), prefer low.
+  const ages = candidates.map((c) => {
+    const t = new Date(c.createdAt).getTime();
+    return Number.isNaN(t) ? Infinity : t;
+  });
+  const winnerIndex = findExtremeIndex(ages, false);
+  if (winnerIndex === null || ages[winnerIndex] === Infinity) return null;
   return winnerIndex;
 }
 
