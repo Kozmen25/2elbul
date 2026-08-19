@@ -89,6 +89,32 @@ type SearchSuggestion = {
   href: string;
 };
 
+/** Subset of the `/api/search/ai` aggregate product result (REAL values only). */
+type AiSearchProduct = {
+  id: string;
+  name: string;
+  slug: string;
+  category: string | null;
+  productType: string | null;
+  listingCount: number;
+  minPrice: number;
+  maxPrice: number;
+  averagePrice: number;
+  bestScore: number;
+};
+
+/** Shape of the `/api/search/ai` response envelope. */
+type AiSearchResponse = {
+  ok: boolean;
+  fallback?: boolean;
+  plan?: {
+    mode?: "fast_search" | "ai_search";
+    query?: string;
+  };
+  products?: AiSearchProduct[];
+  explanation?: string;
+};
+
 type SearchResultsClientProps = {
   query: string;
   initialListings: Listing[];
@@ -118,6 +144,82 @@ const formatDate = (date: string) =>
   });
 
 const PAGE_SIZE = 20;
+
+/**
+ * 2ELBUL AI — AKILLI ARAMA (additive client panel, §6 step 6).
+ *
+ * Strictly additive: it calls `/api/search/ai` only for the current `query` and
+ * renders a grounded "AI arama özeti" proxying REAL system output. It renders
+ * NOTHING when the mode is `fast_search`, the plan is invalid, the request
+ * errors, or the explanation is empty — so the existing deterministic search
+ * below runs byte-for-byte untouched. It never invents a listing, price, or
+ * confidence value; it only echoes the plan's explanation prose and links AI
+ * products to existing `/product/[slug]` routes.
+ */
+function AiSearchPanel({ query }: { query: string }) {
+  const [state, setState] = useState<AiSearchResponse | null>(null);
+
+  useEffect(() => {
+    if (!query) return;
+    const controller = new AbortController();
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      setState(null);
+      fetch(`/api/search/ai?q=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: AiSearchResponse | null) => {
+          if (settled) return;
+          if (data && data.ok && data.plan?.mode === "ai_search" && data.explanation) {
+            setState(data);
+          } else {
+            setState(null);
+          }
+        })
+        .catch(() => {
+          if (!settled) setState(null);
+        });
+    }, 350);
+
+    return () => {
+      settled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  if (!state || !state.products?.length) return null;
+
+  const products = state.products.slice(0, 5);
+
+  return (
+    <div className="mb-8 rounded-3xl border border-[#ff6b00]/16 bg-[#fff7f1] p-5 sm:p-6">
+      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]">
+        2ELBUL AI — Akıllı Arama
+      </p>
+      <p className="mt-2 whitespace-pre-line text-sm font-semibold leading-6 text-black/60">
+        {state.explanation}
+      </p>
+      {products.length > 0 ? (
+        <ul className="mt-4 flex flex-wrap gap-2">
+          {products.map((p) => (
+            <li key={p.id}>
+              <Link
+                href={`/product/${p.slug}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-xs font-black text-[#d95700]"
+              >
+                {p.name}
+                <ArrowUpRight size={13} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 export function SearchResultsClient({
   query,
@@ -520,6 +622,8 @@ export function SearchResultsClient({
             marketRange={marketRange}
             searchIntentLabel={searchIntentLabel}
           />
+
+          <AiSearchPanel query={query} />
 
           {query && <SafeShoppingBanner />}
 
