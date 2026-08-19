@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Mic, MicOff, Search } from "lucide-react";
+import { AudioLines, MapPin, Mic, MicOff, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
@@ -27,6 +27,7 @@ type SpeechRecognitionInstance = {
   maxAlternatives: number;
   start: () => void;
   stop: () => void;
+  onstart: (() => void) | null;
   onresult: ((event: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
@@ -54,6 +55,7 @@ export function SearchBar({
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [speechStatus, setSpeechStatus] = useState<SpeechStatus>("idle");
+  const [hasTranscript, setHasTranscript] = useState(false);
   const recognitionRef = useRef<{
     stop: () => void;
   } | null>(null);
@@ -65,12 +67,28 @@ export function SearchBar({
 
   const speechStatusLabel =
     speechStatus === "listening"
-      ? "Dinleniyor"
+      ? hasTranscript
+        ? "Yazıldı — düzenleyin"
+        : "Dinleniyor"
       : speechStatus === "unsupported"
         ? "Desteklenmiyor"
         : speechStatus === "denied"
-          ? "İzin yok"
-          : "";
+          ? "Mikrofon kapalı"
+          : speechStatus === "error"
+            ? "Hata — yeniden deneyin"
+            : "";
+
+  const micIsActive = speechStatus === "listening";
+  const micIsInactive = speechStatus === "unsupported" || speechStatus === "denied";
+  const micUnavailable = micIsInactive || speechStatus === "error";
+
+  const micTitle = micIsInactive
+    ? "Mikrofon kullanılamıyor — yazılı arama kullanılabilir"
+    : micIsActive
+      ? hasTranscript
+        ? "Sesli aramayı durdur"
+        : "Dinliyorum — konuşun, bitince yazılan metni düzenleyebilirsiniz"
+      : "Sesli arayın";
 
   useEffect(() => {
     return () => recognitionRef.current?.stop();
@@ -163,6 +181,7 @@ export function SearchBar({
       const transcript = event.results[0]?.[0]?.transcript;
       if (transcript) {
         setQuery((current) => (current.trim() ? `${current} ${transcript}` : transcript));
+        setHasTranscript(true);
         setSuggestionsOpen(true);
       }
     };
@@ -175,7 +194,12 @@ export function SearchBar({
       } else {
         setSpeechStatus("error");
       }
+      setHasTranscript(false);
       recognitionRef.current = null;
+    };
+
+    recorder.onstart = () => {
+      setHasTranscript(false);
     };
 
     recorder.onend = () => {
@@ -227,28 +251,31 @@ export function SearchBar({
           <button
             type="button"
             onClick={toggleSpeech}
+            disabled={micUnavailable}
             aria-label={
-              speechStatus === "listening" ? "Sesli aramayı durdur" : "Sesli ara"
+              micIsInactive
+                ? "Mikrofon kullanılamıyor"
+                : micIsActive
+                  ? "Sesli aramayı durdur"
+                  : "Sesli arayın"
             }
-            title={
-              speechStatus === "unsupported"
-                ? "Tarayıcınız sesli aramayı desteklemiyor"
-                : speechStatus === "denied"
-                  ? "Mikrofon izni reddedildi — yazılı arama kullanılabilir"
-                  : speechStatus === "listening"
-                    ? "Dinliyorum — konuşun, bitince yazılan metni düzenleyebilirsiniz"
-                    : "Sesli ara"
-            }
-            className={`shrink-0 rounded-full transition ${
-              speechStatus === "listening"
+            title={micTitle}
+            aria-pressed={micIsActive}
+            className={`relative shrink-0 rounded-full transition ${
+              micIsActive
                 ? "bg-[#ff6b00] text-white"
-                : "text-black/45 hover:bg-black/5 hover:text-black/80"
+                : micIsInactive
+                  ? "cursor-not-allowed text-black/25"
+                  : "text-black/45 hover:bg-black/5 hover:text-black/80 focus-visible:ring-2 focus-visible:ring-[#ff6b00]/60"
             }`}
           >
-            {speechStatus === "listening" ? (
-              <MicOff size={20} />
+            {micIsActive && <span aria-hidden className="mic-ring" />}
+            {micUnavailable ? (
+              <MicOff size={20} className="relative" />
+            ) : micIsActive && !hasTranscript ? (
+              <AudioLines size={20} className="relative" />
             ) : (
-              <Mic size={20} />
+              <Mic size={20} className="relative" />
             )}
           </button>
         </label>
