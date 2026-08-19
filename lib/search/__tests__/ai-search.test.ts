@@ -9,6 +9,7 @@ import {
   parseExclusions,
   extractPlanExtras,
 } from "../ai/turkish-nl-parser";
+import { buildIntentSummary } from "../ai/intent-summary";
 
 // ─── Planner: hybrid routing + PUE-boundary guarantees ───
 
@@ -262,5 +263,51 @@ describe("safety guarantees", () => {
     expect(plan.conditions).toEqual([]);
     expect(plan.referenceProduct).toBeNull();
     expect(plan.sort).toBeNull();
+  });
+});
+
+// ─── AŞAMA 2: intent summary (client-side, pure, PUE-boundary) ───
+
+describe("buildIntentSummary (AŞAMA 2)", () => {
+  it("returns all null for an empty query", () => {
+    const s = buildIntentSummary("   ");
+    expect(s.productTypeLabel).toBeNull();
+    expect(s.deviceLabel).toBeNull();
+    expect(s.priceLabel).toBeNull();
+    expect(s.preferenceLabel).toBeNull();
+  });
+
+  it("formats a price band with Turkish thousands separators", () => {
+    const s = buildIntentSummary("10-15 bin arası laptop");
+    expect(s.priceLabel).toBe("10.000 – 15.000 TL");
+  });
+
+  it("formats an upper bound as 'TL altı'", () => {
+    const s = buildIntentSummary("10 bin TL altı telefon");
+    expect(s.priceLabel).toBe("10.000 TL altı");
+  });
+
+  it("echoes a comparator direction as a display price only when present", () => {
+    const s = buildIntentSummary("iPhone 15 Pro'dan ucuz telefon");
+    // The electron reference is direction-only; no price is invented for it.
+    expect(s.deviceLabel).toContain("iPhone");
+    expect(s.priceLabel).toBeNull();
+  });
+
+  it("names the device with brand capitalization when the user names a model", () => {
+    const s = buildIntentSummary("iphone 15 ekran koruyucu");
+    expect(s.productTypeLabel).toBe("Aksesuar");
+    expect(s.deviceLabel).toContain("iPhone");
+  });
+
+  it("keeps productType null for garbage even under a price signal", () => {
+    const s = buildIntentSummary("xyz 5 bin");
+    expect(s.productTypeLabel).toBeNull();
+  });
+
+  it("echoes sort + condition preference labels from the user's own words", () => {
+    const s = buildIntentSummary("garantili en ucuz PS5");
+    expect(s.preferenceLabel).toContain("Garantili");
+    expect(s.preferenceLabel).toContain("En düşük fiyat");
   });
 });

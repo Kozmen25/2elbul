@@ -2,7 +2,8 @@
 
 import { AudioLines, MapPin, Mic, MicOff, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { buildIntentSummary } from "@/lib/search/ai/intent-summary";
 
 type SearchBarProps = {
   compact?: boolean;
@@ -56,6 +57,7 @@ export function SearchBar({
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [speechStatus, setSpeechStatus] = useState<SpeechStatus>("idle");
   const [hasTranscript, setHasTranscript] = useState(false);
+  const [intentExpanded, setIntentExpanded] = useState(false);
   const recognitionRef = useRef<{
     stop: () => void;
   } | null>(null);
@@ -64,6 +66,18 @@ export function SearchBar({
 
   const speechSupportedRef = useRef(speechSupported);
   speechSupportedRef.current = speechSupported;
+
+  /** AŞAMA 2: deterministic intent read-back from the typed query (pure). */
+  const intentSummary = useMemo(
+    () => buildIntentSummary(query),
+    [query],
+  );
+  const intentSlots = [
+    intentSummary.productTypeLabel,
+    intentSummary.deviceLabel,
+    intentSummary.priceLabel,
+    intentSummary.preferenceLabel,
+  ].filter((slot): slot is string => Boolean(slot));
 
   const speechStatusLabel =
     speechStatus === "listening"
@@ -279,6 +293,42 @@ export function SearchBar({
             )}
           </button>
         </label>
+
+        {intentSlots.length > 0 && (
+          <div
+            className="mt-2 flex flex-col gap-2 rounded-xl border border-[#ffe1c9] bg-[#fff7f0] px-3 py-2"
+            data-intent-summary
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-black uppercase tracking-[0.16em] text-[#b34e00]">
+                Anlaşılan niyet
+              </span>
+              <button
+                type="button"
+                aria-expanded={intentExpanded}
+                aria-label={intentExpanded ? "Detayları gizle" : "Detayları göster"}
+                onClick={() => setIntentExpanded((open) => !open)}
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-[#b34e00] transition hover:bg-[#ffe1c9]"
+              >
+                {intentExpanded ? "Gizle" : "Açıklama"}
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[12px] font-semibold leading-5 text-black/75">
+                {!intentExpanded
+                  ? intentSlots.slice(0, 2).join(" · ")
+                  : intentSlots.join(" · ")}
+              </span>
+              <span
+                role="status"
+                aria-live="polite"
+                className="shrink-0 text-[11px] font-black uppercase tracking-[0.16em] text-[#b34e00]"
+              >
+                {query.trim() ? "Düzenlenebilir" : "Konuşarak ekleyin"}
+              </span>
+            </div>
+          </div>
+        )}
 
         {suggestionsOpen && (suggestions.length > 0 || isLoadingSuggestions) && (
           <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 max-h-80 overflow-y-auto rounded-2xl border border-black/10 bg-white p-2 shadow-[0_18px_60px_rgba(0,0,0,0.14)]">

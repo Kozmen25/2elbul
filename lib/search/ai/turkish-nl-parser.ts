@@ -33,6 +33,22 @@ const tl = (s: string): string =>
     .replace(/[öÖ]/g, "o")
     .replace(/[üÜ]/g, "u");
 
+/**
+ * Remove model names we recognize inside a comparator (e.g. "iPhone 15 Pro") so
+ * the trailing-number "Pro" cannot be misread as a price ("5 TL" bound) when the
+ * query is really a direction-only comparison. Only strips inside a comparison;
+ * a bare "iPhone 15" search is untouched.
+ */
+function stripComparableModels(rawQuery: string): string {
+  const text = tl(rawQuery.trim());
+  if (!/(ucuz|pahali|ndan|ten|den|tan)/.test(text)) return text;
+  let stripped = text;
+  for (const name of COMPARABLE) {
+    stripped = stripped.split(name).join(" ");
+  }
+  return stripped;
+}
+
 // Written-number words we understand, normalized under `tl`.
 const WRITTEN = new Map<string, number>([
   ["sifir", 0],
@@ -139,7 +155,7 @@ function isAffordabilityHint(text: string): boolean {
  *   - bare "10.000"                      -> center at default tolerance
  */
 export function parsePriceIntent(rawQuery: string): PriceParseResult {
-  const text = rawQuery.trim();
+  const text = stripComparableModels(rawQuery.trim());
   if (!text) return { range: emptyRange(), signals: 0 };
   const amounts = parseAmounts(text);
 

@@ -8,6 +8,7 @@ import {
   MapPin,
   RotateCcw,
   SlidersHorizontal,
+  Sparkles,
   Store,
   Tag,
   X,
@@ -628,6 +629,13 @@ export function SearchResultsClient({
           {query && <SafeShoppingBanner />}
 
           <QuickFilterBar signal={signal} onChange={setSignal} />
+
+          <RefinePromptBar
+            sort={sort}
+            signal={signal}
+            onSort={setSort}
+            onSignal={setSignal}
+          />
 
           <div className="mb-6 flex items-center justify-between gap-3 lg:hidden">
             <button
@@ -1712,6 +1720,76 @@ function QuickFilterBar({
       ))}
     </div>
   );
+}
+
+/**
+ * AŞAMA 3: deterministic refine prompts the user can tap to apply a real,
+ * existing filter/sort. Each action maps one-to-one onto a setter that already
+ * exists and already syncs URL params — the row is purely additive and never
+ * introduces a new state dimension or any conversation history. It renders only
+ * above a non-empty result set (the caller places it inside the results-only
+ * branch), so a query with no listings never shows it. It is NOT gated on the
+ * `ai_search` mode: refining sort/signal is meaningful on any keyword result,
+ * and the setters are the exact ones the filter panel already uses.
+ */
+function RefinePromptBar({
+  sort,
+  signal,
+  onSort,
+  onSignal,
+}: {
+  sort: SortOption;
+  signal: QuickFilterOption;
+  onSort: (value: SortOption) => void;
+  onSignal: (value: QuickFilterOption) => void;
+}) {
+  const cheaperActive = sort === "price-asc";
+  const newestActive = signal === "newly-added";
+  const performanceActive = sort === "best-opportunity";
+
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-black/35">
+        <Sparkles size={14} className="text-[#ff6b00]" />
+        AI ile daha da iyileştir
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        <button
+          type="button"
+          aria-pressed={cheaperActive}
+          onClick={() => onSort("price-asc")}
+          className={refineChipClass(cheaperActive)}
+        >
+          Daha ucuzlarını göster
+        </button>
+        <button
+          type="button"
+          aria-pressed={performanceActive}
+          onClick={() => onSort("best-opportunity")}
+          className={refineChipClass(performanceActive)}
+        >
+          Daha yüksek performanslı olanlar
+        </button>
+        <button
+          type="button"
+          aria-pressed={newestActive}
+          onClick={() => onSignal("newly-added")}
+          className={refineChipClass(newestActive)}
+        >
+          Sadece yeni ilanlar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Shared pill styling — mirrors QuickFilterBar's active/inactive tokens. */
+function refineChipClass(active: boolean) {
+  return `inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-black transition ${
+    active
+      ? "border-[#ff6b00] bg-[#ff6b00] text-white"
+      : "border-black/10 bg-white text-black/60 hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+  }`;
 }
 function MiniMetric({
   label,
