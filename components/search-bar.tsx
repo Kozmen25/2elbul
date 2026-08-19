@@ -1,8 +1,8 @@
 "use client";
 
-import { MapPin, Search } from "lucide-react";
+import { MapPin, Mic, MicOff, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type SearchBarProps = {
   compact?: boolean;
@@ -18,6 +18,29 @@ type SearchSuggestion = {
   href: string;
 };
 
+type SpeechStatus = "idle" | "listening" | "unsupported" | "denied" | "error";
+
+/** Minimal shape of the Web Speech API recognition instance we use. */
+type SpeechRecognitionInstance = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
+
+function getSpeechRecognition(): (new () => SpeechRecognitionInstance) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 export function SearchBar({
   compact = false,
   initialQuery = "",
@@ -30,6 +53,28 @@ export function SearchBar({
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState<SpeechStatus>("idle");
+  const recognitionRef = useRef<{
+    stop: () => void;
+  } | null>(null);
+  const speechSupported =
+    typeof window !== "undefined" && getSpeechRecognition() !== null;
+
+  const speechSupportedRef = useRef(speechSupported);
+  speechSupportedRef.current = speechSupported;
+
+  const speechStatusLabel =
+    speechStatus === "listening"
+      ? "Dinleniyor"
+      : speechStatus === "unsupported"
+        ? "Desteklenmiyor"
+        : speechStatus === "denied"
+          ? "İzin yok"
+          : "";
+
+  useEffect(() => {
+    return () => recognitionRef.current?.stop();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -85,6 +130,67 @@ export function SearchBar({
     router.push(`/search?q=${encodeURIComponent(name)}`);
   }
 
+  function stopListening() {
+    recognitionRef.current?.stop();
+    setSpeechStatus("idle");
+  }
+
+  function toggleSpeech() {
+    if (!speechSupportedRef.current) {
+      setSpeechStatus("unsupported");
+      return;
+    }
+    if (speechStatus === "listening") {
+      stopListening();
+      return;
+    }
+
+    const Recorder = getSpeechRecognition();
+    if (!Recorder) {
+      setSpeechStatus("unsupported");
+      return;
+    }
+
+    const recorder = new Recorder();
+    recorder.lang = "tr-TR";
+    recorder.interimResults = false;
+    recorder.maxAlternatives = 1;
+    recognitionRef.current = recorder;
+
+    setSpeechStatus("listening");
+
+    recorder.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript;
+      if (transcript) {
+        setQuery((current) => (current.trim() ? `${current} ${transcript}` : transcript));
+        setSuggestionsOpen(true);
+      }
+    };
+
+    recorder.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setSpeechStatus("denied");
+      } else if (event.error === "aborted") {
+        setSpeechStatus("idle");
+      } else {
+        setSpeechStatus("error");
+      }
+      recognitionRef.current = null;
+    };
+
+    recorder.onend = () => {
+      recognitionRef.current = null;
+      setSpeechStatus((current) => (current === "listening" ? "idle" : current));
+    };
+
+    try {
+      recorder.start();
+    } catch {
+      setSpeechStatus("unsupported");
+      recognitionRef.current = null;
+    }
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -110,6 +216,41 @@ export function SearchBar({
             placeholder="Ne arıyorsun? Örn. iPhone 13"
             autoComplete="off"
           />
+          <span
+            role="status"
+            aria-live="polite"
+            className="shrink-0 text-[11px] font-black uppercase tracking-[0.16em]"
+            aria-hidden={!speechStatusLabel}
+          >
+            {speechStatusLabel}
+          </span>
+          <button
+            type="button"
+            onClick={toggleSpeech}
+            aria-label={
+              speechStatus === "listening" ? "Sesli aramayı durdur" : "Sesli ara"
+            }
+            title={
+              speechStatus === "unsupported"
+                ? "Tarayıcınız sesli aramayı desteklemiyor"
+                : speechStatus === "denied"
+                  ? "Mikrofon izni reddedildi — yazılı arama kullanılabilir"
+                  : speechStatus === "listening"
+                    ? "Dinliyorum — konuşun, bitince yazılan metni düzenleyebilirsiniz"
+                    : "Sesli ara"
+            }
+            className={`shrink-0 rounded-full transition ${
+              speechStatus === "listening"
+                ? "bg-[#ff6b00] text-white"
+                : "text-black/45 hover:bg-black/5 hover:text-black/80"
+            }`}
+          >
+            {speechStatus === "listening" ? (
+              <MicOff size={20} />
+            ) : (
+              <Mic size={20} />
+            )}
+          </button>
         </label>
 
         {suggestionsOpen && (suggestions.length > 0 || isLoadingSuggestions) && (
