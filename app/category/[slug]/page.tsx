@@ -9,6 +9,7 @@ import {
   Clock3,
   PackageSearch,
   Store,
+  TrendingDown,
   TriangleAlert,
 } from "lucide-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -113,6 +114,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     popularProducts,
     latestListings,
     brandDistribution,
+    marketPulse,
     faqItems,
     jsonLd,
     expectedProductType,
@@ -326,6 +328,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             { label: "Fırsatlar", href: "#firsatlar" },
             { label: "Popüler ürünler", href: "#populer-urunler" },
             { label: "Son ilanlar", href: "#son-ilanlar" },
+            { label: "Fiyatı düşenler", href: "#fiyati-dusenler" },
             { label: "Marka dağılımı", href: "#marka-dagilimi" },
             { label: "SSS", href: "#sss" },
           ].map((item) => (
@@ -387,6 +390,23 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             </div>
           ) : (
             <EmptyState text="Bu kategori için henüz yeni ilan bulunmuyor." />
+          )}
+        </section>
+
+        <section id="fiyati-dusenler" className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+          <SectionTitle
+            icon={TrendingDown}
+            eyebrow="Piyasa trendi"
+            title="Fiyatı Düşen Ürünler"
+          />
+          {marketPulse.fallingPriceProducts.length > 0 ? (
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {marketPulse.fallingPriceProducts.map((item) => (
+                <PopularProductCard key={item.productName} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="Bu kategori için şu an fiyatı düşen ürün sinyali yok." />
           )}
         </section>
 
