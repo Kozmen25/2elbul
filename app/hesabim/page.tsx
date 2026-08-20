@@ -160,7 +160,7 @@ export default async function AccountPage() {
             </div>
             <div className="mt-6">
               <p className="mb-3 text-sm font-bold text-black/40">
-                Önceden hazırlanmış avatar (istediğin an değiştirebilirsin)
+                2ElBul avatar koleksiyonu (istediğin an değiştirebilirsin)
               </p>
               <AvatarPicker
                 currentPresetId={presetIdFromUrl(profile?.avatar_url)}

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { isPresetAvatarId, presetAvatarUrl } from "@/lib/preset-avatars";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getSupabaseConfig } from "@/lib/supabase-config";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -100,7 +101,9 @@ export async function uploadAvatar(
     return { ok: false, message: "Avatar adresi oluşturulamadı." };
   }
 
-  const { error: uploadError } = await supabase.storage
+  const writeClient = createSupabaseAdminClient() ?? supabase;
+
+  const { error: uploadError } = await writeClient.storage
     .from(AVATAR_BUCKET)
     .upload(`${user.id}.${ext}`, file, {
       contentType: file.type,
@@ -113,7 +116,7 @@ export async function uploadAvatar(
     return { ok: false, message: "Avatar yüklenemedi. Lütfen tekrar deneyin." };
   }
 
-  const { error: profileError } = await supabase.from("profiles").upsert(
+  const { error: profileError } = await writeClient.from("profiles").upsert(
     {
       user_id: user.id,
       avatar_url: avatarUrl,
@@ -161,7 +164,8 @@ export async function deleteAvatar(): Promise<AccountActionResult> {
     if (url.includes(AVATAR_STORAGE_MARKER)) {
       const objectPath = url.slice(url.indexOf(AVATAR_STORAGE_MARKER) + AVATAR_STORAGE_MARKER.length);
       if (objectPath) {
-        const { error } = await supabase.storage
+        const writeClient = createSupabaseAdminClient() ?? supabase;
+        const { error } = await writeClient.storage
           .from(AVATAR_BUCKET)
           .remove([decodeURIComponent(objectPath)]);
         if (error) {
@@ -171,7 +175,8 @@ export async function deleteAvatar(): Promise<AccountActionResult> {
     }
   }
 
-  const { error: profileError } = await supabase
+  const writeClient = createSupabaseAdminClient() ?? supabase;
+  const { error: profileError } = await writeClient
     .from("profiles")
     .update({ avatar_url: null, updated_at: new Date().toISOString() })
     .eq("user_id", user.id);
@@ -209,7 +214,8 @@ export async function updateProfile(
   const location = String(formData.get("location") ?? "").trim().slice(0, 120);
   const bio = String(formData.get("bio") ?? "").trim().slice(0, 300);
 
-  const { error } = await supabase.from("profiles").upsert(
+  const writeClient = createSupabaseAdminClient() ?? supabase;
+  const { error } = await writeClient.from("profiles").upsert(
     {
       user_id: user.id,
       display_name: displayName || null,
@@ -257,7 +263,8 @@ export async function setAvatarPreset(
   }
 
   const avatarUrl = presetAvatarUrl(presetId);
-  const { error } = await supabase.from("profiles").upsert(
+  const writeClient = createSupabaseAdminClient() ?? supabase;
+  const { error } = await writeClient.from("profiles").upsert(
     {
       user_id: user.id,
       avatar_url: avatarUrl,
