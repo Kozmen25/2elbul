@@ -89,6 +89,17 @@ export function AuthForm({
           </span>
         </label>
 
+        {isLogin && (
+          <p className="-mt-2 text-sm">
+            <Link
+              href="/sifre-sifirla"
+              className="font-semibold text-[#ff6b00] hover:underline"
+            >
+              Şifremi unuttum
+            </Link>
+          </p>
+        )}
+
         {!isLogin && (
           <label>
             <span className="mb-2 block text-sm font-bold">Şifre tekrarı</span>

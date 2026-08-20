@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { CircleCheck } from "lucide-react";
 import { login } from "@/app/auth/actions";
 import { AuthForm } from "@/components/auth-form";
 import { BrandLogo } from "@/components/brand-logo";
@@ -17,6 +18,7 @@ type LoginPageProps = {
   searchParams: Promise<{
     next?: string;
     error?: string;
+    reset?: string;
   }>;
 };
 
@@ -49,6 +51,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 : ""
             }
           />
+
+          {params.reset === "success" && (
+            <div className="mt-6 flex gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+              <CircleCheck size={18} className="mt-0.5 shrink-0" />
+              <p className="font-semibold">
+                Şifren güncellendi. Yeni şifrenle giriş yap.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </section>

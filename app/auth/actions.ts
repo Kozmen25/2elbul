@@ -115,8 +115,102 @@ export async function logout() {
   redirect("/");
 }
 
+/**
+ * Sends a password-reset email. Supabase intentionally returns success for
+ * unknown addresses too, so this never reveals whether an account exists.
+ */
+export async function resetPassword(
+  _previousState: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").trim();
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    return { status: "error", message: "Supabase bağlantısı yapılandırılmamış." };
+  }
+
+  if (!email) {
+    return { status: "error", message: "Geçerli bir e-posta adresi girin." };
+  }
+
+  const origin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: origin
+      ? `${origin.replace(/\/$/, "")}/auth/callback`
+      : undefined,
+  });
+
+  if (error) {
+    console.error("Supabase password reset failed:", error);
+    return {
+      status: "error",
+      message: resetErrorMessage(error.message),
+    };
+  }
+
+  return {
+    status: "success",
+    message: "Şifre sıfırlama bağlantısı e-postana gönderildi.",
+  };
+}
+
+/**
+ * Sets a new password. The caller must already hold a session that came from
+ * the recovery flow (the /yeni-sifre page gates on `amr: recovery`). When the
+ * new password is persisted the recovery session is discarded so the user logs
+ * in again with the fresh password.
+ */
+export async function updatePassword(
+  _previousState: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    return { status: "error", message: "Supabase bağlantısı yapılandırılmamış." };
+  }
+
+  if (password.length < 6) {
+    return {
+      status: "error",
+      message: "Yeni şifre en az 6 karakter olmalıdır.",
+    };
+  }
+
+  if (password !== confirmPassword) {
+    return { status: "error", message: "Şifreler birbiriyle eşleşmiyor." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    console.error("Supabase password update failed:", error);
+    return {
+      status: "error",
+      message: "Şifre güncellenemedi. Lütfen tekrar deneyin.",
+    };
+  }
+
+  await supabase.auth.signOut();
+  redirect("/giris?reset=success");
+}
+
 function safeNextPath(value: string, fallback = "/") {
   return value.startsWith("/") && !value.startsWith("//") ? value : fallback;
+}
+
+function resetErrorMessage(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("rate limit")) {
+    return "Çok fazla istek gönderildi. Lütfen biraz sonra tekrar deneyin.";
+  }
+  if (normalized.includes("valid email")) {
+    return "Geçerli bir e-posta adresi girin.";
+  }
+  return "Şifre sıfırlama bağlantısı gönderilemedi. Lütfen tekrar deneyin.";
 }
 
 function authErrorMessage(message: string) {
