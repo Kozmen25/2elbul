@@ -1,15 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<svg viewBox="0 0 256 256" role="img" aria-label="Zümra — 2ElBul avatar">
   <defs>
-    <radialGradient id="g" cx="0.25" cy="0.2" r="1.1">
-      <stop offset="0" stop-color="#A5D6A7"/>
-      <stop offset="1" stop-color="#5BA468"/>
+    <linearGradient id="bg-i" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f0faf1"/>
+      <stop offset="1" stop-color="#d3efd8"/>
+    </linearGradient>
+    <radialGradient id="glow-i" cx="0.5" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
+    <clipPath id="clip-i"><rect x="12" y="12" width="232" height="232" rx="40"/></clipPath>
   </defs>
-  <rect width="128" height="128" rx="28" fill="#A5D6A7"/>
-  <rect width="128" height="128" rx="28" fill="url(#g)"/>
-  <circle cx="64" cy="50" r="22" fill="#2E6B38" opacity="0.94"/>
-  <path d="M20 128 C20 92 40 74 64 74 C88 74 108 92 108 128 Z" fill="#2E6B38" opacity="0.94"/>
-  <circle cx="75" cy="40" r="4" fill="#FFFFFF" opacity="0.65"/>
-  <circle cx="54" cy="60" r="3" fill="#C4E4C7" opacity="0.5"/>
-  <circle cx="78" cy="63" r="2.5" fill="#C4E4C7" opacity="0.5"/>
+  <g clip-path="url(#clip-i)">
+    <rect x="12" y="12" width="232" height="232" rx="40" fill="url(#bg-i)"/>
+    <circle cx="128" cy="118" r="104" fill="url(#glow-i)"/>
+    <circle cx="128" cy="128" r="86" fill="#ffffff" opacity="0.05"/>
+    <path d="M18 206 C46 176 86 162 128 162 C170 162 210 176 238 206 L238 244 L18 244 Z" fill="#000" opacity="0.10"/>
+    
+    <path d="M48 218 C54 176 82 150 128 150 C174 150 202 176 208 218 L208 248 L48 248 Z" fill="#2e9e63"/>
+    <path d="M82 170 C88 154 106 146 128 146 C150 146 168 154 174 170 C160 178 96 178 82 170 Z" fill="#cd9363"/>
+    <ellipse cx="128" cy="122" rx="53" ry="60" fill="#cd9363"/>
+    <path d="M84 150 C82 58 98 46 128 46 C158 46 174 58 174 150 C152 156 108 156 84 150 Z" fill="#3a2a1c"/><circle cx="128" cy="38" r="21" fill="#3a2a1c"/><path d="M112 42 C118 52 138 52 144 40 C136 56 120 56 112 42 Z M150 46 C154 56 138 62 130 58 C142 60 150 54 150 46 Z" fill="#2a1c10"/>
+    <path d="M118 120 C122 126 134 126 138 120" fill="none" stroke="#8a2b18" stroke-width="5" stroke-linecap="round" opacity="0.22"/>
+    <g fill="#2c1a10"><circle cx="107" cy="122" r="6.5"/><circle cx="149" cy="122" r="6.5"/></g>
+    <path d="M104 119 a2.4 2.4 0 0 1 3-0.4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+    <path d="M98 198 C108 202 118 200 124 196" fill="none" stroke="#20150e" stroke-width="6" stroke-linecap="round"/><path d="M132 196 C138 200 148 202 158 198" fill="none" stroke="#20150e" stroke-width="6" stroke-linecap="round"/>
+    <path d="M126 132 C130 135 132 135 132 131" fill="none" stroke="#b0572e" stroke-width="5" stroke-linecap="round" opacity="0.6"/>
+    <path d="M108 146 C118 158 138 158 148 146" fill="none" stroke="#7a2010" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+    
+    <circle cx="96" cy="133" r="9" fill="#eb7d4a" opacity="0.16"/><circle cx="160" cy="133" r="9" fill="#eb7d4a" opacity="0.16"/>
+  </g>
 </svg>

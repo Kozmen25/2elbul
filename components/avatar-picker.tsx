@@ -50,6 +50,16 @@ export function AvatarPicker({ currentPresetId, onSelect, onChange }: AvatarPick
 
   return (
     <div>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-bold text-black/45">
+          {PRESET_AVATARS.length} özgün karakter
+        </p>
+        {selected ? (
+          <p className="text-sm font-bold text-[#ff6b00]">
+            {PRESET_AVATARS.find((a) => a.id === selected)?.label ?? "Seçili"}
+          </p>
+        ) : null}
+      </div>
       <div
         role="radiogroup"
         aria-label="Avatar seç"
