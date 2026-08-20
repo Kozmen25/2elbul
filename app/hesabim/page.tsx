@@ -13,6 +13,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
+import { uploadAvatar, deleteAvatar } from "@/app/account/actions";
+import { AvatarControl } from "@/components/avatar";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertsList } from "@/components/price-alerts-list";
 import { SavedSearchesList } from "@/components/saved-searches-list";
@@ -46,20 +48,22 @@ export default async function AccountPage() {
     redirect("/giris?next=/hesabim");
   }
 
-  const [favoritesResult, alertsResult, listingsResult, savedSearchesResult] = await Promise.all([
-    supabase
-      .from("favorites")
-      .select("listing_id", { count: "exact", head: true })
-      .eq("user_id", data.user.id),
-    supabase
-      .from("price_alerts")
-      .select("id, target_price, current_price, status, created_at, product_id, listing_id, products(name), listings(title)")
-      .eq("user_id", data.user.id)
-      .neq("status", "cancelled")
-      .order("created_at", { ascending: false }),
-    fetchUserListings(supabase, data.user.id),
-    getSavedSearches(),
-  ]);
+  const [favoritesResult, alertsResult, listingsResult, savedSearchesResult, profileResult] =
+    await Promise.all([
+      supabase
+        .from("favorites")
+        .select("listing_id", { count: "exact", head: true })
+        .eq("user_id", data.user.id),
+      supabase
+        .from("price_alerts")
+        .select("id, target_price, current_price, status, created_at, product_id, listing_id, products(name), listings(title)")
+        .eq("user_id", data.user.id)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false }),
+      fetchUserListings(supabase, data.user.id),
+      getSavedSearches(),
+      supabase.from("profiles").select("display_name, location, bio, avatar_url").eq("user_id", data.user.id).maybeSingle(),
+    ]);
 
   if (favoritesResult.error) {
     console.error("Supabase account favorites query failed:", favoritesResult.error);
@@ -70,11 +74,16 @@ export default async function AccountPage() {
   if (listingsResult.error) {
     console.error("Supabase account listings query failed:", listingsResult.error);
   }
+  if (profileResult.error) {
+    console.error("Supabase account profile query failed:", profileResult.error);
+  }
 
   const favoriteCount = favoritesResult.count ?? 0;
   const alertRows = alertsResult.data ?? [];
   const alertCount = alertRows.length;
   const listings = listingsResult.data ?? [];
+  const profile = profileResult.data ?? null;
+  const displayName = String(profile?.display_name ?? data.user.email ?? "Hesap");
   const priceAlerts = alertRows.map((alert) => ({
     id: String(alert.id),
     productName: String(
@@ -93,8 +102,8 @@ export default async function AccountPage() {
   return (
     <section className="min-h-[calc(100vh-145px)] bg-[#fafaf8] py-10 sm:py-14">
       <div className="container-shell">
-        <div className="rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-9">
-          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
+        <section className="rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-9">
+          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
             <div>
               <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
                 <UserRound size={24} />
@@ -117,7 +126,38 @@ export default async function AccountPage() {
             </form>
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <div className="mt-8 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
+            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+              <AvatarControl
+                src={profile?.avatar_url ? String(profile.avatar_url) : null}
+                name={displayName}
+                email={data.user.email}
+                uploadAction={uploadAvatar}
+                deleteAction={deleteAvatar}
+              />
+              <div className="min-w-0 flex-1 text-center sm:text-left">
+                <h2 className="text-2xl font-black tracking-[-0.04em]">
+                  {displayName}
+                </h2>
+                <p className="mt-1 break-all text-sm font-medium text-black/50">
+                  {data.user.email}
+                </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs font-semibold text-black/40 sm:justify-start">
+                  {profile?.location ? (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin size={14} /> {String(profile.location)}
+                    </span>
+                  ) : null}
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays size={14} /> Üyelik:{" "}
+                    {formatDate(data.user.created_at)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <InfoCard
               icon={<Mail size={19} />}
               label="E-posta adresi"
@@ -145,7 +185,7 @@ export default async function AccountPage() {
               emptyMessage="Henüz fiyat alarmınız yok"
             />
           </div>
-        </div>
+        </section>
 
         <section className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-9">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
