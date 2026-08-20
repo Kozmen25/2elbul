@@ -14,10 +14,21 @@ export type AccountActionResult = {
 
 const AVATAR_BUCKET = "avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+
+// Canonicalize the many spellings browsers/OSes attach to the same image format
+// (image/jpg vs image/jpeg, image/x-png vs image/png, image/pjpeg) so real
+// uploads aren't wrongly rejected and the storage contentType stays canonical.
+function normalizeMimeType(type: string): string {
+  const t = String(type ?? "").toLowerCase().trim();
+  if (t === "image/jpg" || t === "image/pjpeg") return "image/jpeg";
+  if (t === "image/x-png") return "image/png";
+  return t;
+}
+
 const ALLOWED_AVATAR_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
+  normalizeMimeType("image/png"),
+  normalizeMimeType("image/jpeg"),
+  normalizeMimeType("image/webp"),
 ]);
 
 // Uploaded avatars live under this storage bucket URL segment. Only URLs that
@@ -79,7 +90,8 @@ export async function uploadAvatar(
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, message: "Yüklenecek bir dosya seçin." };
   }
-  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+  const mimeType = normalizeMimeType(file.type);
+  if (!ALLOWED_AVATAR_TYPES.has(mimeType)) {
     return {
       ok: false,
       message: "Sadece PNG, JPEG veya WebP dosyası yükleyebilirsiniz.",
@@ -95,7 +107,7 @@ export async function uploadAvatar(
   }
 
   const ext =
-    file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
   const avatarUrl = publicAvatarUrl(user.id, ext);
   if (!avatarUrl) {
     return { ok: false, message: "Avatar adresi oluşturulamadı." };
@@ -106,7 +118,7 @@ export async function uploadAvatar(
   const { error: uploadError } = await writeClient.storage
     .from(AVATAR_BUCKET)
     .upload(`${user.id}.${ext}`, file, {
-      contentType: file.type,
+      contentType: mimeType,
       upsert: true,
       cacheControl: "3600",
     });

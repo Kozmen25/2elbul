@@ -165,6 +165,7 @@ export default async function AccountPage() {
               <AvatarPicker
                 currentPresetId={presetIdFromUrl(profile?.avatar_url)}
                 onSelect={setAvatarPreset}
+                disclosure
               />
             </div>
           </div>
