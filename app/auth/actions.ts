@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { isPresetAvatarId } from "@/lib/preset-avatars";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export type AuthState = {
@@ -51,6 +52,7 @@ export async function signUp(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const avatarPreset = String(formData.get("avatarPreset") ?? "").trim();
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -68,15 +70,26 @@ export async function signUp(
     return { status: "error", message: "Şifreler birbiriyle eşleşmiyor." };
   }
 
+  // Optional user-chosen avatar id; the DB trigger defaults to a deterministic
+  // one when absent. Whitelisted so a client can't inject an arbitrary path.
+  const data: Record<string, string> = {};
+  if (avatarPreset) {
+    if (!isPresetAvatarId(avatarPreset)) {
+      return { status: "error", message: "Geçersiz avatar seçildi." };
+    }
+    data.avatar = avatarPreset;
+  }
+
   const origin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: origin
-      ? {
-          emailRedirectTo: `${origin.replace(/\/$/, "")}/auth/callback`,
-        }
-      : undefined,
+    options: {
+      emailRedirectTo: origin
+        ? `${origin.replace(/\/$/, "")}/auth/callback`
+        : undefined,
+      data,
+    },
   });
 
   if (error) {

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { LockKeyhole, Mail, TriangleAlert } from "lucide-react";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { AuthState } from "@/app/auth/actions";
+import { AvatarPicker } from "@/components/avatar-picker";
 
 type AuthFormProps = {
   mode: "login" | "signup";
@@ -28,6 +29,7 @@ export function AuthForm({
   };
   const [state, formAction] = useActionState(action, formInitialState);
   const isLogin = mode === "login";
+  const [avatarPreset, setAvatarPreset] = useState("");
 
   return (
     <form
@@ -106,6 +108,18 @@ export function AuthForm({
               />
             </span>
           </label>
+        )}
+
+        {!isLogin && (
+          <div>
+            <span className="mb-2 block text-sm font-bold">Avatarın</span>
+            <input type="hidden" name="avatarPreset" value={avatarPreset} />
+            <AvatarPicker onChange={(id) => setAvatarPreset(id)} />
+            <p className="mt-2 text-xs text-black/45">
+              İstediğin avatari seç; boş bırakırsan hesabına otomatik bir avatar
+              atanır.
+            </p>
+          </div>
         )}
       </div>
 

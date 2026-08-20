@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isPresetAvatarId, presetAvatarUrl } from "@/lib/preset-avatars";
 import { getSupabaseConfig } from "@/lib/supabase-config";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -17,6 +18,11 @@ const ALLOWED_AVATAR_TYPES = new Set([
   "image/jpeg",
   "image/webp",
 ]);
+
+// Uploaded avatars live under this storage bucket URL segment. Only URLs that
+// contain it may ever have a storage object removed; preset avatars and any
+// other path are served from /public and must never be deleted.
+const AVATAR_STORAGE_MARKER = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
 
 function isLikelyImage(buf: Uint8Array) {
   if (buf.length < 8) return false;
@@ -149,13 +155,18 @@ export async function deleteAvatar(): Promise<AccountActionResult> {
     .maybeSingle();
 
   if (profile?.avatar_url) {
-    const path = String(profile.avatar_url).split("/").pop() ?? "";
-    if (path) {
-      const { error } = await supabase.storage
-        .from(AVATAR_BUCKET)
-        .remove([decodeURIComponent(path)]);
-      if (error) {
-        console.error("Avatar delete failed:", error);
+    const url = String(profile.avatar_url);
+    // Only remove a real storage object. Preset avatars (and anything else,
+    // e.g. /public paths) are never storage-backed and must not be removed.
+    if (url.includes(AVATAR_STORAGE_MARKER)) {
+      const objectPath = url.slice(url.indexOf(AVATAR_STORAGE_MARKER) + AVATAR_STORAGE_MARKER.length);
+      if (objectPath) {
+        const { error } = await supabase.storage
+          .from(AVATAR_BUCKET)
+          .remove([decodeURIComponent(objectPath)]);
+        if (error) {
+          console.error("Avatar delete failed:", error);
+        }
       }
     }
   }
@@ -216,4 +227,50 @@ export async function updateProfile(
 
   revalidatePath("/hesabim");
   return { ok: true, message: "Profil güncellendi." };
+}
+
+/**
+ * Server action used by the avatar picker (non-form, no action state). Only a
+ * whitelisted preset id accepted; the preset id is turned into its static URL.
+ */
+export async function setAvatarPreset(
+  presetId: string,
+): Promise<AccountActionResult> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { ok: false, message: "Supabase bağlantısı yapılandırılmamış." };
+  }
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return {
+      ok: false,
+      requiresAuth: true,
+      message: "Bu işlem için giriş yapmalısınız.",
+    };
+  }
+
+  if (!isPresetAvatarId(presetId)) {
+    return { ok: false, message: "Geçersiz avatar seçildi." };
+  }
+
+  const avatarUrl = presetAvatarUrl(presetId);
+  const { error } = await supabase.from("profiles").upsert(
+    {
+      user_id: user.id,
+      avatar_url: avatarUrl,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (error) {
+    console.error("Profile preset avatar update failed:", error);
+    return { ok: false, message: "Avatar kaydedilemedi. Lütfen tekrar deneyin." };
+  }
+
+  revalidatePath("/hesabim");
+  return { ok: true, message: "Avatar güncellendi." };
 }

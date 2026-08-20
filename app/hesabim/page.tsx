@@ -13,8 +13,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
-import { uploadAvatar, deleteAvatar } from "@/app/account/actions";
+import { uploadAvatar, deleteAvatar, setAvatarPreset } from "@/app/account/actions";
 import { AvatarControl } from "@/components/avatar";
+import { AvatarPicker } from "@/components/avatar-picker";
 import { ProfileSettingsForm } from "@/components/profile-settings-form";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertsList } from "@/components/price-alerts-list";
@@ -22,6 +23,7 @@ import { SavedSearchesList } from "@/components/saved-searches-list";
 import { getSavedSearches } from "@/app/saved-searches/actions";
 import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import { presetIdFromUrl } from "@/lib/preset-avatars";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const metadata: Metadata = {
@@ -155,6 +157,15 @@ export default async function AccountPage() {
                   </span>
                 </div>
               </div>
+            </div>
+            <div className="mt-6">
+              <p className="mb-3 text-sm font-bold text-black/40">
+                Önceden hazırlanmış avatar (istediğin an değiştirebilirsin)
+              </p>
+              <AvatarPicker
+                currentPresetId={presetIdFromUrl(profile?.avatar_url)}
+                onSelect={setAvatarPreset}
+              />
             </div>
           </div>
 
