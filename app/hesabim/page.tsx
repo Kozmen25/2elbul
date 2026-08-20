@@ -15,6 +15,7 @@ import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
 import { uploadAvatar, deleteAvatar } from "@/app/account/actions";
 import { AvatarControl } from "@/components/avatar";
+import { ProfileSettingsForm } from "@/components/profile-settings-form";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertsList } from "@/components/price-alerts-list";
 import { SavedSearchesList } from "@/components/saved-searches-list";
@@ -169,6 +170,27 @@ export default async function AccountPage() {
               value={formatDate(data.user.created_at)}
             />
           </div>
+
+          <section className="mt-8 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-sm font-bold text-[#ff6b00]">Profil ayarları</p>
+                <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">
+                  Bilgilerini düzenle
+                </h2>
+              </div>
+              <p className="text-xs font-semibold text-black/40">
+                Kaydettiğin bilgiler profilin çevresinde görünür.
+              </p>
+            </div>
+            <div className="mt-5">
+              <ProfileSettingsForm
+                displayName={profile?.display_name}
+                location={profile?.location}
+                bio={profile?.bio}
+              />
+            </div>
+          </section>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <StatCard

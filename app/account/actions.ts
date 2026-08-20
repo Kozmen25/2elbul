@@ -10,12 +10,6 @@ export type AccountActionResult = {
   requiresAuth?: boolean;
 };
 
-export type ProfileInput = {
-  displayName?: string;
-  location?: string;
-  bio?: string;
-};
-
 const AVATAR_BUCKET = "avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_AVATAR_TYPES = new Set([
@@ -181,7 +175,7 @@ export async function deleteAvatar(): Promise<AccountActionResult> {
 }
 
 export async function updateProfile(
-  _previousState: ProfileInput | undefined,
+  _previousState: AccountActionResult | undefined,
   formData: FormData,
 ): Promise<AccountActionResult> {
   const supabase = await createSupabaseServerClient();
