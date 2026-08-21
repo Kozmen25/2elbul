@@ -44,6 +44,7 @@ describe("preset-avatars", () => {
     expect(isPresetAvatarUrl("/avatars/preset-a.svg")).toBe(true);
     expect(isPresetAvatarUrl("/avatars/preset-u.svg")).toBe(true);
     expect(isPresetAvatarUrl("/avatars/preset-q.svg")).toBe(false);
+    expect(isPresetAvatarUrl("/avatars/preset-a.png")).toBe(false);
     expect(isPresetAvatarUrl("https://example.com/x.png")).toBe(false);
     expect(isPresetAvatarUrl("http://evil.com/avatars/preset-a.svg")).toBe(false);
     expect(
