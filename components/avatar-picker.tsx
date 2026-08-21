@@ -76,6 +76,7 @@ export function AvatarPicker({
           type="button"
           onClick={handleToggle}
           aria-expanded={open}
+          aria-controls="avatar-collection"
           className="flex w-full items-center gap-3 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-left transition hover:border-[#ff6b00]/40"
         >
           {selectedAvatar ? (
@@ -125,6 +126,7 @@ export function AvatarPicker({
             </div>
           ) : null}
           <div
+            id="avatar-collection"
             role="radiogroup"
             aria-label="Avatar seç"
             className="grid grid-cols-5 gap-2.5 sm:grid-cols-10"

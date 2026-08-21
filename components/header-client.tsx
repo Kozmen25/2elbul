@@ -86,7 +86,7 @@ export function HeaderClient({
                   className="group flex items-center gap-2 rounded-xl border border-black/10 px-2.5 py-2 transition hover:border-[#ff6b00]/30"
                   title={userEmail}
                 >
-                  <span className="grid size-7 place-items-center overflow-hidden rounded-lg bg-[#fff1e7] text-xs font-black uppercase text-[#d95700]">
+                  <span className="relative grid size-7 place-items-center overflow-hidden rounded-lg bg-[#fff1e7] text-xs font-black uppercase text-[#d95700]">
                     <AvatarImage
                       src={avatarUrl}
                       name={displayName}
@@ -109,7 +109,7 @@ export function HeaderClient({
                     className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.12)]"
                   >
                     <div className="flex items-center gap-3 border-b border-black/8 px-4 py-3">
-                      <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#fff1e7] text-base font-black uppercase text-[#d95700]">
+                      <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#fff1e7] text-base font-black uppercase text-[#d95700]">
                         <AvatarImage
                           src={avatarUrl}
                           name={displayName}

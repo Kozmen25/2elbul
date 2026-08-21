@@ -42,6 +42,7 @@ export function AvatarImage({
         unoptimized
         sizes="(max-width: 768px) 96px, 96px"
         className={`object-cover ${className}`}
+        draggable={false}
       />
     );
   }
