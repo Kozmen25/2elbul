@@ -12,6 +12,15 @@ type Props = {
   deleteAction: () => Promise<{ ok: boolean; message: string }>;
 };
 
+/**
+ * Resolve a preset URL to its current local-path form. Preset avatars live in
+ * `public/avatars` and are served from the same origin, so we keep them as
+ * plain `src` unless they are already absolute.
+ */
+function displaySrc(src: string): string {
+  return src;
+}
+
 function initialsOf(name?: string | null, email?: string | null) {
   const base = (name ?? email ?? "?").trim();
   const words = base.split(/\s+/).filter(Boolean);
@@ -36,7 +45,7 @@ export function AvatarImage({
   if (src) {
     return (
       <Image
-        src={src}
+        src={displaySrc(src)}
         alt={name || email || "Avatar"}
         fill
         unoptimized
