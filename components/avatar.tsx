@@ -40,9 +40,10 @@ export function AvatarImage({
         alt={name || email || "Avatar"}
         fill
         unoptimized
-        sizes="(max-width: 768px) 96px, 96px"
-        className={`object-cover ${className}`}
+        sizes="(max-width: 768px) 128px, 128px"
+        className="object-cover"
         draggable={false}
+        style={{ pointerEvents: "none" }}
       />
     );
   }
