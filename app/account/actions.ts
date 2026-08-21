@@ -195,7 +195,7 @@ export async function deleteAvatar(): Promise<AccountActionResult> {
 
   if (profileError) {
     console.error("Profile avatar clear failed:", profileError);
-    return { ok: false, message: "Avatar kaldırılamadı. Lütfen tekrar deneyin." };
+    return { ok: false, message: profileWriteErrorMessage(profileError, "Avatar kaldırılamadı. Lütfen tekrar deneyin.") };
   }
 
   revalidatePath("/hesabim");
@@ -240,7 +240,7 @@ export async function updateProfile(
 
   if (error) {
     console.error("Profile update failed:", error);
-    return { ok: false, message: "Profil güncellenemedi. Lütfen tekrar deneyin." };
+    return { ok: false, message: profileWriteErrorMessage(error, "Profil güncellenemedi. Lütfen tekrar deneyin.") };
   }
 
   revalidatePath("/hesabim");
@@ -287,9 +287,32 @@ export async function setAvatarPreset(
 
   if (error) {
     console.error("Profile preset avatar update failed:", error);
-    return { ok: false, message: "Avatar kaydedilemedi. Lütfen tekrar deneyin." };
+    return { ok: false, message: profileWriteErrorMessage(error) };
   }
 
   revalidatePath("/hesabim");
   return { ok: true, message: "Avatar güncellendi." };
+}
+
+/** Map PostgREST / Postgres write failures to a clear Turkish message. */
+function profileWriteErrorMessage(
+  error: { code?: string; message?: string } | null | undefined,
+  fallback = "Avatar kaydedilemedi. Lütfen tekrar deneyin.",
+): string {
+  const code = String(error?.code ?? "");
+  const msg = String(error?.message ?? "").toLowerCase();
+  // Table missing (migration not applied) — PGRST205 / schema cache miss.
+  if (
+    code === "PGRST205" ||
+    code === "42P01" ||
+    msg.includes("could not find the table") ||
+    msg.includes("does not exist")
+  ) {
+    return "Profil tablosu henüz kurulmamış. Supabase migration uygulanmalı.";
+  }
+  // RLS deny — no matching policy / row not visible.
+  if (code === "42501" || msg.includes("row-level security") || msg.includes("permission denied")) {
+    return "Profil yazma yetkisi yok. Lütfen tekrar giriş yapıp deneyin.";
+  }
+  return fallback;
 }
