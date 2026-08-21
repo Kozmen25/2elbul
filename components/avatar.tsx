@@ -117,13 +117,6 @@ export function AvatarControl({
           className="flex size-full items-center justify-center text-3xl"
         />
       </div>
-        <AvatarImage
-          src={src}
-          name={name}
-          email={email}
-          className="flex size-full items-center justify-center text-3xl"
-        />
-      </div>
 
       {status ? (
         <p
