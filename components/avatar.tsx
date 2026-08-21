@@ -48,7 +48,7 @@ export function AvatarImage({
   }
   return (
     <span
-      className={`grid place-items-center bg-[#fff1e7] font-black uppercase text-[#ff6b00] ${className}`}
+      className={`relative grid place-items-center bg-[#fff1e7] font-black uppercase text-[#ff6b00] ${className}`}
     >
       {initialsOf(name, email)}
     </span>
@@ -100,6 +100,13 @@ export function AvatarControl({
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="relative size-24 overflow-hidden rounded-3xl border border-black/8 bg-[#f4f1ea] shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
+        <AvatarImage
+          src={src}
+          name={name}
+          email={email}
+          className="flex size-full items-center justify-center text-3xl"
+        />
+      </div>
         <AvatarImage
           src={src}
           name={name}
