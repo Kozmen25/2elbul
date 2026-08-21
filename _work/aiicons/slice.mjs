@@ -1,6 +1,6 @@
 // Slice the reference sheet ("2 ELBUL ORIGINAL AICONS", 1024x1024, 4x4 grid)
-// into 16 individual avatar blacks. Writes 260x260 black-on-transparent crops
-// and a 4x4 contact sheet for visual verification.
+// into 16 individual avatar crops. Writes 260x260 crops and a 4x4 contact
+// sheet for visual verification.
 import sharp from "sharp";
 
 const SRC = "C:/Users/LÜFER/Downloads/Adsız tasarım (1).png";
@@ -8,12 +8,12 @@ const BASE = "C:/Users/LÜFER/Downloads/RestoreLens/RestoreLens/2elbul";
 const OUT = `${BASE}/_work/aiicons`;
 
 // 4x4 grid. Each cell is 1024/4 = 256px. The gutter scan showed the grid is
-// not perfectly flush (a <4px white frame around each cell), so bleed each
-// crop 3px into the neighbor and rely on the gutter's recorded color to cover
-// seams. Verified by the probe: corners ≈ [0,0,0], gutter ≈ [231,231,231].
+// not perfectly flush (a thin white frame around each cell), so bleed each
+// crop 3px into the neighbor and shrink 2px back toward the center to remove
+// seam artifacts before resizing.
 const CELL = 256;
 const BLEED = 3;
-const TAPER = 2; // shrink toward center to remove any residual neighbor artifact
+const TAPER = 2;
 
 const meta = await sharp(SRC).metadata();
 if (meta.width !== 1024 || meta.height !== 1024) {
@@ -28,13 +28,12 @@ for (let r = 0; r < 4; r++) {
     const id = `ai${r}${c}`;
     await sharp(SRC)
       .extract({ left, top, width: size, height: size })
-      .resize(260, 260, { fit: "cover" })
+      .resize(260, 260, { fit: "cover", position: "centre" })
       .toFile(`${OUT}/${id}.png`);
   }
 }
 
 // contact sheet, 4x4, white gutters, labeled
-const colovers = [];
 const W = 272, H = 272, GAP = 8, LABEL = 22;
 const pad = 4;
 const cellW = W - pad * 2, cellH = H - pad * 2;
