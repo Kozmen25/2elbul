@@ -85,6 +85,7 @@ export function AvatarPicker({
               src={presetAvatarUrl(selectedAvatar.id)}
               alt=""
               className="size-9 shrink-0 rounded-lg object-cover ring-1 ring-black/10"
+              draggable={false}
             />
           ) : (
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#fff1e7] text-xs font-black text-[#ff6b00]">
