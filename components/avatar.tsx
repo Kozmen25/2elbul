@@ -84,27 +84,43 @@ export function AvatarControl({
     message: string;
   } | null>(null);
 
-  async function handleUpload(formData: FormData) {
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    formData.delete("file");
-    formData.set("file", file);
+  async function handleUpload(file: File) {
     setBusy("upload");
     setStatus(null);
-    const result = await uploadAction(formData);
-    setBusy(null);
-    setStatus(result);
-    if (fileRef.current) fileRef.current.value = "";
-    if (result.ok) onChanged?.();
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const result = await uploadAction(formData);
+      setStatus(result);
+      if (result.ok) onChanged?.();
+    } catch (error) {
+      console.error("Avatar upload failed:", error);
+      setStatus({
+        ok: false,
+        message: "Avatar yüklenemedi. Lütfen tekrar deneyin.",
+      });
+    } finally {
+      setBusy(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   }
 
   async function handleDelete() {
     setBusy("delete");
     setStatus(null);
-    const result = await deleteAction();
-    setBusy(null);
-    setStatus(result);
-    if (result.ok) onChanged?.();
+    try {
+      const result = await deleteAction();
+      setStatus(result);
+      if (result.ok) onChanged?.();
+    } catch (error) {
+      console.error("Avatar delete failed:", error);
+      setStatus({
+        ok: false,
+        message: "Avatar kaldırılamadı. Lütfen tekrar deneyin.",
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -137,7 +153,7 @@ export function AvatarControl({
           id="avatar-file-input"
           onChange={(e) => {
             if (e.target.files?.[0]) {
-              void handleUpload(new FormData());
+              void handleUpload(e.target.files[0]);
             }
           }}
         />
