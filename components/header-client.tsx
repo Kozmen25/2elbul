@@ -4,9 +4,11 @@ import Link from "next/link";
 import {
   Bell,
   ChevronDown,
+  ChevronLeft,
   Home,
   BarChart3,
   Heart,
+  LayoutGrid,
   LogIn,
   LogOut,
   Menu,
@@ -20,8 +22,34 @@ import { usePathname } from "next/navigation";
 import { logout } from "@/app/auth/actions";
 import { BrandLogo } from "@/components/brand-logo";
 import { NotificationDropdown } from "@/components/notification-dropdown";
+import {
+  CATEGORY_TAXONOMY_PRODUCTS,
+  type CategoryNode,
+} from "@/lib/category-taxonomy";
 
 import { AvatarImage } from "@/components/avatar";
+
+const CATEGORY_ID_SLUG: Record<string, string> = {
+  "shopping.phone": "telefon",
+  "shopping.phone-accessories": "aksesuar",
+  "shopping.computer": "bilgisayar",
+  "shopping.game-console": "konsol",
+  "shopping.tv-audio": "tv-ses",
+  "shopping.white-goods": "ev-yasam",
+  "shopping.furniture": "ev-yasam",
+  "shopping.home-electronics": "ev-yasam",
+  "shopping.small-appliances": "ev-yasam",
+  "shopping.decoration": "ev-yasam",
+  "shopping.garden-diy": "ev-yasam",
+  vehicles: "arac",
+  "real-estate": "emlak",
+  "parts-accessories": "yedek-parca",
+};
+
+function categoryHref(node: CategoryNode): string {
+  const slug = CATEGORY_ID_SLUG[node.id];
+  return slug ? `/category/${slug}` : `/search?q=${encodeURIComponent(node.label)}`;
+}
 
 export function HeaderClient({
   userEmail,
@@ -36,16 +64,24 @@ export function HeaderClient({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [categoryPath, setCategoryPath] = useState<CategoryNode[]>([]);
   const pathname = usePathname();
 
   useEffect(() => {
     setMenuOpen(false);
     setProfileMenuOpen(false);
+    setCategoryMenuOpen(false);
+    setCategoryPath([]);
   }, [pathname]);
 
   useEffect(() => {
     function closeDesktopMenu() {
-      if (window.innerWidth >= 768) setMenuOpen(false);
+      if (window.innerWidth >= 768) {
+        setMenuOpen(false);
+        setCategoryMenuOpen(false);
+        setCategoryPath([]);
+      }
     }
 
     window.addEventListener("resize", closeDesktopMenu);
@@ -68,6 +104,40 @@ export function HeaderClient({
             <Search size={17} strokeWidth={2.5} />
             Piyasayı Keşfet
           </Link>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryMenuOpen((open) => !open);
+                setCategoryPath([]);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={categoryMenuOpen}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2.5 transition ${
+                categoryMenuOpen
+                  ? "border-[#ff6b00]/40 bg-[#fff4ec] text-[#d95700]"
+                  : "border-black/10 hover:border-[#ff6b00]/30"
+              }`}
+            >
+              <LayoutGrid size={16} strokeWidth={2.5} className="text-[#ff6b00]" />
+              Kategoriler
+              <ChevronDown
+                size={15}
+                className={`text-black/45 transition-transform ${categoryMenuOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {categoryMenuOpen && (
+              <CategoryMenuPanel
+                key={categoryMenuOpen ? categoryPath.map((n) => n.id).join("/") || "root" : "closed"}
+                path={categoryPath}
+                onNavigate={(next) => setCategoryPath(next)}
+                onClose={() => setCategoryMenuOpen(false)}
+              />
+            )}
+          </div>
+
           {userEmail ? (
             <div className="flex items-center gap-2">
               <Link
@@ -244,6 +314,24 @@ export function HeaderClient({
               <Search size={18} className="text-[#ff6b00]" /> Piyasayı Keşfet
             </Link>
 
+            <div className="flex flex-col gap-1 overflow-hidden rounded-xl bg-black/2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryMenuOpen((open) => !open);
+                  setCategoryPath([]);
+                }}
+                aria-haspopup="menu"
+                aria-expanded={categoryMenuOpen}
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-left font-semibold hover:bg-black/4"
+              >
+                <LayoutGrid size={18} className="text-[#ff6b00]" /> Kategoriler
+              </button>
+              {categoryMenuOpen && (
+                <MobileCategoryMenu path={categoryPath} onNavigate={setCategoryPath} />
+              )}
+            </div>
+
             <div className="my-2 h-px bg-black/8" />
 
             {userEmail ? (
@@ -357,5 +445,141 @@ function ProfileMenuItem({
     >
       {icon} {label}
     </Link>
+  );
+}
+
+function CategoryMenuPanel({
+  path,
+  onNavigate,
+  onClose,
+}: {
+  path: CategoryNode[];
+  onNavigate: (path: CategoryNode[]) => void;
+  onClose: () => void;
+}) {
+  const current = path[path.length - 1] ?? null;
+  const parent = path.length > 1 ? path[path.length - 2] : null;
+  const node: CategoryNode = current ?? { id: "root", label: "Tüm Kategoriler", aliases: [], keywords: [] };
+
+  return (
+    <div
+      key={categoryMenuPanelKey(path)}
+      role="menu"
+      className="absolute right-0 top-full z-50 mt-2 flex w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-2xl border border-black/8 bg-white shadow-[0_18px_45px_rgba(0,0,0,0.12)]"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/8 px-4 py-2.5">
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold">
+          <LayoutGrid size={15} className="shrink-0 text-[#ff6b00]" />
+          <span className="truncate">{node.label}</span>
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Kapat"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-black/45 transition hover:bg-black/4"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      <div className="flex max-h-[min(60vh,480px)] flex-col p-1.5">
+        {current && (
+          <>
+            <button
+              type="button"
+              onClick={() => onNavigate(path.slice(0, -1))}
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-black/2 px-3 py-2.5 text-sm font-bold transition hover:bg-black/4"
+            >
+              <ChevronLeft size={16} strokeWidth={2.5} />
+              {parent ? parent.label : "Tüm Kategoriler"}
+            </button>
+            <Link
+              href={categoryHref(current)}
+              onClick={onClose}
+              className="flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-[#d95700] transition hover:bg-[#fff4ec]"
+            >
+              Bütün {current.label}
+            </Link>
+            <div className="my-1.5 h-px shrink-0 bg-black/8" />
+          </>
+        )}
+
+        <div className="overflow-y-auto">
+          {(current ? (node.children ?? []) : CATEGORY_TAXONOMY_PRODUCTS).map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onNavigate([...path, row])}
+              className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-black/4"
+            >
+              <span className="min-w-0 flex-1 truncate">{row.label}</span>
+              {row.children && row.children.length > 0 && (
+                <ChevronDown size={15} className="-rotate-90 shrink-0 text-black/35" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function categoryMenuPanelKey(path: CategoryNode[]): string {
+  return path.map((n) => n.id).join("/") || "root";
+}
+
+function MobileCategoryMenu({
+  path,
+  onNavigate,
+}: {
+  path: CategoryNode[];
+  onNavigate: (path: CategoryNode[]) => void;
+}) {
+  const current = path[path.length - 1] ?? null;
+  const parent = path.length > 1 ? path[path.length - 2] : null;
+  const hasLevel = current !== null;
+
+  return (
+    <div className="flex flex-col gap-1 overflow-hidden rounded-xl bg-white p-1.5">
+      {hasLevel && (
+        <>
+          <button
+            type="button"
+            onClick={() => onNavigate(path.slice(0, -1))}
+            className="flex items-center gap-2 rounded-xl bg-black/2 px-3 py-2.5 text-left font-bold transition hover:bg-black/4"
+          >
+            <ChevronLeft size={16} strokeWidth={2.5} />
+            {parent ? parent.label : "Tüm Kategoriler"}
+          </button>
+          <Link
+            href={categoryHref(current)}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-bold text-[#d95700] transition hover:bg-[#fff4ec]"
+          >
+            Bütün {current.label}
+          </Link>
+        </>
+      )}
+      {(current?.children ?? CATEGORY_TAXONOMY_PRODUCTS).map((row) =>
+        row.children && row.children.length > 0 ? (
+          <button
+            key={row.id}
+            type="button"
+            onClick={() => onNavigate([...path, row])}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left font-semibold transition hover:bg-black/4"
+          >
+            <span className="min-w-0 flex-1 truncate">{row.label}</span>
+            <ChevronDown size={15} className="-rotate-90 shrink-0 text-black/35" />
+          </button>
+        ) : (
+          <Link
+            key={row.id}
+            href={categoryHref(row)}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-3 font-semibold transition hover:bg-black/4"
+          >
+            <span className="min-w-0 flex-1 truncate">{row.label}</span>
+          </Link>
+        )
+      )}
+    </div>
   );
 }

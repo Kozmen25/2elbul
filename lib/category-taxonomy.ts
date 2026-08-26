@@ -240,6 +240,25 @@ export const CATEGORY_TAXONOMY: CategoryNode[] = [
 
 export const normalizeCategoryText = newNormalizeCategoryText;
 
+// Product-only view of the taxonomy for the in-app category browser.
+// Service-oriented families (repair, services, jobs, lessons, helpers) are
+// excluded so the nav tree lists only second-hand product categories.
+// Derived from CATEGORY_TAXONOMY above — single source, never edited apart.
+const PRODUCT_FAMILY_IDS = new Set([
+  "vehicles",
+  "real-estate",
+  "shopping",
+  "prod-spare-parts",
+  "prod-accessories",
+  "parts-accessories",
+  "industrial",
+  "animals",
+]);
+
+export const CATEGORY_TAXONOMY_PRODUCTS: CategoryNode[] = CATEGORY_TAXONOMY.filter(
+  (family) => PRODUCT_FAMILY_IDS.has(family.id),
+);
+
 export function findCategoryMatches(query: string): CategoryMatch[] {
   const normalizedQuery = normalizeCategoryText(query);
   if (!normalizedQuery) return [];
