@@ -2,7 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { isPresetAvatarId } from "@/lib/preset-avatars";
+import { getSiteUrl } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+const AUTH_CALLBACK_PATH = "/auth/callback";
+
+function authCallbackOrigin() {
+  return `${getSiteUrl().replace(/\/$/, "")}${AUTH_CALLBACK_PATH}`;
+}
 
 export type AuthState = {
   status: "idle" | "error" | "success";
@@ -80,16 +87,10 @@ export async function signUp(
     data.avatar = avatarPreset;
   }
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      emailRedirectTo: origin
-        ? `${origin.replace(/\/$/, "")}/auth/callback`
-        : undefined,
-      data,
-    },
+    options: { emailRedirectTo: authCallbackOrigin(), data },
   });
 
   if (error) {
@@ -134,11 +135,8 @@ export async function resetPassword(
     return { status: "error", message: "Geçerli bir e-posta adresi girin." };
   }
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: origin
-      ? `${origin.replace(/\/$/, "")}/auth/callback`
-      : undefined,
+    redirectTo: authCallbackOrigin(),
   });
 
   if (error) {
