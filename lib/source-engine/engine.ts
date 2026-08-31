@@ -63,7 +63,8 @@ export async function runSourceEngine(
       runType: options.mode === "scheduled" ? "scheduled" : "real_test",
       maxLimit: options.limit,
       forceStatus: options.mode === "debug" || options.mode === "real_test" ? "pending" : undefined,
-      skipInactiveMarking: options.mode !== "scheduled" || Boolean(options.limit),
+      fullSync: options.fullSync,
+      skipInactiveMarking: options.fullSync !== true || Boolean(options.limit),
       category: options.category,
     });
 

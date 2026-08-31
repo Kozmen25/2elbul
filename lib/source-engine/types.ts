@@ -10,6 +10,10 @@ export type SourceEngineRunOptions = {
   limit?: number;
   includeUnsupported?: boolean;
   category?: string;
+  /** Declared full-catalog sync: the incoming batch represents the entire source,
+   *  so listings outside the batch MAY be cascade-inactivated. Defaults off —
+   *  partial/search syncs never inactivate out-of-batch rows. */
+  fullSync?: boolean;
 };
 
 export type SourceEngineSource = SourceRunRecord & {

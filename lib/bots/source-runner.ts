@@ -52,6 +52,10 @@ type RunSourceOptions = {
   maxLimit?: number;
   forceStatus?: "pending" | "published" | "active";
   skipInactiveMarking?: boolean;
+  /** Declared full-catalog sync: the incoming batch represents the entire source,
+   *  so listings outside the batch MAY be cascade-inactivated. Defaults off —
+   *  partial/search syncs never inactivate out-of-batch rows. */
+  fullSync?: boolean;
   category?: string;
 };
 
@@ -91,10 +95,18 @@ export async function runSourceScrapeBot(
   }
 
   const runId = Number(botRun.id);
-  const limit = normalizeLimit(
-    source.fetch_limit ?? source.product_limit ?? 10,
-    options.maxLimit,
-  );
+  // Cascade-inactivate is an explicit opt-in (declared fullSync without an explicit
+  // skipInactiveMarking override). No live caller sets fullSync, so nothing cascades.
+  const allowCascade = options.fullSync === true && options.skipInactiveMarking !== true;
+  // A declared full-catalog sync must not be truncated to fetch_limit — a bounded fetch
+  // can never safely cascade. Only fullSync is capped by maxLimit; partial runs keep the
+  // source's own fetch_limit.
+  const limit = options.fullSync
+    ? normalizeLimit(options.maxLimit ?? 1000, options.maxLimit)
+    : normalizeLimit(
+        source.fetch_limit ?? source.product_limit ?? 10,
+        options.maxLimit,
+      );
   const listingStatus = normalizeSyncStatus(
     options.forceStatus ??
       normalizeImportMode(source.bot_import_mode) ??
@@ -152,7 +164,7 @@ export async function runSourceScrapeBot(
       errors.push("Ürün bulunamadı veya HTML yapısı değişmiş olabilir");
     } else {
       const result = await syncListingsForSource(supabase, source.id, listings, {
-        skipInactiveMarking: options.skipInactiveMarking,
+        skipInactiveMarking: !allowCascade,
       });
       imported = result.imported;
       updated = result.updated;

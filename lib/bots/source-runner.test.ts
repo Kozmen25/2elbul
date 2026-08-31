@@ -70,6 +70,7 @@ vi.mock("@/lib/records", () => ({
 
 import { runSourceScrapeBot } from "./source-runner";
 import { syncListingsForSource } from "@/lib/bots/listing-sync";
+import { getStandardSourceAdapter } from "@/lib/bots/connectors";
 import type { SourceRunRecord } from "./source-runner";
 
 // ---------------------------------------------------------------------------
@@ -210,5 +211,50 @@ describe("H4 — per-source 120s timeout", () => {
     expect(syncListingsForSource).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FAZ 9 #3 — cascade-inactivate neutrality (partial never cascades; fullSync may)
+// ---------------------------------------------------------------------------
+describe("FAZ 9 #3 — partial batch vs full-catalog sync", () => {
+  it("partial run (no fullSync) passes skipInactiveMarking=true so out-of-batch listings are NOT inactivated", async () => {
+    const { supabase } = buildSupabaseMock();
+    // Adapter returns 10 of a 100-listing source; never cascade the remaining 90.
+    mockSync.mockResolvedValue(FAKE_ADAPTER_RESULT);
+
+    const result = await runSourceScrapeBot(
+      supabase as never,
+      { ...DEFAULT_SOURCE, fetch_limit: 10 },
+      { runType: "real_test", maxLimit: undefined, forceStatus: undefined },
+    );
+
+    expect(result.status).toBe("success");
+    expect(syncListingsForSource).toHaveBeenCalledTimes(1);
+    const [, , , syncOptions] = vi.mocked(syncListingsForSource).mock.calls[0];
+    expect(syncOptions).toEqual({ skipInactiveMarking: true });
+  });
+
+  it("fullSync:true passes skipInactiveMarking=false and is NOT truncated to fetch_limit", async () => {
+    const { supabase } = buildSupabaseMock();
+    // Source says fetch_limit=10, but full-catalog must fetch the whole source,
+    // so the adapter bound is NOT fetch_limit and the sync may cascade.
+    mockSync.mockResolvedValue(FAKE_ADAPTER_RESULT);
+
+    const result = await runSourceScrapeBot(
+      supabase as never,
+      { ...DEFAULT_SOURCE, fetch_limit: 10 },
+      { runType: "real_test", maxLimit: 50, forceStatus: undefined, fullSync: true },
+    );
+
+    expect(result.status).toBe("success");
+    expect(syncListingsForSource).toHaveBeenCalledTimes(1);
+    const [, , , syncOptions] = vi.mocked(syncListingsForSource).mock.calls[0];
+    expect(syncOptions).toEqual({ skipInactiveMarking: false });
+
+    const adapter = vi.mocked(getStandardSourceAdapter);
+    const adapterArgs = adapter.mock.calls[adapter.mock.calls.length - 1][0];
+    // Not bounded by the source fetch_limit (10) — bound by the declared maxLimit (50).
+    expect(adapterArgs.productLimit).toBe(50);
   });
 });
