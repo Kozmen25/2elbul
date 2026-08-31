@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { isAdminEmail } from "@/lib/admin";
+import { isDbAdmin } from "@/lib/auth/db-admin";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export async function verifyAdmin(): Promise<NextResponse | null> {
   const supabase = await createSupabaseServerClient();
@@ -19,7 +21,12 @@ export async function verifyAdmin(): Promise<NextResponse | null> {
       { status: 401 },
     );
   }
-  if (!isAdminEmail(user.email)) {
+
+  // Dual gate (fail-safe): env allow-list OR a real DB grant row. If the
+  // admin_roles query fails, isDbAdmin() returns false and the env allow-list
+  // still decides.
+  const dbAdmin = await isDbAdmin(createSupabaseAdminClient(), user.id);
+  if (!(isAdminEmail(user.email) || dbAdmin)) {
     return NextResponse.json(
       { ok: false, error: "Bu işlem için admin yetkisi gerekli." },
       { status: 403 },

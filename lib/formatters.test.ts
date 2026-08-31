@@ -44,6 +44,9 @@ describe("formatters", () => {
   it("handles null and invalid input for relative age", () => {
     expect(formatRelativeAge(null)).toBe("—");
     expect(formatRelativeAge("invalid")).toBe("—");
-    expect(formatRelativeAge("2026-08-17T21:00:00.000Z")).toBe("—");
+    // A wall-clock date is relative to the default now, which ages — pin `now`
+    // so a past-by-milliseconds stamp stays in the future branch deterministically.
+    const future = Date.parse("2026-08-17T21:00:00.000Z");
+    expect(formatRelativeAge("2026-08-17T21:00:01.000Z", future)).toBe("—");
   });
 });

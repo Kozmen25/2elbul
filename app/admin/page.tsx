@@ -11,6 +11,9 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  UserPlus,
+  UserRound,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { AdminPageHeader, AdminStatCard } from "@/components/admin-ui";
@@ -93,6 +96,33 @@ export default async function AdminOverviewPage() {
         />
       </section>
 
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <AdminStatCard
+          label="Toplam kullanıcı"
+          value={summary.authUserCount}
+          icon={Users}
+          note="auth.users kayıtları"
+        />
+        <AdminStatCard
+          label="Yeni kullanıcı (7 gün)"
+          value={summary.newUsers7d}
+          icon={UserPlus}
+          note="Son 7 gün içinde kayıt"
+        />
+        <AdminStatCard
+          label="Aktif kullanıcı (15 dk)"
+          value={summary.activeUsers15m}
+          icon={UserRound}
+          note="Son 15 dakikada analytics olayı"
+        />
+        <AdminStatCard
+          label="Bugün arama"
+          value={summary.searchEventsToday}
+          icon={Search}
+          note="Bugünkü SEARCH olayları"
+        />
+      </section>
+
       <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
         <div className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
           <div className="flex items-start justify-between gap-4">
@@ -149,6 +179,8 @@ async function loadOperationsSummary() {
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const onlineCutoff = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
 
   if (!supabase) {
     return emptyOperationsSummary("Service role yapılandırılmadı.");
@@ -161,6 +193,10 @@ async function loadOperationsSummary() {
     searchDemands,
     sources,
     botRuns,
+    authUsers,
+    newUsers,
+    activeUsers15m,
+    searchesToday,
   ] = await Promise.all([
     countSafe(supabase.from("products").select("id", { count: "exact", head: true })),
     countActiveListings(supabase),
@@ -182,6 +218,27 @@ async function loadOperationsSummary() {
       .select("status, run_type, started_at, finished_at, error_message, found_count, imported_count, error_count, created_at")
       .order("created_at", { ascending: false })
       .limit(100),
+    countSafe(supabase.from("auth.users").select("id", { count: "exact", head: true })),
+    countSafe(
+      supabase
+        .from("auth.users")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", sevenDaysAgo.toISOString()),
+    ),
+    countSafe(
+      supabase
+        .from("analytics_events")
+        .select("user_id", { count: "exact", head: true })
+        .not("user_id", "is", null)
+        .gte("created_at", onlineCutoff),
+    ),
+    countSafe(
+      supabase
+        .from("analytics_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_name", "SEARCH")
+        .gte("created_at", today.toISOString()),
+    ),
   ]);
 
   const botRows = botRuns.error ? [] : ((botRuns.data ?? []) as BotRunRow[]);
@@ -219,6 +276,10 @@ async function loadOperationsSummary() {
       marketSignalLabel === "Aktif"
         ? "Arama sinyali üretiyor"
         : "Talep sinyali düşük",
+    authUserCount: authUsers.count ?? 0,
+    newUsers7d: newUsers.count ?? 0,
+    activeUsers15m: activeUsers15m.count ?? 0,
+    searchEventsToday: searchesToday.count ?? 0,
     operationsMessage:
       failedRuns24h > 0
         ? "Kaynak veya bot tarafında son 24 saatte hata var. Bot Merkezi ve Kaynak Sağlığı bölümlerini kontrol et."
@@ -265,6 +326,10 @@ function emptyOperationsSummary(message: string) {
     sourceHealthNote: message,
     marketSignalLabel: "Bilinmiyor",
     marketSignalNote: message,
+    authUserCount: 0,
+    newUsers7d: 0,
+    activeUsers15m: 0,
+    searchEventsToday: 0,
     operationsMessage: message,
   };
 }

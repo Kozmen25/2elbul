@@ -1,31 +1,34 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { deleteUser } from "./actions";
 
-export function DeleteUserButton({
-  userId,
-  email,
+export function ConfirmDialog({
+  title,
+  description,
+  confirmLabel,
+  pendingLabel,
+  danger = false,
+  run,
 }: {
-  userId: string;
-  email: string;
+  title: string;
+  description: React.ReactNode;
+  confirmLabel: string;
+  pendingLabel: string;
+  danger?: boolean;
+  run: () => Promise<{ ok: boolean; message: string }>;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
 
-  function confirmDelete() {
+  function confirm() {
     startTransition(async () => {
-      const result = await deleteUser(userId);
+      const result = await run();
       if (!result.ok) {
         setMessage(result.message);
         return;
       }
       setOpen(false);
-      router.refresh();
     });
   }
 
@@ -34,10 +37,13 @@ export function DeleteUserButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="grid size-9 place-items-center rounded-lg border border-red-200 text-red-600"
-        aria-label="Kullanıcıyı sil"
+        className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+          danger
+            ? "border border-red-200 bg-white text-red-600 hover:bg-red-50"
+            : "border border-black/10 bg-white font-bold hover:bg-[#fafaf8]"
+        }`}
       >
-        <Trash2 size={16} />
+        {title}
       </button>
       {open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
@@ -46,11 +52,10 @@ export function DeleteUserButton({
             aria-modal="true"
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
           >
-            <h2 className="text-xl font-black">Kullanıcıyı sil</h2>
-            <p className="mt-3 text-sm leading-6 text-black/55">
-              <strong>{email}</strong> hesabı kalıcı olarak silinecek. Bu işlem
-              geri alınamaz.
-            </p>
+            <h2 className="text-xl font-black">{title}</h2>
+            <div className="mt-3 text-sm leading-6 text-black/55">
+              {description}
+            </div>
             {message && (
               <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
                 {message}
@@ -67,10 +72,12 @@ export function DeleteUserButton({
               <button
                 type="button"
                 disabled={pending}
-                onClick={confirmDelete}
-                className="rounded-xl bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-50"
+                onClick={confirm}
+                className={`rounded-xl px-4 py-3 font-bold text-white disabled:opacity-50 ${
+                  danger ? "bg-red-600" : "bg-[#ff6b00]"
+                }`}
               >
-                {pending ? "Siliniyor..." : "Kalıcı olarak sil"}
+                {pending ? pendingLabel : confirmLabel}
               </button>
             </div>
           </div>

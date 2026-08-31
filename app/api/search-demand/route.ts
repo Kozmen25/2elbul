@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { isMissingSearchQueueTable } from "@/lib/listing-status";
+import { recordEvent } from "@/lib/analytics/events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -213,6 +214,15 @@ export async function POST(request: Request) {
       }
     }
   }
+
+  // Additive analytics post-condition: never affects search-demand logic.
+  // Coarse server-side event, fire-and-forget, errors swallowed in recordEvent.
+  void recordEvent(supabase, {
+    eventName: "SEARCH",
+    userId,
+    searchQuery: query,
+    headers: request.headers,
+  });
 
   return NextResponse.json({
     queued: true,

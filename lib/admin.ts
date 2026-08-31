@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { isDbAdmin } from "@/lib/auth/db-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const DEFAULT_ADMIN_EMAILS = [
   "kozmen25@gmail.com",
@@ -45,7 +47,12 @@ export async function requireAdminUser(nextPath = "/admin") {
     redirect(`/giris?next=${encodeURIComponent(nextPath)}`);
   }
 
-  if (!isAdminEmail(user.email)) {
+  // Dual gate: env allow-list OR a real DB grant row. Fail-safe — if the
+  // admin_roles query ever throws, isDbAdmin() returns false and the env
+  // allow-list still decides (a broken migration can never lock admins out).
+  const dbAdmin = await isDbAdmin(createSupabaseAdminClient(), user.id);
+
+  if (!(isAdminEmail(user.email) || dbAdmin)) {
     redirect("/");
   }
 

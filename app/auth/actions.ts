@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { isPresetAvatarId } from "@/lib/preset-avatars";
 import { getSiteUrl } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { recordEvent } from "@/lib/analytics/events";
 
 const AUTH_CALLBACK_PATH = "/auth/callback";
 
@@ -49,6 +51,12 @@ export async function login(
     };
   }
 
+  const session = (await supabase.auth.getSession()).data.session;
+  void recordEvent(createSupabaseAdminClient(), {
+    eventName: "LOGIN",
+    userId: session?.user?.id ?? null,
+  });
+
   redirect(next);
 }
 
@@ -79,18 +87,18 @@ export async function signUp(
 
   // Optional user-chosen avatar id; the DB trigger defaults to a deterministic
   // one when absent. Whitelisted so a client can't inject an arbitrary path.
-  const data: Record<string, string> = {};
+  const userData: Record<string, string> = {};
   if (avatarPreset) {
     if (!isPresetAvatarId(avatarPreset)) {
       return { status: "error", message: "Geçersiz avatar seçildi." };
     }
-    data.avatar = avatarPreset;
+    userData.avatar = avatarPreset;
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: authCallbackOrigin(), data },
+    options: { emailRedirectTo: authCallbackOrigin(), data: userData },
   });
 
   if (error) {
@@ -101,6 +109,11 @@ export async function signUp(
     };
   }
 
+  void recordEvent(createSupabaseAdminClient(), {
+    eventName: "SIGNUP",
+    userId: data?.user?.id ?? null,
+  });
+
   return {
     status: "success",
     message: "Kayıt başarılı, e-postanı kontrol et",
@@ -109,10 +122,20 @@ export async function signUp(
 
 export async function logout() {
   const supabase = await createSupabaseServerClient();
+  const session = supabase
+    ? (await supabase.auth.getSession()).data.session
+    : null;
+
   if (supabase) {
     const { error } = await supabase.auth.signOut();
     if (error) console.error("Supabase logout failed:", error);
   }
+
+  void recordEvent(createSupabaseAdminClient(), {
+    eventName: "LOGOUT",
+    userId: session?.user?.id ?? null,
+  });
+
   redirect("/");
 }
 

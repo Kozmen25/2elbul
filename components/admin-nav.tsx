@@ -37,6 +37,7 @@ const groups = [
     links: [
       { href: "/admin/monitoring", label: "İzleme Merkezi", icon: Activity },
       { href: "/admin/recovery", label: "Kurtarma", icon: HeartPulse },
+      { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
     ],
   },
   {
