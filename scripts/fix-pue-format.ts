@@ -5,20 +5,11 @@
  * `attributes`, but all extractors (extractProductTypeFromAttributes,
  * hasProductUnderstanding) expect `attributes.productUnderstanding.*`.
  *
- * Usage: npx tsx scripts/fix-pue-format.ts
+ * Usage: npx tsx --env-file=.env.local scripts/fix-pue-format.ts
  */
-import { createClient } from "@supabase/supabase-js";
+import { requireScriptAdminClient } from "./script-client";
 
-const SUPABASE_URL = "https://ozbzxhhorhrslpeccgsl.supabase.co";
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!SERVICE_KEY) {
-  console.error("Missing SUPABASE_SERVICE_ROLE_KEY env var");
-  process.exit(1);
-}
-
-const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
-  auth: { persistSession: false },
-});
+const supabase = requireScriptAdminClient();
 
 const BATCH_SIZE = 10;
 

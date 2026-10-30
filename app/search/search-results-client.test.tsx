@@ -176,12 +176,29 @@ describe("search-results decision mapping", () => {
     ["falling-price", ["galaxy-a54"]],
     ["refurbished", ["iphone-13"]],
   ] as const)("filters summaries by %s", (signal, expectedProductIds) => {
-    const summaries = buildProductSummaries(buildDecisionListings());
+    const summaries = buildProductSummaries(buildDecisionListings(), {}, buildPriceHistory());
     const filtered = filterProductSummariesBySignal(summaries, signal);
 
     expect(filtered.map((item) => item.productId)).toEqual(expectedProductIds);
   });
 });
+
+/** Recorded history: the Galaxy's price keeps falling, the iPhone's is flat. */
+function buildPriceHistory() {
+  const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  return {
+    "galaxy-a54": [
+      { price: 24000, recordedAt: daysAgo(20) },
+      { price: 22000, recordedAt: daysAgo(10) },
+      { price: 20000, recordedAt: daysAgo(1) },
+    ],
+    "iphone-13": [
+      { price: 31900, recordedAt: daysAgo(20) },
+      { price: 32000, recordedAt: daysAgo(10) },
+      { price: 31900, recordedAt: daysAgo(1) },
+    ],
+  };
+}
 
 function buildDecisionListings(): Listing[] {
   return [

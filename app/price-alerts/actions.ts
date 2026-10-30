@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { changePriceAlertStatus, createPriceAlert as createAlert } from "@/lib/price-alerts/service";
+import { getAlertSession } from "@/lib/price-alerts/session";
+import type { PriceAlertStatus } from "@/lib/price-alerts/rules";
 
 export type PriceAlertActionResult = {
   ok: boolean;
@@ -9,144 +10,41 @@ export type PriceAlertActionResult = {
   requiresAuth?: boolean;
 };
 
+async function requireSession(loginMessage: string) {
+  const result = await getAlertSession();
+  if (result.ok) return { session: result.session };
+  return {
+    failure: {
+      ok: false,
+      requiresAuth: result.reason === "unauthenticated",
+      message:
+        result.reason === "unauthenticated" ? loginMessage : "Supabase bağlantısı yapılandırılmamış.",
+    } satisfies PriceAlertActionResult,
+  };
+}
+
 export async function createPriceAlert(input: {
   productId: string;
   targetPrice: number;
 }): Promise<PriceAlertActionResult> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return {
-      ok: false,
-      message: "Supabase bağlantısı yapılandırılmamış.",
-    };
-  }
+  const { session, failure } = await requireSession("Fiyat alarmı kurmak için giriş yapmalısınız.");
+  if (!session) return failure;
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return {
-      ok: false,
-      requiresAuth: true,
-      message: "Fiyat alarmı kurmak için giriş yapmalısınız.",
-    };
-  }
-
-  const productId = Number(input.productId);
-  const targetPrice = Number(input.targetPrice);
-
-  if (!Number.isInteger(productId) || productId <= 0) {
-    return { ok: false, message: "Geçersiz ürün seçimi." };
-  }
-  if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
-    return { ok: false, message: "Geçerli bir hedef fiyat girin." };
-  }
-
-  const { data: product, error: productError } = await supabase
-    .from("products")
-    .select("id")
-    .eq("id", productId)
-    .maybeSingle();
-
-  if (productError || !product) {
-    return {
-      ok: false,
-      message: productError?.message ?? "Ürün bulunamadı.",
-    };
-  }
-
-  const { data: existingAlert, error: lookupError } = await supabase
-    .from("price_alerts")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("product_id", productId)
-    .eq("target_price", targetPrice)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (lookupError) {
-    console.error("Price alert lookup failed:", lookupError);
-    return { ok: false, message: lookupError.message };
-  }
-
-  if (existingAlert) {
-    return {
-      ok: true,
-      message: "Bu hedef fiyat için aktif alarmın zaten var.",
-    };
-  }
-
-  const { data: currentListing, error: currentPriceError } = await supabase
-    .from("listings")
-    .select("price")
-    .eq("product_id", productId)
-    .in("status", ["published", "active"])
-    .order("price", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (currentPriceError) {
-    console.error("Price alert current price lookup failed:", currentPriceError);
-  }
-
-  const { error: insertError } = await supabase.from("price_alerts").insert({
-    user_id: user.id,
-    product_id: productId,
-    target_price: targetPrice,
-    current_price: currentListing?.price ? Number(currentListing.price) : null,
-    status: "active",
-  });
-
-  if (insertError) {
-    console.error("Price alert insert failed:", insertError);
-    return { ok: false, message: insertError.message };
-  }
-
-  revalidatePath("/hesabim");
-
-  return {
-    ok: true,
-    message: "Fiyat alarmın oluşturuldu.",
-  };
+  // No revalidatePath: /hesabim is a dynamic page (per-user cookies), so it is
+  // never served from the client router cache, and revalidating here would
+  // re-render the heavy product page the form sits on for no benefit.
+  const result = await createAlert(session.supabase, session.userId, input);
+  return { ok: result.ok, message: result.message };
 }
 
-export async function deactivatePriceAlert(
+/** Pause, resume, re-arm (triggered → active) or cancel one of the user's alerts. */
+export async function setPriceAlertStatus(
   alertId: string,
+  status: PriceAlertStatus,
 ): Promise<PriceAlertActionResult> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return {
-      ok: false,
-      message: "Supabase bağlantısı yapılandırılmamış.",
-    };
-  }
+  const { session, failure } = await requireSession("Bu işlem için giriş yapmalısınız.");
+  if (!session) return failure;
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return {
-      ok: false,
-      requiresAuth: true,
-      message: "Bu işlem için giriş yapmalısınız.",
-    };
-  }
-
-  const { error } = await supabase
-    .from("price_alerts")
-    .update({ status: "cancelled" })
-    .eq("id", alertId)
-    .eq("user_id", user.id);
-
-  if (error) {
-    console.error("Price alert cancel failed:", error);
-    return { ok: false, message: error.message };
-  }
-
-  revalidatePath("/hesabim");
-  return { ok: true, message: "Fiyat alarmı iptal edildi." };
+  const result = await changePriceAlertStatus(session.supabase, session.userId, alertId, status);
+  return { ok: result.ok, message: result.message };
 }

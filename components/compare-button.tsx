@@ -36,8 +36,8 @@ export function CompareButton({
         compact ? "size-10" : "px-3 py-2 text-sm"
       } ${
         selected
-          ? "border-[#ff6b00]/30 bg-[#fff1e7] text-[#d95700]"
-          : "border-black/10 bg-white text-black/55 hover:border-[#ff6b00]/35 hover:text-[#ff6b00]"
+          ? "border-[#3B66E0]/30 bg-[#E4ECFF] text-[#2A4FBF]"
+          : "border-black/10 bg-white text-black/55 hover:border-[#3B66E0]/35 hover:text-[#3B66E0]"
       }`}
     >
       {selected ? <Check size={18} /> : <Scale size={18} />}

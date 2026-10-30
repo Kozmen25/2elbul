@@ -14,8 +14,12 @@ type CronTaskResult = {
 const TASKS = [
   { task: "retry-dlq", path: "/api/cron/retry-dlq" },
   { task: "run-sources", path: "/api/cron/run-sources" },
+  // After the scan, before anything that notifies users about listings.
+  { task: "check-listing-availability", path: "/api/cron/check-listing-availability" },
   { task: "process-search-queue", path: "/api/cron/process-search-queue" },
   { task: "check-price-alerts", path: "/api/cron/check-price-alerts" },
+  { task: "regroup-duplicates", path: "/api/cron/regroup-duplicates" },
+  { task: "check-product-follows", path: "/api/cron/check-product-follows" },
   { task: "check-saved-searches", path: "/api/cron/check-saved-searches" },
 ] as const;
 

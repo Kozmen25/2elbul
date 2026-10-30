@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+import { CACHE_SECONDS, CACHE_TAGS } from "@/lib/cache-policy";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isMissingSiteSettingsTable } from "@/lib/listing-status";
 
@@ -24,7 +26,7 @@ const DEFAULT_MAINTENANCE: SiteMaintenanceSettings = {
     "Planlı bakım çalışması yapılıyor. Kısa süre içinde tekrar hizmetinizdeyiz.",
 };
 
-export async function getSiteGeneralSettings(): Promise<SiteGeneralSettings> {
+async function readGeneralSettings(): Promise<SiteGeneralSettings> {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return DEFAULT_GENERAL;
 
@@ -44,7 +46,7 @@ export async function getSiteGeneralSettings(): Promise<SiteGeneralSettings> {
   };
 }
 
-export async function getSiteMaintenanceSettings(): Promise<SiteMaintenanceSettings> {
+async function readMaintenanceSettings(): Promise<SiteMaintenanceSettings> {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return DEFAULT_MAINTENANCE;
 
@@ -61,3 +63,50 @@ export async function getSiteMaintenanceSettings(): Promise<SiteMaintenanceSetti
     message: String(value.message ?? DEFAULT_MAINTENANCE.message),
   };
 }
+
+/**
+ * Category slugs shown in the header menu. `null` means "not configured":
+ * the header then lists every main category.
+ */
+export type HeaderCategorySettings = {
+  slugs: string[] | null;
+};
+
+export const HEADER_CATEGORIES_KEY = "header_categories";
+
+async function readHeaderCategorySettings(): Promise<HeaderCategorySettings> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return { slugs: null };
+
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", HEADER_CATEGORIES_KEY)
+    .maybeSingle();
+
+  const slugs = (data?.value as { slugs?: unknown } | null)?.slugs;
+  if (error || !Array.isArray(slugs)) return { slugs: null };
+  return { slugs: slugs.filter((slug): slug is string => typeof slug === "string") };
+}
+
+// Settings are read on every page render, so they are cached across requests
+// and invalidated by the admin save actions (CACHE_TAGS.siteSettings).
+const cacheOptions = { revalidate: CACHE_SECONDS.siteSettings, tags: [CACHE_TAGS.siteSettings] };
+
+export const getSiteGeneralSettings = unstable_cache(
+  readGeneralSettings,
+  ["site-settings:general"],
+  cacheOptions,
+);
+
+export const getSiteMaintenanceSettings = unstable_cache(
+  readMaintenanceSettings,
+  ["site-settings:maintenance"],
+  cacheOptions,
+);
+
+export const getHeaderCategorySettings = unstable_cache(
+  readHeaderCategorySettings,
+  ["site-settings:header-categories"],
+  cacheOptions,
+);

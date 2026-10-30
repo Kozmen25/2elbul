@@ -84,7 +84,7 @@ export default async function AdminUserDetailPage({
     <>
       <Link
         href="/admin/users"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm font-bold text-black/50 transition hover:text-[#d95700]"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm font-bold text-black/50 transition hover:text-[#2A4FBF]"
       >
         <ArrowLeft size={16} /> Kullanıcılar
       </Link>
@@ -95,7 +95,7 @@ export default async function AdminUserDetailPage({
         description={email || "E-posta adresi yok"}
         action={
           isAdmin && (
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#fff1e7] px-3 py-2 text-sm font-black text-[#d95700]">
+            <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#E4ECFF] px-3 py-2 text-sm font-black text-[#2A4FBF]">
               <ShieldCheck size={16} /> Admin
             </span>
           )
@@ -188,13 +188,13 @@ export default async function AdminUserDetailPage({
                 <ActionButton
                   label="E-postayı doğrula"
                   pendingLabel="Doğrulanıyor..."
-                  run={() => verifyUser(id)}
+                  run={verifyUser.bind(null, id)}
                 />
               )}
               <ActionButton
                 label="Şifre sıfırlama bağlantısı gönder"
                 pendingLabel="Gönderiliyor..."
-                run={() => resetUserPassword(id)}
+                run={resetUserPassword.bind(null, id)}
                 tone="ghost"
               />
               {isAdmin ? (
@@ -204,13 +204,13 @@ export default async function AdminUserDetailPage({
                   confirmLabel="Yetkiyi kaldır"
                   pendingLabel="Kaldırılıyor..."
                   danger
-                  run={() => removeAdmin(id)}
+                  run={removeAdmin.bind(null, id)}
                 />
               ) : (
                 <ActionButton
                   label="Admin yap"
                   pendingLabel="Ekleniyor..."
-                  run={() => makeAdmin(id)}
+                  run={makeAdmin.bind(null, id)}
                 />
               )}
               {banned ? (
@@ -220,7 +220,7 @@ export default async function AdminUserDetailPage({
                   confirmLabel="Engeli kaldır"
                   pendingLabel="Kaldırılıyor..."
                   danger
-                  run={() => unbanUser(id)}
+                  run={unbanUser.bind(null, id)}
                 />
               ) : (
                 <ConfirmDialog
@@ -229,7 +229,7 @@ export default async function AdminUserDetailPage({
                   confirmLabel="Engelle"
                   pendingLabel="Engelleniyor..."
                   danger
-                  run={() => banUser(id)}
+                  run={banUser.bind(null, id)}
                 />
               )}
               <div className="pt-2">
@@ -239,7 +239,7 @@ export default async function AdminUserDetailPage({
                   confirmLabel="Kalıcı olarak sil"
                   pendingLabel="Siliniyor..."
                   danger
-                  run={() => deleteUser(id)}
+                  run={deleteUser.bind(null, id)}
                 />
               </div>
             </div>
@@ -284,7 +284,7 @@ function Badge({
     green: "bg-emerald-50 text-emerald-700",
     amber: "bg-amber-50 text-amber-700",
     red: "bg-red-50 text-red-700",
-    custom: "bg-[#fff1e7] text-[#d95700]",
+    custom: "bg-[#E4ECFF] text-[#2A4FBF]",
   };
   return (
     <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${tones[tone]}`}>

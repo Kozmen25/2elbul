@@ -1,12 +1,23 @@
-import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { confirmFailurePath, safeNextPath } from "@/lib/auth/confirm";
 import { NEW_PASSWORD_PATH } from "@/lib/auth/recovery";
+import { redirectToPath } from "@/lib/relative-redirect";
 
+/**
+ * PKCE landing route: Supabase's default e-mail links (sign-up confirmation,
+ * password reset) return here with `?code=…`. The code is exchanged for a
+ * session using the verifier cookie stored when the e-mail was requested, so
+ * the link must be opened in the same browser. Custom e-mail templates use
+ * /auth/confirm instead, which has no such restriction.
+ *
+ * `next` is set by the requesting action (e.g. /yeni-sifre for a password
+ * reset). Whether a session may actually set a new password is decided by the
+ * new-password page itself (lib/auth/recovery.ts), not by this route.
+ */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = safeNextPath(url.searchParams.get("next") ?? "/");
-  const type = url.searchParams.get("type");
+  const next = safeNextPath(url.searchParams.get("next"));
 
   if (code) {
     const supabase = await createSupabaseServerClient();
@@ -15,27 +26,11 @@ export async function GET(request: Request) {
     };
 
     if (!error) {
-      if (type === "recovery") {
-        // Password-reset link landed: the session is now authenticated but its
-        // amr method is `recovery`, so we land the user on the new-password page.
-        // The user is already session-valid here, so the page must NOT redirect
-        // away just because a user exists.
-        return NextResponse.redirect(
-          new URL(NEW_PASSWORD_PATH, url.origin),
-        );
-      }
-      return NextResponse.redirect(new URL(next, url.origin));
+      return redirectToPath(next);
     }
 
-    console.error("Supabase auth callback failed:", error);
+    console.error("Supabase auth callback failed:", error.message);
   }
 
-  return NextResponse.redirect(
-    new URL("/giris?error=verification_failed", url.origin),
-  );
+  return redirectToPath(confirmFailurePath(next === NEW_PASSWORD_PATH ? "recovery" : null));
 }
-
-function safeNextPath(value: string) {
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
-}
-

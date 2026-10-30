@@ -1,3 +1,4 @@
+import { getNotificationLink } from "@/lib/notification-link";
 import {
   ArrowRight,
   BellRing,
@@ -51,6 +52,7 @@ function getTypeIcon(type: string) {
     case "price_alert":
       return "📉";
     case "new_listing":
+    case "saved_search":
       return "🆕";
     case "price_drop":
       return "💰";
@@ -59,14 +61,6 @@ function getTypeIcon(type: string) {
     default:
       return "🔔";
   }
-}
-
-function getNotificationLink(notif: NotificationRow): string {
-  const meta = notif.metadata;
-  if (meta?.product_id) return `/product/${meta.product_id}`;
-  if (notif.type === "new_listing" && meta?.query) return `/search?q=${encodeURIComponent(String(meta.query))}`;
-  if (meta?.listing_id) return `/listing/${meta.listing_id}`;
-  return "#";
 }
 
 export default async function NotificationsPage({
@@ -114,14 +108,17 @@ export default async function NotificationsPage({
     <section className="min-h-[calc(100vh-145px)] bg-[#fafaf8] py-10 sm:py-14">
       <div className="container-shell">
         <div className="mb-8">
-          <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
             <BellRing size={23} />
           </span>
           <h1 className="mt-5 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
             Bildirimlerim
           </h1>
           <p className="mt-2 text-black/50">
-            Fiyat alarmları ve sistem bildirimleri.
+            Fiyat düşüşleri, yeni ilanlar ve fiyat alarmların.{" "}
+            <Link href="/hesabim#bildirim-tercihleri" className="font-bold text-[#2A4FBF] hover:underline">
+              Bildirim tercihlerini düzenle
+            </Link>
           </p>
         </div>
 
@@ -154,8 +151,8 @@ export default async function NotificationsPage({
                 <article
                   key={notif.id}
                   className={`flex items-start gap-4 px-5 py-4 transition ${
-                    !notif.read_at ? "bg-[#fff8f0]" : ""
-                  } ${getNotificationLink(notif) !== "#" ? "hover:bg-black/2" : ""}`}
+                    !notif.read_at ? "bg-[#EEF3FF]" : ""
+                  } ${getNotificationLink(notif, "#") !== "#" ? "hover:bg-black/2" : ""}`}
                 >
                   <span className="mt-0.5 shrink-0 text-lg leading-none">
                     {getTypeIcon(notif.type)}
@@ -167,7 +164,7 @@ export default async function NotificationsPage({
                         {notif.title}
                       </h3>
                       {!notif.read_at && (
-                        <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[#ff6b00]" />
+                        <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[#3B66E0]" />
                       )}
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-black/55">
@@ -178,10 +175,10 @@ export default async function NotificationsPage({
                     </p>
                   </div>
 
-                  {getNotificationLink(notif) !== "#" && (
+                  {getNotificationLink(notif, "#") !== "#" && (
                     <Link
-                      href={getNotificationLink(notif)}
-                      className="mt-1 shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#ff6b00] transition hover:bg-[#fff1e7]"
+                      href={getNotificationLink(notif, "#")}
+                      className="mt-1 shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#3B66E0] transition hover:bg-[#E4ECFF]"
                     >
                       Görüntüle
                     </Link>
@@ -201,8 +198,8 @@ export default async function NotificationsPage({
                         href={`/bildirimler?page=${page}`}
                         className={`grid size-9 place-items-center rounded-xl text-sm font-bold transition ${
                           isCurrent
-                            ? "bg-[#ff6b00] text-white"
-                            : "border border-black/10 text-black/60 hover:border-[#ff6b00]/30 hover:text-[#ff6b00]"
+                            ? "bg-[#3B66E0] text-white"
+                            : "border border-black/10 text-black/60 hover:border-[#3B66E0]/30 hover:text-[#3B66E0]"
                         }`}
                       >
                         {page}
@@ -243,7 +240,7 @@ function MarkAllReadButton() {
       >
         <button
           type="submit"
-          className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-[#ff6b00] transition hover:bg-[#fff1e7]"
+          className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-[#3B66E0] transition hover:bg-[#E4ECFF]"
         >
           <CheckCheck size={15} /> Tümünü okundu işaretle
         </button>

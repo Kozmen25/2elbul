@@ -1,3 +1,11 @@
+import { buildPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = buildPageMetadata({
+  title: "İletişim | 2ElBul",
+  description: "2ElBul ile görüş, öneri ve iş birliği talepleriniz için iletişime geçin.",
+  path: "/iletisim",
+});
+
 export default function ContactPage() {
   return (
     <section className="container-shell min-h-[60vh] py-12 sm:py-16">
@@ -11,7 +19,7 @@ export default function ContactPage() {
           </p>
           <a
             href="mailto:iletisim@2elbul.com"
-            className="mt-2 inline-block font-bold text-[#ff6b00] hover:underline"
+            className="mt-2 inline-block font-bold text-[#3B66E0] hover:underline"
           >
             iletisim@2elbul.com
           </a>

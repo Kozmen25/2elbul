@@ -1,5 +1,6 @@
 import { detectQueryIntent } from "@/lib/search/query-intent-detector";
-import { getExpandedSearchTerms, isBroadCategoryQuery } from "@/lib/category-taxonomy";
+import { isBroadCategoryQuery } from "@/lib/category-taxonomy";
+import { getExpandedSearchTerms } from "@/lib/search/query-expansion";
 import { extractPlanExtras } from "./turkish-nl-parser";
 import {
   isPlanValid,

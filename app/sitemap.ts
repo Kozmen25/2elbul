@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { isMissingStatusColumn } from "@/lib/listing-status";
+import { extractBrand } from "@/lib/normalization";
 import { createProductSlug } from "@/lib/product-slug";
 import { getBrandCatalog } from "@/lib/brand-intelligence";
 import { getCategoryCatalog } from "@/lib/category-intelligence";
@@ -8,8 +9,15 @@ import {
   isPublicDemoListing,
   isPublicDemoProductName,
 } from "@/lib/public-data-cleanup";
+import { PRICE_LIST_PATH } from "@/lib/seo/landing-content";
 import { getSiteUrl } from "@/lib/site-url";
 import { createSupabaseClient } from "@/lib/supabase";
+import { toBigintIds } from "@/lib/supabase-ids";
+
+// Regenerated hourly; without this the sitemap is frozen at build time.
+export const revalidate = 3600;
+
+const STATIC_INFO_PATHS = ["/iletisim", "/gizlilik", "/kullanim-sartlari"];
 
 type ProductRow = {
   id: string | number;
@@ -42,28 +50,52 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
-      url: `${siteUrl}/ilan-ekle`,
+      url: `${siteUrl}/categories`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
+      changeFrequency: "weekly",
+      priority: 0.75,
     },
+    {
+      url: `${siteUrl}${PRICE_LIST_PATH}`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.9,
+    },
+    {
+      url: `${siteUrl}/market`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.8,
+    },
+    ...STATIC_INFO_PATHS.map((path) => ({
+      url: `${siteUrl}${path}`,
+      lastModified: now,
+      changeFrequency: "yearly" as const,
+      priority: 0.3,
+    })),
   ];
 
   const brandCatalog = await getBrandCatalog();
-  const brandRoutes = brandCatalog.map((brand) => ({
+  const toBrandRoute = (brand: (typeof brandCatalog)[number]) => ({
     url: `${siteUrl}/brand/${brand.slug}`,
     lastModified: brand.latestProductAt ? new Date(brand.latestProductAt) : now,
     changeFrequency: "weekly" as const,
     priority: 0.6,
-  }));
+  });
+  // Without listing data every brand is listed; once it loads, only brands
+  // that have a model with live listings (others are noindex).
+  let brandRoutes = brandCatalog.map(toBrandRoute);
 
   const categoryCatalog = await getCategoryCatalog();
-  const categoryRoutes = categoryCatalog.map((category) => ({
-    url: `${siteUrl}/category/${category.slug}`,
-    lastModified: category.latestListingAt ? new Date(category.latestListingAt) : now,
-    changeFrequency: "weekly" as const,
-    priority: 0.65,
-  }));
+  // Categories without listings are noindex, so they stay out of the sitemap.
+  const categoryRoutes = categoryCatalog
+    .filter((category) => category.listingCount > 0)
+    .map((category) => ({
+      url: `${siteUrl}/category/${category.slug}`,
+      lastModified: category.latestListingAt ? new Date(category.latestListingAt) : now,
+      changeFrequency: "weekly" as const,
+      priority: 0.65,
+    }));
 
   const cityCatalog = await getCityCatalog();
   const cityRoutes = cityCatalog.map((city) => ({
@@ -101,12 +133,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter(Boolean),
   );
 
-  if (!publicProductIds.size) return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes];
+  // No live listings at all: no brand page has content to index.
+  if (!publicProductIds.size) return [...routes, ...categoryRoutes, ...cityRoutes];
 
   const { data, error } = await supabase
     .from("products")
     .select("id, name, slug, created_at")
-    .in("id", [...publicProductIds])
+    .in("id", toBigintIds(publicProductIds))
     .order("created_at", { ascending: false })
     .limit(500);
 
@@ -115,9 +148,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return [...routes, ...brandRoutes, ...categoryRoutes, ...cityRoutes];
   }
 
-  const productRoutes = ((data ?? []) as ProductRow[])
-    .filter((product) => !isPublicDemoProductName(product.name))
-    .map((product) => ({
+  const publicProducts = ((data ?? []) as ProductRow[]).filter(
+    (product) => !isPublicDemoProductName(product.name),
+  );
+  const listedBrandSlugs = new Set(
+    publicProducts.map((product) => extractBrand(product.name)).filter(Boolean),
+  );
+  brandRoutes = brandCatalog
+    .filter((brand) => listedBrandSlugs.has(brand.slug))
+    .map(toBrandRoute);
+
+  const productRoutes = publicProducts.map((product) => ({
       url: `${siteUrl}/product/${product.slug || createProductSlug(product.name)}`,
       lastModified: product.created_at ? new Date(product.created_at) : now,
       changeFrequency: "weekly" as const,

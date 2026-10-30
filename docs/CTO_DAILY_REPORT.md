@@ -16,21 +16,24 @@ The platform is fully operational. Saved search functionality is now live — us
 ## Recent Sprint Completions (P-16.x)
 
 ### Sprint P-16.1 — Product Card Image Integration ✅
+
 - Source logo SVGs created for all 10 sources
 - `ListingImage` component extended with source logo overlay and "+N listing" badge
 - Search results now show product photos with source attribution
 - Product detail and home page ListingImage callers updated
 
 ### Sprint P-16.2 — SEO Implementation ✅
+
 - `robots.txt` with sitemap reference
 - `manifest.json` for PWA support
 - Dynamic `generateMetadata` on search page
-- Mobile themeColor (`#ff6b00`) via viewport export
+- Mobile themeColor (`#2C4FB8`) via viewport export
 - Twitter card fixed to `summary_large_image` on product pages
 - JSON-LD Organization + WebSite schemas in root layout
 - Turkish diacritics fixed on home page metadata
 
 ### Sprint P-16.3 — Search Pagination ✅
+
 - Client-side pagination on search results page (PAGE_SIZE=20)
 - Page state synced to URL via `searchParams.page` for shareable/bookmarkable URLs
 - Page auto-resets to 1 on any filter/sort/signal/query change
@@ -41,6 +44,7 @@ The platform is fully operational. Saved search functionality is now live — us
 - TypeScript: 0 errors | Tests: 925/931 passing (no regression)
 
 ### ScrapingFish Resilience Epic ✅
+
 - **`fetchViaAntiBotProxy`** rewritten with try-catch + fallback to `safeFetchHtml`
 - **Circuit breaker** (`scrapingfish` slug): 3 failures → 60s timeout before retry
 - **Auth errors** (401/403) still throw loud — indicates misconfiguration, not transient failure
@@ -50,6 +54,7 @@ The platform is fully operational. Saved search functionality is now live — us
 - TypeScript compilation: clean
 
 ### P0 Mobile API Endpoints Epic ✅
+
 - **Shared mobile library** — `lib/mobile/types.ts`, `response.ts`, `auth.ts` with reusable types and helpers
 - **`GET /api/mobile/home`** — Home feed with hero stats, popular categories, AI recommendations, trending products, latest listings, market summary
 - **`GET /api/mobile/search`** — Full-text search with intent resolution, faceted filters, relevance/price/newest sorting, pagination, auth-aware favorites
@@ -59,6 +64,7 @@ The platform is fully operational. Saved search functionality is now live — us
 - **Validation**: 0 TypeScript errors, all existing tests pass, build succeeds
 
 ### Saved Search Feature ✅
+
 - **`saved_searches` SQL migration** — Full table with RLS policies, indexes, unique partial index on user+query+filters, frequency constraint (instant/daily/weekly), updated_at trigger
 - **Server actions** — `createSavedSearch`, `deleteSavedSearch`, `getSavedSearches` with auth validation, duplicate detection, revalidation
 - **"Save Search" button** — Added to search results page (appears when query is present and user is authenticated), calls `createSavedSearch` with "instant" frequency
@@ -70,23 +76,23 @@ The platform is fully operational. Saved search functionality is now live — us
 
 ## System Health
 
-| Subsystem | Status | Notes |
-|-----------|--------|-------|
-| Source Engine | 🟢 OK | All 10 sources registered |
-| Bot Adapters | 🟢 OK | EasyCep, Getmobil, Sahibinden, commerce adapters |
-| Product Matcher | 🟢 OK | Batch matching deployed |
-| Duplicate Engine | 🟢 OK | Group-level dedup, cache optimizations |
-| Confidence Engine | 🟢 OK | Scoring pipeline |
-| Normalization | 🟢 OK | Brand/model detection |
-| Import Pipeline | 🟢 OK | Queue processing active |
-| Monitoring | 🟢 OK | Metrics, alerts, health scoring |
-| Recovery | 🟢 OK | Circuit breakers, DLQ, retry |
-| SEO | 🟢 OK | All 7 gaps closed |
-| Notifications | 🟢 OK | Saved search notifications active |
-| Saved Searches | 🟢 OK | CRUD + cron monitoring + dashboard UI |
-| Health Check | 🟢 OK | `GET /api/health` |
-| ScrapingFish Resilience | 🟢 OK | Fallback transport + circuit breaker deployed |
-| **Mobile API** | 🟢 OK | **6 endpoints deployed — 0 TS errors** |
+| Subsystem               | Status | Notes                                            |
+| ----------------------- | ------ | ------------------------------------------------ |
+| Source Engine           | 🟢 OK  | All 10 sources registered                        |
+| Bot Adapters            | 🟢 OK  | EasyCep, Getmobil, Sahibinden, commerce adapters |
+| Product Matcher         | 🟢 OK  | Batch matching deployed                          |
+| Duplicate Engine        | 🟢 OK  | Group-level dedup, cache optimizations           |
+| Confidence Engine       | 🟢 OK  | Scoring pipeline                                 |
+| Normalization           | 🟢 OK  | Brand/model detection                            |
+| Import Pipeline         | 🟢 OK  | Queue processing active                          |
+| Monitoring              | 🟢 OK  | Metrics, alerts, health scoring                  |
+| Recovery                | 🟢 OK  | Circuit breakers, DLQ, retry                     |
+| SEO                     | 🟢 OK  | All 7 gaps closed                                |
+| Notifications           | 🟢 OK  | Saved search notifications active                |
+| Saved Searches          | 🟢 OK  | CRUD + cron monitoring + dashboard UI            |
+| Health Check            | 🟢 OK  | `GET /api/health`                                |
+| ScrapingFish Resilience | 🟢 OK  | Fallback transport + circuit breaker deployed    |
+| **Mobile API**          | 🟢 OK  | **6 endpoints deployed — 0 TS errors**           |
 
 ---
 
@@ -115,8 +121,8 @@ The platform is fully operational. Saved search functionality is now live — us
 
 ## Risk Register
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Supabase connection pool exhaustion | API degradation under load | Low | Monitoring alerts configured |
-| Single bot adapter failure | Partial listing gap for one source | Medium | Circuit breakers + DLQ in place |
-| Saved search cron frequency capped by Vercel Hobby | Delayed notifications for "instant" searches | Certain | Architectural limitation — upgrade or separate scheduler needed for sub-daily intervals |
+| Risk                                               | Impact                                       | Likelihood | Mitigation                                                                              |
+| -------------------------------------------------- | -------------------------------------------- | ---------- | --------------------------------------------------------------------------------------- |
+| Supabase connection pool exhaustion                | API degradation under load                   | Low        | Monitoring alerts configured                                                            |
+| Single bot adapter failure                         | Partial listing gap for one source           | Medium     | Circuit breakers + DLQ in place                                                         |
+| Saved search cron frequency capped by Vercel Hobby | Delayed notifications for "instant" searches | Certain    | Architectural limitation — upgrade or separate scheduler needed for sub-daily intervals |

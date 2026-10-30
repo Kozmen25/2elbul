@@ -1,141 +1,142 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import { detectImageType, IMAGE_EXTENSIONS } from "@/lib/image-signature";
+import {
+  MAX_SUBMISSIONS_PER_DAY,
+  validateListingSubmission,
+  type ListingFieldErrors,
+  type ListingSubmissionInput,
+} from "@/lib/listing-submission/validation";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isMissingStatusColumn } from "@/lib/listing-status";
-import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 
-export type SubmissionState = {
-  status: "idle" | "success" | "error";
-  message: string;
-};
+export type SubmitListingResult =
+  | { ok: true; message: string }
+  | { ok: false; message: string; fieldErrors?: ListingFieldErrors };
 
-const allowedSources = new Set<string>(LISTING_SOURCES);
-const allowedConditions = new Set<string>(LISTING_CONDITIONS);
+const IMAGE_BUCKET = "listing-images";
+/** The wizard shrinks photos before upload; anything larger than this is refused. */
+const MAX_IMAGE_BYTES = 1_500_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-export async function submitListing(
-  _previousState: SubmissionState,
-  formData: FormData,
-): Promise<SubmissionState> {
-  const productIdValue = String(formData.get("product_id") ?? "").trim();
-  const productId = Number(productIdValue);
-  const title = String(formData.get("title") ?? "").trim();
-  const priceValue = String(formData.get("price") ?? "").trim();
-  const price = parsePrice(priceValue);
-  const city = String(formData.get("city") ?? "").trim();
-  const source = String(formData.get("source") ?? "").trim();
-  const url = String(formData.get("url") ?? "").trim();
-  const imageUrl = String(formData.get("image_url") ?? "").trim();
-  const condition = String(formData.get("condition") ?? "").trim();
+const fail = (message: string, fieldErrors?: ListingFieldErrors): SubmitListingResult => ({
+  ok: false,
+  message,
+  ...(fieldErrors ? { fieldErrors } : {}),
+});
 
-  if (
-    !Number.isInteger(productId) ||
-    productId <= 0 ||
-    !title ||
-    !Number.isFinite(price) ||
-    price <= 0 ||
-    !city ||
-    !allowedSources.has(source) ||
-    !allowedConditions.has(condition)
-  ) {
-    return {
-      status: "error",
-      message: "Lütfen tüm alanları geçerli bilgilerle doldurun.",
-    };
-  }
+function readInput(formData: FormData): ListingSubmissionInput {
+  const text = (name: string) => String(formData.get(name) ?? "");
+  return {
+    productId: text("product_id"),
+    title: text("title"),
+    price: text("price"),
+    city: text("city"),
+    source: text("source"),
+    condition: text("condition"),
+    url: text("url"),
+  };
+}
 
-  try {
-    const parsedUrl = new URL(url);
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error("Unsupported protocol");
-    }
-  } catch {
-    return {
-      status: "error",
-      message: "Lütfen geçerli bir ilan bağlantısı girin.",
-    };
-  }
-
-  if (imageUrl && !isHttpUrl(imageUrl)) {
-    return {
-      status: "error",
-      message: "Görsel linki geçerli bir http veya https adresi olmalıdır.",
-    };
-  }
+export async function submitListing(formData: FormData): Promise<SubmitListingResult> {
+  const validation = validateListingSubmission(readInput(formData));
+  if (!validation.ok) return fail("Formdaki eksikleri düzeltin.", validation.errors);
+  const listing = validation.value;
 
   const supabase = await createSupabaseServerClient();
+  if (!supabase) return fail("Supabase bağlantısı yapılandırılmamış.");
 
-  if (!supabase) {
-    return {
-      status: "error",
-      message: "Supabase bağlantısı yapılandırılmamış.",
-    };
-  }
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData.user;
+  if (!user) return fail("İlan eklemek için giriş yapmalısınız.");
 
   const { data: product, error: productError } = await supabase
     .from("products")
     .select("id")
-    .eq("id", productId)
+    .eq("id", listing.productId)
     .maybeSingle();
+  if (productError) {
+    console.error("Supabase product lookup failed:", productError);
+    return fail("Ürün doğrulanamadı. Lütfen tekrar deneyin.");
+  }
+  if (!product) return fail("Seçilen ürün bulunamadı.", { productId: "Ürünü listeden yeniden seçin." });
 
-  if (productError || !product) {
-    if (productError) {
-      console.error("Supabase product lookup failed:", productError);
+  // Same link sent before (by anyone, in any status)? Looked up with the
+  // service role because row-level security hides other users' pending rows.
+  const admin = createSupabaseAdminClient();
+  if (admin) {
+    const { data: existing } = await admin.from("listings").select("id").eq("url", listing.url).limit(1);
+    if ((existing ?? []).length > 0) {
+      return fail("Bu ilan zaten sistemde var.", { url: "Bu bağlantı daha önce gönderilmiş." });
     }
-    return {
-      status: "error",
-      message: productError
-        ? `Ürün doğrulanamadı: ${productError.message}`
-        : "Seçilen ürün bulunamadı. Ürün listesini yenileyip tekrar deneyin.",
-    };
   }
 
-  const listingPayload = {
-    product_id: productId,
-    title,
-    price,
-    city,
-    source,
-    url,
-    condition,
-    image_url: imageUrl || null,
-  };
-  let insertResult = await supabase.from("listings").insert({
-    ...listingPayload,
+  const since = new Date(Date.now() - DAY_MS).toISOString();
+  const { count: recentCount } = await supabase
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .gte("created_at", since);
+  if ((recentCount ?? 0) >= MAX_SUBMISSIONS_PER_DAY) {
+    return fail(`24 saat içinde en fazla ${MAX_SUBMISSIONS_PER_DAY} ilan gönderebilirsin. Onaylananlardan sonra tekrar deneyebilirsin.`);
+  }
+
+  const upload = await uploadImage(supabase, user.id, formData.get("image"));
+  if (!upload.ok) return fail(upload.message);
+
+  // Always pending and tied to the submitter: row-level security only accepts
+  // inserts of this shape, and "İlanlarım" lists listings by user_id.
+  const { error: insertError } = await supabase.from("listings").insert({
+    product_id: listing.productId,
+    title: listing.title,
+    price: listing.price,
+    city: listing.city,
+    source: listing.source,
+    url: listing.url,
+    condition: listing.condition,
+    image_url: upload.url,
     status: "pending",
+    user_id: user.id,
   });
 
-  if (insertResult.error && isMissingStatusColumn(insertResult.error)) {
-    insertResult = await supabase.from("listings").insert(listingPayload);
-  }
-
-  if (insertResult.error) {
-    console.error("Supabase listing insert failed:", insertResult.error);
-    return {
-      status: "error",
-      message: `İlan kaydedilemedi: ${insertResult.error.message}`,
-    };
+  if (insertError) {
+    console.error("Supabase listing insert failed:", insertError);
+    if (upload.path) await supabase.storage.from(IMAGE_BUCKET).remove([upload.path]);
+    return fail("İlan kaydedilemedi. Lütfen bilgileri kontrol edip tekrar deneyin.");
   }
 
   return {
-    status: "success",
-    message: "İlan başarıyla alındı, onaydan sonra yayınlanacak",
+    ok: true,
+    message: "İlanın alındı. Onaylandıktan sonra yayınlanacak; durumunu Hesabım sayfasında görebilirsin.",
   };
 }
 
-function isHttpUrl(value: string) {
-  try {
-    return ["http:", "https:"].includes(new URL(value).protocol);
-  } catch {
-    return false;
+type UploadResult = { ok: true; url: string | null; path: string | null } | { ok: false; message: string };
+
+async function uploadImage(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
+  userId: string,
+  file: FormDataEntryValue | null,
+): Promise<UploadResult> {
+  if (!(file instanceof File) || file.size === 0) return { ok: true, url: null, path: null };
+
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { ok: false, message: "Fotoğraf çok büyük. Daha küçük bir fotoğraf seçin." };
   }
-}
 
-function parsePrice(value: string) {
-  if (!value) return Number.NaN;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const type = detectImageType(bytes);
+  if (!type) return { ok: false, message: "Fotoğraf PNG, JPEG ya da WebP olmalı." };
 
-  const normalized = value.includes(",")
-    ? value.replace(/\./g, "").replace(",", ".")
-    : value;
+  const path = `${userId}/${randomUUID()}.${IMAGE_EXTENSIONS[type]}`;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, { contentType: type, upsert: false });
+  if (error) {
+    console.error("Listing image upload failed:", error);
+    return { ok: false, message: "Fotoğraf yüklenemedi. Lütfen tekrar deneyin." };
+  }
 
-  return Number(normalized);
+  const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+  return { ok: true, url: data.publicUrl, path };
 }

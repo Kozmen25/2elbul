@@ -1,3 +1,10 @@
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import {
+  buildLandingDescription,
+  buildLandingTitle,
+  isIndexableSnapshot,
+  snapshotFromMarketIntelligence,
+} from "@/lib/seo/landing-content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -13,6 +20,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { CategoryShell } from "@/components/category-shell";
+import { loadCategoryHub } from "@/lib/category-hub";
 import type { CategoryListingRecord } from "@/lib/category-intelligence";
 import {
   getCategoryPageData,
@@ -34,12 +43,21 @@ import {
 } from "@/lib/opportunity-engine";
 import type { MarketPulseItem } from "@/lib/market-pulse";
 import { getCategoryForProductType } from "@/lib/taxonomy/product-type-mapping";
+import { listingOutboundPath } from "@/lib/listing-links";
 
 type CategoryPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export const dynamic = "force-dynamic";
+// ISR: public data, no per-visitor content. Must stay a literal (static analysis);
+// keep equal to CACHE_SECONDS.publicPage in lib/cache-policy.ts.
+export const revalidate = 300;
+
+// No pages are built ahead of time, but exporting this lets each page be cached
+// (ISR) the first time it is requested.
+export function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata({
   params,
@@ -62,32 +80,16 @@ export async function generateMetadata({
     };
   }
 
-  const title = `${categoryData.categoryName} ikinci el kategori analizi | 2ElBul`;
-  const description =
-    categoryData.marketIntelligence.sampleSize > 0
-      ? `${categoryData.categoryName} için ${categoryData.marketIntelligence.sampleSize} ilan, ${categoryData.marketIntelligence.marketSummary.sourceCount} kaynak ve ${formatPrice(categoryData.marketIntelligence.priceAnalysis.averagePrice)} ortalama fiyatla güncel kategori analizi.`
-      : `${categoryData.categoryName} için henüz yeterli ilan verisi oluşmadı. Kategori analizi ve fırsat sinyalleri veri geldikçe güncellenecek.`;
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: categoryData.categoryUrl,
-    },
-    openGraph: {
-      title,
-      description,
-      url: categoryData.categoryUrl,
-      siteName: "2ElBul",
-      locale: "tr_TR",
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-    },
-  };
+  const snapshot = snapshotFromMarketIntelligence(categoryData.marketIntelligence);
+  const now = new Date();
+  return buildPageMetadata({
+    title: buildLandingTitle("category", categoryData.categoryName, now),
+    description: buildLandingDescription("category", categoryData.categoryName, snapshot),
+    path: new URL(categoryData.categoryUrl).pathname,
+    // Empty pages stay reachable for visitors but are kept out of the index.
+    noIndex: !isIndexableSnapshot(snapshot),
+    followLinks: true,
+  });
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
@@ -98,12 +100,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     redirect(`/category/${resolveCanonicalSlug(slug)}`);
   }
 
-  const categoryData = await getCategoryPageData(slug);
+  const [categoryData, hub] = await Promise.all([
+    getCategoryPageData(slug),
+    loadCategoryHub(slug),
+  ]);
 
   if (!categoryData) notFound();
 
   const {
-    categoryName,
     shortDescription,
     longDescription,
     productCount,
@@ -113,12 +117,15 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     topOpportunities,
     popularProducts,
     latestListings,
+    gridListings,
     brandDistribution,
     marketPulse,
     faqItems,
     jsonLd,
     expectedProductType,
-    attributeFilters,
+    categoryName,
+    parent: parentBreadcrumb,
+    subcategories,
   } = categoryData;
   const hasEnoughData = marketIntelligence.sampleSize >= 3;
   const sourceLabel = formatMarketIntelligenceSources(
@@ -147,17 +154,21 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         <Breadcrumbs
           items={[
             { label: "Ana Sayfa", href: "/" },
+            ...(parentBreadcrumb
+              ? [{ label: parentBreadcrumb.label, href: `/category/${parentBreadcrumb.slug}` }]
+              : []),
             { label: categoryName },
           ]}
         />
 
-        <section className="mt-4 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8 lg:p-10">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:items-end">
+        <CategoryShell hub={hub}>
+        <section className="rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] xl:items-end">
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#3B66E0]">
                 Kategori analizi
               </p>
-              <h1 className="mt-3 break-words text-4xl font-black tracking-[-0.055em] sm:text-6xl">
+              <h1 className="mt-3 break-words text-3xl font-black tracking-[-0.05em] sm:text-4xl">
                 {categoryName}
               </h1>
               <p className="mt-4 max-w-3xl text-sm leading-7 text-black/58 sm:text-base">
@@ -167,26 +178,40 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 {productCount.toLocaleString("tr-TR")} ürün ·{" "}
                 {listingCount.toLocaleString("tr-TR")} ilan
               </p>
+              {subcategories.length > 0 ? (
+                <nav aria-label="Alt kategoriler" className="mt-4 flex flex-wrap gap-2">
+                  {subcategories.map((subcategory) => (
+                    <Link
+                      key={subcategory.slug}
+                      href={`/category/${subcategory.slug}`}
+                      className="rounded-sm border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
+                    >
+                      {subcategory.label}{" "}
+                      <span className="text-black/35">{subcategory.productCount.toLocaleString("tr-TR")}</span>
+                    </Link>
+                  ))}
+                </nav>
+              ) : null}
             </div>
 
-            <div className="rounded-3xl border border-[#ff6b00]/18 bg-[#fff7f1] p-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]/75">
+            <div className="rounded-sm border border-[#3B66E0]/18 bg-[#EEF3FF] p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]/75">
                 Karar özeti
               </p>
               <div className="mt-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-2xl font-black tracking-[-0.04em] text-[#d95700]">
+                  <p className="text-2xl font-black tracking-[-0.04em] text-[#2A4FBF]">
                     {opportunityAnalysis.recommendation.label}
                   </p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-black/60">
                     {opportunityAnalysis.recommendation.description}
                   </p>
                 </div>
-                <span className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-right text-xs font-black text-black shadow-sm">
+                <span className="rounded-sm border border-white/70 bg-white px-3 py-2 text-right text-xs font-black text-black ">
                   <span className="block text-[10px] uppercase tracking-[0.08em] text-black/35">
                     Fırsat skoru
                   </span>
-                  <span className="mt-1 block text-lg text-[#d95700]">
+                  <span className="mt-1 block text-lg text-[#2A4FBF]">
                     {opportunityAnalysis.opportunityScore}/100
                   </span>
                 </span>
@@ -196,7 +221,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 {opportunityAnalysis.positiveSignals.slice(0, 3).map((signal) => (
                   <span
                     key={signal}
-                    className="rounded-full border border-green-100 bg-green-50 px-3 py-1.5 text-xs font-semibold leading-5 text-green-800"
+                    className="rounded-sm border border-green-100 bg-green-50 px-3 py-1.5 text-xs font-semibold leading-5 text-green-800"
                   >
                     {signal}
                   </span>
@@ -204,7 +229,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 {opportunityAnalysis.warningSignals.slice(0, 2).map((signal) => (
                   <span
                     key={signal}
-                    className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold leading-5 text-amber-800"
+                    className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold leading-5 text-amber-800"
                   >
                     {signal}
                   </span>
@@ -213,7 +238,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <StatCard
               label="Analiz edilen ilan"
               value={marketIntelligence.sampleSize.toLocaleString("tr-TR")}
@@ -231,7 +256,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               label="Kaynak sayısı"
               value={marketIntelligence.marketSummary.sourceCount.toLocaleString("tr-TR")}
             />
-            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4">
+            <div className="min-w-0 rounded-sm border border-[#3B66E0]/20 bg-[#EEF3FF] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
                 Güven
               </p>
@@ -253,14 +278,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
           {expectedProductType ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[#ff6b00]/18 bg-[#fff7f1] px-3 py-1.5 text-xs font-black uppercase tracking-[0.04em] text-[#d95700]">
+              <span className="rounded-sm border border-[#3B66E0]/18 bg-[#EEF3FF] px-3 py-1.5 text-xs font-black uppercase tracking-[0.04em] text-[#2A4FBF]">
                 {getCategoryForProductType(expectedProductType) ?? expectedProductType}
               </span>
             </div>
           ) : null}
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-            <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+          <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div className="rounded-sm border border-black/15 bg-[#fafaf8] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
                 Market Intelligence özeti
               </p>
@@ -271,7 +296,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 {summaryHighlights.map((item) => (
                   <span
                     key={item}
-                    className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-semibold leading-5 text-black/55"
+                    className="rounded-sm border border-black/15 bg-white px-3 py-1.5 text-xs font-semibold leading-5 text-black/55"
                   >
                     {item}
                   </span>
@@ -282,7 +307,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   {summaryWarnings.map((item) => (
                     <span
                       key={item}
-                      className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold leading-5 text-amber-800"
+                      className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold leading-5 text-amber-800"
                     >
                       {item}
                     </span>
@@ -291,7 +316,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               ) : null}
             </div>
 
-            <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+            <div className="rounded-sm border border-black/15 bg-[#fafaf8] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
                 Analiz zamanı
               </p>
@@ -309,16 +334,11 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 üzerinden üretildi ve {formatOpportunityFreshness(opportunityAnalysis.dataFreshness)} sinyaliyle güncellendi.
               </p>
               {!hasEnoughData ? (
-                <div className="mt-4 flex gap-3 rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+                <div className="mt-4 flex gap-3 rounded-sm border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
                   <TriangleAlert className="mt-0.5 shrink-0" size={17} />
                   <span>Yetersiz veri: karar notu daha fazla ilan geldikçe otomatik olarak güçlenecek.</span>
                 </div>
-              ) : (
-                <div className="mt-4 flex gap-3 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-semibold leading-6 text-green-900">
-                  <BadgeCheck className="mt-0.5 shrink-0 text-green-700" size={17} />
-                  <span>Bu kategori sayfası yeterli veriyle oluşturuldu.</span>
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
         </section>
@@ -328,6 +348,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             { label: "Fırsatlar", href: "#firsatlar" },
             { label: "Popüler ürünler", href: "#populer-urunler" },
             { label: "Son ilanlar", href: "#son-ilanlar" },
+            { label: "Tüm ilanlar", href: "#tum-ilanlar" },
             { label: "Fiyatı düşenler", href: "#fiyati-dusenler" },
             { label: "Marka dağılımı", href: "#marka-dagilimi" },
             { label: "SSS", href: "#sss" },
@@ -335,21 +356,21 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             <a
               key={item.href}
               href={item.href}
-              className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+              className="shrink-0 rounded-sm border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF] hover:text-[#2A4FBF]"
             >
               {item.label}
             </a>
           ))}
         </nav>
 
-        <section id="firsatlar" className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <section id="firsatlar" className="mt-5 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
           <SectionTitle
             icon={BarChart3}
             eyebrow="Öne çıkan fırsatlar"
             title="En İyi Fırsatlar"
           />
           {topOpportunities.length > 0 ? (
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {topOpportunities.map((item) => (
                 <OpportunityCard key={item.productName} item={item} />
               ))}
@@ -359,14 +380,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           )}
         </section>
 
-        <section id="populer-urunler" className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <section id="populer-urunler" className="mt-5 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
           <SectionTitle
             icon={PackageSearch}
             eyebrow="Popüler sinyaller"
             title="En Popüler Ürünler"
           />
           {popularProducts.length > 0 ? (
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {popularProducts.map((item) => (
                 <PopularProductCard key={item.productName} item={item} />
               ))}
@@ -376,14 +397,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           )}
         </section>
 
-        <section id="son-ilanlar" className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <section id="son-ilanlar" className="mt-5 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
           <SectionTitle
             icon={Clock3}
             eyebrow="Yeni veri"
             title="Son Eklenen İlanlar"
           />
           {latestListings.length > 0 ? (
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {latestListings.map((listing) => (
                 <LatestListingCard key={listing.id} listing={listing} />
               ))}
@@ -393,14 +414,31 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           )}
         </section>
 
-        <section id="fiyati-dusenler" className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <section id="tum-ilanlar" className="mt-5 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
+          <SectionTitle
+            icon={PackageSearch}
+            eyebrow="Gezinme"
+            title="Tüm İlanlar"
+          />
+          {gridListings.length > 0 ? (
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {gridListings.map((listing) => (
+                <LatestListingCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="Bu kategori için henüz listelenecek ilan bulunmuyor." />
+          )}
+        </section>
+
+        <section id="fiyati-dusenler" className="mt-5 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
           <SectionTitle
             icon={TrendingDown}
             eyebrow="Piyasa trendi"
             title="Fiyatı Düşen Ürünler"
           />
           {marketPulse.fallingPriceProducts.length > 0 ? (
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {marketPulse.fallingPriceProducts.map((item) => (
                 <PopularProductCard key={item.productName} item={item} />
               ))}
@@ -410,8 +448,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           )}
         </section>
 
-        <section id="marka-dagilimi" className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <div className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <section id="marka-dagilimi" className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="rounded-sm border border-black/15 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
             <SectionTitle
               icon={Store}
               eyebrow="Marka dağılımı"
@@ -432,7 +470,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             )}
           </div>
 
-          <div className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+          <div className="rounded-sm border border-black/15 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
             <SectionTitle
               icon={BadgeCheck}
               eyebrow="Güven notları"
@@ -450,26 +488,26 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               {marketIntelligence.confidenceReasons.slice(0, 4).map((reason) => (
                 <span
                   key={reason}
-                  className="rounded-full border border-black/8 bg-[#fafaf8] px-3 py-1.5 text-xs font-semibold leading-5 text-black/55"
+                  className="rounded-sm border border-black/15 bg-[#fafaf8] px-3 py-1.5 text-xs font-semibold leading-5 text-black/55"
                 >
                   {reason}
                 </span>
               ))}
             </div>
-            <div className="mt-6 rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+            <div className="mt-6 rounded-sm border border-black/15 bg-[#fafaf8] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
                 İç linkleme
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
                   href="/market"
-                  className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+                  className="rounded-sm border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
                 >
                   Piyasa merkezi
                 </Link>
                 <Link
                   href={`/search?q=${encodeURIComponent(categoryName)}`}
-                  className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+                  className="rounded-sm border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-black/60 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
                 >
                   {categoryName} araması
                 </Link>
@@ -478,13 +516,13 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           </div>
         </section>
 
-        <section id="sss" className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+        <section id="sss" className="mt-5 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-4 sm:p-6">
           <SectionTitle icon={TriangleAlert} eyebrow="Sık sorulanlar" title="SSS" />
           <div className="mt-6 grid gap-3">
             {faqItems.map((faq) => (
               <details
                 key={faq.question}
-                className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4"
+                className="rounded-sm border border-black/15 bg-[#fafaf8] p-4"
               >
                 <summary className="cursor-pointer list-none text-sm font-black leading-6 text-black">
                   {faq.question}
@@ -494,6 +532,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             ))}
           </div>
         </section>
+        </CategoryShell>
       </div>
     </main>
   );
@@ -501,7 +540,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
 function OpportunityCard({ item }: { item: MarketPulseItem }) {
   return (
-    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:bg-white hover:shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
+    <article className="min-w-0 rounded-sm border border-black/15 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:bg-white hover:shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="break-words text-lg font-black leading-6">
@@ -511,7 +550,7 @@ function OpportunityCard({ item }: { item: MarketPulseItem }) {
             {item.listingCount} ilan · {item.searchCount} arama
           </p>
         </div>
-        <span className="rounded-full border border-green-200 bg-white px-3 py-1.5 text-[11px] font-black text-green-700">
+        <span className="rounded-sm border border-green-200 bg-white px-3 py-1.5 text-[11px] font-black text-green-700">
           {item.decisionLabel}
         </span>
       </div>
@@ -541,7 +580,7 @@ function OpportunityCard({ item }: { item: MarketPulseItem }) {
 
 function PopularProductCard({ item }: { item: MarketPulseItem }) {
   return (
-    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5">
+    <article className="min-w-0 rounded-sm border border-black/15 bg-[#fafaf8] p-5">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="break-words text-lg font-black leading-6">
@@ -551,7 +590,7 @@ function PopularProductCard({ item }: { item: MarketPulseItem }) {
             {item.listingCount} ilan · {item.searchCount} arama
           </p>
         </div>
-        <span className="rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
+        <span className="rounded-sm border border-[#3B66E0]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#2A4FBF]">
           {item.opportunityLabel}
         </span>
       </div>
@@ -576,7 +615,7 @@ function PopularProductCard({ item }: { item: MarketPulseItem }) {
 
 function LatestListingCard({ listing }: { listing: CategoryListingRecord }) {
   return (
-    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5">
+    <article className="min-w-0 rounded-sm border border-black/15 bg-[#fafaf8] p-5">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.08em] text-black/35">
@@ -591,7 +630,7 @@ function LatestListingCard({ listing }: { listing: CategoryListingRecord }) {
           ) : null}
       </div>
 
-      <p className="mt-4 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
+      <p className="mt-4 text-2xl font-black tracking-[-0.04em] text-[#3B66E0]">
         {formatPrice(listing.price)}
       </p>
 
@@ -608,9 +647,9 @@ function LatestListingCard({ listing }: { listing: CategoryListingRecord }) {
       </div>
 
       <a
-        href={listing.url}
+        href={listingOutboundPath(listing.id)}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener noreferrer nofollow"
         className="orange-button mt-5 w-full justify-center py-3"
       >
         İlana Git
@@ -634,12 +673,12 @@ function BrandCard({
   totalListings: number;
 }) {
   return (
-    <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+    <div className="rounded-sm border border-black/15 bg-[#fafaf8] p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
             href={`/brand/${brand.brandSlug}`}
-            className="break-words text-sm font-black transition hover:text-[#d95700]"
+            className="break-words text-sm font-black transition hover:text-[#2A4FBF]"
           >
             {brand.brandName}
           </Link>
@@ -647,14 +686,14 @@ function BrandCard({
             {brand.productCount} ürün · {brand.listingCount} ilan
           </p>
         </div>
-        <span className="rounded-full border border-white bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
+        <span className="rounded-sm border border-white bg-white px-3 py-1.5 text-[11px] font-black text-[#2A4FBF]">
           %{Math.round(brand.share * 100)}
         </span>
       </div>
       {totalListings > 0 ? (
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-black/5">
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-sm bg-black/5">
           <div
-            className="h-full rounded-full bg-[#ff6b00]"
+            className="h-full rounded-sm bg-[#3B66E0]"
             style={{ width: `${Math.max(4, Math.round(brand.share * 100))}%` }}
           />
         </div>
@@ -673,13 +712,13 @@ function StatCard({
   accent?: boolean;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+    <div className="min-w-0 rounded-sm border border-black/15 bg-[#fafaf8] p-4">
       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
         {label}
       </p>
       <p
         className={`mt-2 break-words text-base font-black leading-6 ${
-          accent ? "text-[#d95700]" : ""
+          accent ? "text-[#2A4FBF]" : ""
         }`}
         title={value}
       >
@@ -699,13 +738,13 @@ function MiniMetric({
   accent?: boolean;
 }) {
   return (
-    <div className="min-w-0 rounded-xl border border-black/8 bg-white p-3">
+    <div className="min-w-0 rounded-sm border border-black/15 bg-white p-3">
       <p className="text-[10px] font-black uppercase tracking-[0.06em] text-black/35">
         {label}
       </p>
       <p
         className={`mt-1 truncate text-sm font-black ${
-          accent ? "text-[#ff6b00]" : ""
+          accent ? "text-[#3B66E0]" : ""
         }`}
         title={value}
       >
@@ -726,11 +765,11 @@ function SectionTitle({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+      <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-[#E4ECFF] text-[#3B66E0]">
         <Icon size={21} />
       </span>
       <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#ff6b00]">
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#3B66E0]">
           {eyebrow}
         </p>
         <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">{title}</h2>
@@ -741,7 +780,7 @@ function SectionTitle({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-12 text-center text-sm font-semibold text-black/45">
+    <div className="rounded-sm border border-dashed border-black/15 bg-[#fafaf8] px-6 py-12 text-center text-sm font-semibold text-black/45">
       {text}
     </div>
   );

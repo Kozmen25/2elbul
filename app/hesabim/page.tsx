@@ -16,6 +16,11 @@ import { logout } from "@/app/auth/actions";
 import { uploadAvatar, deleteAvatar, setAvatarPreset } from "@/app/account/actions";
 import { AvatarControl } from "@/components/avatar";
 import { AvatarPicker } from "@/components/avatar-picker";
+import { ChangePasswordForm } from "@/components/change-password-form";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { NotificationPreferences } from "@/components/notification-preferences";
+import { loadSmtpConfig } from "@/lib/email/settings";
+import { expandSettings, parseNotificationSettings } from "@/lib/notifications/preferences";
 import { ProfileSettingsForm } from "@/components/profile-settings-form";
 import { ListingImage } from "@/components/listing-image";
 import { PriceAlertsList } from "@/components/price-alerts-list";
@@ -59,13 +64,13 @@ export default async function AccountPage() {
         .eq("user_id", data.user.id),
       supabase
         .from("price_alerts")
-        .select("id, target_price, current_price, status, created_at, product_id, listing_id, products(name), listings(title)")
+        .select("id, target_price, current_price, status, created_at, product_id, listing_id, products(name, slug), listings(title)")
         .eq("user_id", data.user.id)
         .neq("status", "cancelled")
         .order("created_at", { ascending: false }),
       fetchUserListings(supabase, data.user.id),
       getSavedSearches(),
-      supabase.from("profiles").select("display_name, location, bio, avatar_url").eq("user_id", data.user.id).maybeSingle(),
+      supabase.from("profiles").select("display_name, location, bio, avatar_url, email_notifications").eq("user_id", data.user.id).maybeSingle(),
     ]);
 
   if (favoritesResult.error) {
@@ -86,12 +91,26 @@ export default async function AccountPage() {
   const alertCount = alertRows.length;
   const listings = listingsResult.data ?? [];
   const profile = profileResult.data ?? null;
+
+  // Read apart from the profile: a database that has not run the
+  // notification-settings migration yet then still shows the profile, with
+  // every notification kind on.
+  const settingsResult = await supabase
+    .from("profiles")
+    .select("notification_settings")
+    .eq("user_id", data.user.id)
+    .maybeSingle();
+  const notificationGrid = expandSettings(parseNotificationSettings(settingsResult.data?.notification_settings));
+
+  const adminClient = createSupabaseAdminClient();
+  const emailServiceReady = adminClient ? (await loadSmtpConfig(adminClient)).status === "ready" : false;
   const displayName = String(profile?.display_name ?? data.user.email ?? "Hesap");
   const priceAlerts = alertRows.map((alert) => ({
     id: String(alert.id),
     productName: String(
-      (alert.products as { name?: string } | null)?.name ?? "Ürün",
+      alert.products?.name ?? alert.listings?.title ?? "Ürün",
     ),
+    productSlug: alert.products?.slug ?? null,
     targetPrice: Number(alert.target_price),
     currentPrice:
       alert.current_price === null || alert.current_price === undefined
@@ -108,7 +127,7 @@ export default async function AccountPage() {
         <section className="rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-9">
           <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
             <div>
-              <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+              <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
                 <UserRound size={24} />
               </span>
               <h1 className="mt-5 text-3xl font-black tracking-[-0.04em]">
@@ -186,7 +205,7 @@ export default async function AccountPage() {
           <section className="mt-8 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
               <div>
-                <p className="text-sm font-bold text-[#ff6b00]">Profil ayarları</p>
+                <p className="text-sm font-bold text-[#3B66E0]">Profil ayarları</p>
                 <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">
                   Bilgilerini düzenle
                 </h2>
@@ -202,6 +221,28 @@ export default async function AccountPage() {
                 bio={profile?.bio}
               />
             </div>
+          </section>
+
+          <section id="bildirim-tercihleri" className="mt-5 scroll-mt-24 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
+            <p className="text-sm font-bold text-[#3B66E0]">Bildirimler</p>
+            <h2 className="mt-1 mb-1 text-xl font-black tracking-[-0.035em]">Bildirim tercihlerin</h2>
+            <p className="mb-4 text-xs font-semibold text-black/40">
+              Hangi gelişmelerden nerede haberdar olmak istediğini seç.
+            </p>
+            <NotificationPreferences
+              initialGrid={notificationGrid}
+              initialEmailEnabled={profile?.email_notifications ?? true}
+              emailServiceReady={emailServiceReady}
+            />
+          </section>
+
+          <section className="mt-5 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
+            <p className="text-sm font-bold text-[#3B66E0]">Güvenlik</p>
+            <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">Şifreni değiştir</h2>
+            <p className="mt-1 mb-5 text-xs font-semibold text-black/40">
+              Değiştirdiğinde diğer cihazlardaki oturumların kapatılır.
+            </p>
+            <ChangePasswordForm />
           </section>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -224,7 +265,7 @@ export default async function AccountPage() {
         <section className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-9">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="text-sm font-bold text-[#ff6b00]">İlanlarım</p>
+              <p className="text-sm font-bold text-[#3B66E0]">İlanlarım</p>
               <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
                 Eklediğim ilanlar
               </h2>
@@ -270,7 +311,7 @@ export default async function AccountPage() {
                   <h3 className="mt-4 font-black leading-6">
                     {String(listing.title)}
                   </h3>
-                  <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
+                  <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#3B66E0]">
                     {formatPrice(Number(listing.price))}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm text-black/50">
@@ -283,7 +324,7 @@ export default async function AccountPage() {
                     href={String(listing.url)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-5 flex items-center gap-1.5 text-sm font-bold text-[#ff6b00] hover:underline"
+                    className="mt-5 flex items-center gap-1.5 text-sm font-bold text-[#3B66E0] hover:underline"
                   >
                     İlana git <ArrowUpRight size={16} />
                   </a>
@@ -302,7 +343,7 @@ export default async function AccountPage() {
         </section>
 
         <section className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-9">
-          <p className="text-sm font-bold text-[#ff6b00]">Fiyat alarmları</p>
+          <p className="text-sm font-bold text-[#3B66E0]">Fiyat alarmları</p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
             Takip ettiğim ürünler
           </h2>
@@ -313,7 +354,7 @@ export default async function AccountPage() {
         </section>
 
         <section className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-9">
-          <p className="text-sm font-bold text-[#ff6b00]">Kaydedilmiş Aramalar</p>
+          <p className="text-sm font-bold text-[#3B66E0]">Kaydedilmiş Aramalar</p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
             Takip ettiğim aramalar
           </h2>
@@ -385,7 +426,7 @@ function InfoCard({
   return (
     <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4 sm:p-5">
       <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-black/40">
-        <span className="text-[#ff6b00]">{icon}</span>
+        <span className="text-[#3B66E0]">{icon}</span>
         {label}
       </p>
       <p className="mt-3 break-all font-bold">{value}</p>
@@ -407,9 +448,9 @@ function StatCard({
   href?: string;
 }) {
   const content = (
-    <div className="h-full rounded-2xl border border-black/8 p-5 transition hover:border-[#ff6b00]/30">
+    <div className="h-full rounded-2xl border border-black/8 p-5 transition hover:border-[#3B66E0]/30">
       <div className="flex items-center justify-between">
-        <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+        <span className="grid size-10 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
           {icon}
         </span>
         <span className="text-3xl font-black tracking-[-0.04em]">{count}</span>

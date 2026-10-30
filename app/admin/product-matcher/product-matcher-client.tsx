@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { runPlaygroundAction, type PlaygroundResult } from "@/app/admin/ai/actions";
 
 type MatcherSignals = {
   brand: string | null;
@@ -48,12 +49,21 @@ export function ProductMatcherClient() {
   const [result, setResult] = useState<MatcherResult | null>(null);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [aiOpinion, setAiOpinion] = useState<PlaygroundResult | null>(null);
+  const [aiPending, startAiTransition] = useTransition();
+
+  // Second opinion from Gemini on the same title (suggestion only; nothing is written).
+  function askAi() {
+    setAiOpinion(null);
+    startAiTransition(async () => setAiOpinion(await runPlaygroundAction("match", result?.inputTitle ?? title)));
+  }
 
   function runTest(value = title) {
     const nextTitle = value.trim();
     setTitle(nextTitle);
     setError("");
     setResult(null);
+    setAiOpinion(null);
 
     startTransition(async () => {
       try {
@@ -106,7 +116,7 @@ export function ProductMatcherClient() {
               key={example}
               type="button"
               onClick={() => runTest(example)}
-              className="rounded-full border border-black/10 bg-[#fafaf8] px-3 py-2 text-xs font-bold text-black/55 hover:border-[#ff6b00]/30 hover:text-[#ff6b00]"
+              className="rounded-full border border-black/10 bg-[#fafaf8] px-3 py-2 text-xs font-bold text-black/55 hover:border-[#3B66E0]/30 hover:text-[#3B66E0]"
             >
               {example}
             </button>
@@ -134,6 +144,42 @@ export function ProductMatcherClient() {
             }
             accent={!result.matchedProduct}
           />
+
+          <div className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black tracking-[-0.025em]">AI görüşü</h2>
+                <p className="mt-1 text-sm text-black/50">
+                  Gemini bu başlığı mevcut ürünlerle karşılaştırır. Yalnızca öneridir, kayıt değiştirmez.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={askAi}
+                disabled={aiPending}
+                className="rounded-xl border border-black/12 px-5 py-3 text-sm font-bold transition hover:border-[#3B66E0]/40 disabled:opacity-50"
+              >
+                {aiPending ? "AI düşünüyor..." : "AI görüşü al"}
+              </button>
+            </div>
+            {aiOpinion && !aiOpinion.ok && (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{aiOpinion.message}</p>
+            )}
+            {aiOpinion?.ok && aiOpinion.kind === "match" && (
+              <div className="mt-3 rounded-xl bg-[#fafaf8] p-4 text-sm">
+                <p className="font-black">
+                  {aiOpinion.matchedName ? `Eşleşme: ${aiOpinion.matchedName}` : "Mevcut ürünlerin hiçbiri uymuyor"}{" "}
+                  <span className="font-semibold text-black/45">(güven %{Math.round(aiOpinion.judgement.confidence * 100)})</span>
+                </p>
+                {aiOpinion.judgement.reason && <p className="mt-1 text-black/60">{aiOpinion.judgement.reason}</p>}
+                {result.wouldCreate && aiOpinion.matchedName && (
+                  <p className="mt-2 text-xs font-bold text-amber-700">
+                    Kural tabanlı eşleştirici yeni ürün oluşturacaktı; AI mevcut bir ürünle eşleşme görüyor. Olası yinelenen ürün.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] lg:col-span-2">
             <h2 className="text-lg font-black tracking-[-0.025em]">
@@ -173,7 +219,7 @@ function ResultCard({
   return (
     <div
       className={`rounded-2xl border p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] ${
-        accent ? "border-[#ff6b00]/20 bg-[#fff7f1]" : "border-black/8 bg-white"
+        accent ? "border-[#3B66E0]/20 bg-[#EEF3FF]" : "border-black/8 bg-white"
       }`}
     >
       <p className="text-xs font-black uppercase tracking-[0.12em] text-black/40">

@@ -7,6 +7,7 @@ const {
   logAdminActionMock,
   revalidatePathMock,
   getSiteUrlMock,
+  createRecoveryEmailClientMock,
 } = vi.hoisted(() => ({
   requireAdminUserMock: vi.fn(),
   isAdminEmailMock: vi.fn(),
@@ -14,6 +15,7 @@ const {
   logAdminActionMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   getSiteUrlMock: vi.fn(),
+  createRecoveryEmailClientMock: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -35,6 +37,10 @@ vi.mock("@/lib/auth/audit", () => ({
 
 vi.mock("@/lib/site-url", () => ({
   getSiteUrl: getSiteUrlMock,
+}));
+
+vi.mock("@/lib/auth/recovery-email", () => ({
+  createRecoveryEmailClient: createRecoveryEmailClientMock,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -107,7 +113,7 @@ describe("resetUserPassword — email flow, never the recovery link/token", () =
       error: null,
     }));
     const resetMock = vi.fn(async () => ({ error: null }));
-    client.auth.admin.resetPasswordForEmail = resetMock;
+    createRecoveryEmailClientMock.mockReturnValue({ auth: { resetPasswordForEmail: resetMock } });
 
     const result = await resetUserPassword("t-1");
 
@@ -118,7 +124,7 @@ describe("resetUserPassword — email flow, never the recovery link/token", () =
     });
     expect(resetMock).toHaveBeenCalledWith(
       "target@example.com",
-      { redirectTo: "https://2elbul.test/auth/callback" },
+      { redirectTo: "https://2elbul.test/auth/recovery" },
     );
     expect(logAdminActionMock).toHaveBeenCalledWith(
       client,
@@ -134,6 +140,37 @@ describe("resetUserPassword — email flow, never the recovery link/token", () =
     expect(logAdminActionMock.mock.calls[0][2]).not.toHaveProperty("resetLink");
   });
 
+  it("reports a failed send without logging an audit entry", async () => {
+    const client = createSupabaseAdminClientMock();
+    client.auth.admin.getUserById = vi.fn(async () => ({
+      data: { user: { id: "t-1", email: "target@example.com" } },
+      error: null,
+    }));
+    createRecoveryEmailClientMock.mockReturnValue({
+      auth: { resetPasswordForEmail: vi.fn(async () => ({ error: { message: "rate limit" } })) },
+    });
+
+    const result = await resetUserPassword("t-1");
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("gönderilemedi");
+    expect(logAdminActionMock).not.toHaveBeenCalled();
+  });
+
+  it("fails cleanly when the mail client is not configured", async () => {
+    const client = createSupabaseAdminClientMock();
+    client.auth.admin.getUserById = vi.fn(async () => ({
+      data: { user: { id: "t-1", email: "target@example.com" } },
+      error: null,
+    }));
+    createRecoveryEmailClientMock.mockReturnValue(null);
+
+    const result = await resetUserPassword("t-1");
+
+    expect(result.ok).toBe(false);
+    expect(logAdminActionMock).not.toHaveBeenCalled();
+  });
+
   it("refuses when the target email is unknown", async () => {
     const client = createSupabaseAdminClientMock();
     client.auth.admin.getUserById = vi.fn(async () => ({ data: { user: null }, error: null }));
@@ -141,7 +178,7 @@ describe("resetUserPassword — email flow, never the recovery link/token", () =
     const result = await resetUserPassword("t-1");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("e-posta");
-    expect(client.auth.admin.resetPasswordForEmail).toBeUndefined();
+    expect(createRecoveryEmailClientMock).not.toHaveBeenCalled();
   });
 });
 

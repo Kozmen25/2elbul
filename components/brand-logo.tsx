@@ -34,7 +34,7 @@ export function BrandLogo({
     <>
       <span
         aria-hidden="true"
-        className={`grid shrink-0 place-items-center bg-[#ff6b00] font-black leading-none tracking-[-0.05em] text-white shadow-[0_5px_16px_rgba(255,107,0,0.22)] ${classes.mark}`}
+        className={`grid shrink-0 place-items-center bg-[#3B66E0] font-black leading-none tracking-[-0.05em] text-white shadow-[0_5px_16px_rgba(59,102,224,0.22)] ${classes.mark}`}
       >
         2
       </span>
@@ -60,7 +60,7 @@ export function BrandLogo({
   return (
     <Link
       href="/"
-      className={`${className} rounded-xl outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-[#ff6b00] focus-visible:ring-offset-4`}
+      className={`${className} rounded-xl outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-[#3B66E0] focus-visible:ring-offset-4`}
       aria-label="2ElBul ana sayfa"
     >
       {logo}

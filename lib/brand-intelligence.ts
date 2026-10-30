@@ -3,6 +3,10 @@ import type { ConfidenceLevel } from "@/lib/confidence-engine";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
 import { isMissingStatusColumn, isMissingAttributesColumn, isMissingProductCategoryColumn, isMissingListingUpdatedAtColumn } from "@/lib/listing-status";
 import { calculateProductIntelligence, type ProductIntelligence } from "@/lib/intelligence-engine";
+import {
+  buildLandingFaqItems,
+  snapshotFromMarketIntelligence,
+} from "@/lib/seo/landing-content";
 import { buildMarketIntelligence, type MarketIntelligence, type MarketIntelligenceListing } from "@/lib/market-intelligence";
 import {
   toConfidenceResult,
@@ -26,6 +30,7 @@ import {
   type OpportunityAnalysis,
 } from "@/lib/opportunity-engine";
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
+import { toBigintIds } from "@/lib/supabase-ids";
 
 export type BrandCatalogEntry = {
   slug: string;
@@ -318,11 +323,7 @@ export const getBrandPageData = cache(
       .slice(0, 6);
     const faqItems = buildBrandFaqItems({
       brandName,
-      listingCount: marketIntelligence.marketSummary.totalListingCount,
-      productCount: brandProducts.length,
-      sourceCount: marketIntelligence.marketSummary.sourceCount,
       marketIntelligence,
-      opportunityAnalysis,
     });
     const jsonLd = buildBrandJsonLd({
       brandName,
@@ -391,52 +392,15 @@ export function buildBrandCatalog(products: BrandCatalogRow[]): BrandCatalogEntr
     );
 }
 
+/** User-facing FAQ, answered from live market numbers (shared with every landing page). */
 export function buildBrandFaqItems({
   brandName,
-  listingCount,
-  productCount,
-  sourceCount,
   marketIntelligence,
-  opportunityAnalysis,
 }: {
   brandName: string;
-  listingCount: number;
-  productCount: number;
-  sourceCount: number;
-  marketIntelligence: MarketIntelligence;
-  opportunityAnalysis: OpportunityAnalysis;
+  marketIntelligence: Pick<MarketIntelligence, "priceAnalysis" | "marketSummary">;
 }): BrandFaqItem[] {
-  const listingText =
-    listingCount > 0
-      ? `${listingCount.toLocaleString("tr-TR")} ilan`
-      : "henüz yeterli ilan";
-  const sourceText =
-    sourceCount > 0
-      ? `${sourceCount.toLocaleString("tr-TR")} kaynak`
-      : "kaynak çeşitliliği oluşmadan";
-
-  return [
-    {
-      question: `${brandName} marka sayfası nasıl hazırlanıyor?`,
-      answer: `2ElBul, ${brandName} ile eşleşen ürünleri ve bu ürünlere bağlı ilanları tek yerde toplar. Market Intelligence, Opportunity Engine ve Product Matcher çıktıları birlikte kullanılır.`,
-    },
-    {
-      question: "En iyi fırsatlar nasıl seçiliyor?",
-      answer: `Fırsat skoru, risk seviyesi, confidence ve duplicate yoğunluğu birlikte değerlendirilir. Bu sayfada ${brandName} için en güçlü sinyaller öne çıkarılır.`,
-    },
-    {
-      question: "Yetersiz veri ne zaman gösterilir?",
-      answer: `${brandName} için ${listingText} oluştuğunda ve yeterli karşılaştırma kurulamadığında güvenli fallback gösterilir; karar notu veri çoğaldıkça otomatik güçlenir.`,
-    },
-    {
-      question: "Kaynak sayısı neden önemli?",
-      answer: `${sourceText} analiz yapmak fiyat bandını daha güvenilir hale getirir. ${marketIntelligence.sampleSize.toLocaleString("tr-TR")} ilan üzerinden üretilen kararlar daha dengeli olur.`,
-    },
-    {
-      question: "Bu sayfa SEO için neden uygun?",
-      answer: `${brandName} sayfası marka bazlı, kanonik ve tekrar üretilebilir bir analiz katmanı sunar. Bu yapı ileride programmatic SEO, marka sayfaları ve analiz sayfaları için ölçeklenebilir bir temel oluşturur.`,
-    },
-  ];
+  return buildLandingFaqItems("brand", brandName, snapshotFromMarketIntelligence(marketIntelligence));
 }
 
 export function buildBrandJsonLd({
@@ -703,7 +667,7 @@ async function fetchBrandListingBatch(
       ...(useStatusColumn ? ["status"] : []),
     ].join(", ");
 
-    let query = supabase.from("listings").select(columns).in("product_id", productIds);
+    let query = supabase.from("listings").select(columns).in("product_id", toBigintIds(productIds));
     if (useStatusColumn) {
       query = query.in("status", ["published", "active"]);
     }

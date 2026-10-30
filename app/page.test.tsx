@@ -39,19 +39,19 @@ describe("Home page", () => {
 
     const html = renderToStaticMarkup(await Home());
 
-    expect(html).toContain("AI Kararı");
+    expect(html).toContain("AI Piyasa Kararı");
     expect(html).toContain("iPhone 15 Pro");
     expect(html).toContain("Fırsat skoru");
     expect(html).toContain("Şimdi Al");
-    expect(html).toContain("Bu öneri 18 ilan, 3 kaynak ve 12 arama sinyali üzerinden hesaplandı.");
     expect(html).toContain("En iyi fırsatlar");
     expect(html).toContain("Piyasa Nabzı");
     expect(html).toContain("Son eklenen ilanlar");
     expect(html).toContain("Kategoriler");
     expect(html).toContain("Kaynaklara göre ilanlar");
     expect(html).toContain("Güven ağı");
-    expect(html).toContain("md:hidden");
-    expect(html).toContain("fixed inset-x-3 bottom-3");
+    // The mobile bottom navigation is global (components/mobile-bottom-nav.tsx),
+    // so the homepage must not render a second one.
+    expect(html).not.toContain("fixed inset-x-3 bottom-3");
     expect(html).not.toContain("Hızlı Keşif");
     expect(html).not.toContain("Yenilenmiş cihazlar");
     expect(html).not.toContain("Popüler ürünler");
@@ -71,7 +71,6 @@ describe("Home page", () => {
     const html = renderToStaticMarkup(await Home());
 
     expect(html).toContain("Yeterli veri oluşunca karar sinyali burada görünecek.");
-    expect(html).toContain("Kaynaklar ve ilanlar çoğaldıkça 2ElBul");
   });
 
   it("keeps the market pulse compact to three visible signals per group", async () => {

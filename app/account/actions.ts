@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isLikelyImage } from "@/lib/image-signature";
+import { compactSettings } from "@/lib/notifications/preferences";
 import { isPresetAvatarId, presetAvatarUrl } from "@/lib/preset-avatars";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getSupabaseConfig } from "@/lib/supabase-config";
@@ -35,31 +37,6 @@ const ALLOWED_AVATAR_TYPES = new Set([
 // contain it may ever have a storage object removed; preset avatars and any
 // other path are served from /public and must never be deleted.
 const AVATAR_STORAGE_MARKER = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
-
-function isLikelyImage(buf: Uint8Array) {
-  if (buf.length < 8) return false;
-  // PNG, JPEG (SOI + APP0/APP1), and WebP ("RIFF....WEBP") magic bytes.
-  const head = Array.from(buf.slice(0, 8));
-  const png = [137, 80, 78, 71, 13, 10, 26, 10];
-  if (png.every((byte, i) => head[i] === byte)) return true;
-  if (
-    buf[0] === 0xff &&
-    buf[1] === 0xd8 &&
-    buf[2] === 0xff &&
-    (buf[3] === 0xe0 || buf[3] === 0xe1)
-  ) {
-    return true;
-  }
-  const riff = Array.from(buf.slice(0, 4));
-  const webp = Array.from(buf.slice(8, 12));
-  if (
-    [0x52, 0x49, 0x46, 0x46].every((byte, i) => riff[i] === byte) &&
-    [0x57, 0x45, 0x42, 0x50].every((byte, i) => webp[i] === byte)
-  ) {
-    return true;
-  }
-  return false;
-}
 
 function publicAvatarUrl(userId: string, extension: string) {
   const config = getSupabaseConfig();
@@ -315,4 +292,61 @@ function profileWriteErrorMessage(
     return "Profil yazma yetkisi yok. Lütfen tekrar giriş yapıp deneyin.";
   }
   return fallback;
+}
+
+/**
+ * Switches e-mail copies of notifications (price alerts, price drops, saved
+ * searches) on or off for the signed-in user. In-app notifications and account
+ * e-mails (sign-up confirmation, password reset) are not affected.
+ */
+export async function setEmailNotifications(enabled: boolean): Promise<AccountActionResult> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Supabase bağlantısı yapılandırılmamış." };
+
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return { ok: false, requiresAuth: true, message: "Bu işlem için giriş yapmalısınız." };
+
+  // upsert: the profile row is normally created at sign-up, but older accounts may lack it.
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({ user_id: data.user.id, email_notifications: Boolean(enabled) }, { onConflict: "user_id" });
+
+  if (error) {
+    console.error("Email notification preference save failed:", error);
+    return { ok: false, message: "Tercih kaydedilemedi. Lütfen tekrar deneyin." };
+  }
+
+  revalidatePath("/hesabim");
+  return {
+    ok: true,
+    message: enabled ? "E-posta bildirimleri açıldı." : "E-posta bildirimleri kapatıldı. Uygulama içi bildirimler devam eder.",
+  };
+}
+
+/**
+ * Saves which notification kinds the signed-in user wants in the app and by
+ * e-mail. `grid` is the complete kind x channel grid from the account page;
+ * only values that differ from the default ("on") are stored.
+ */
+export async function saveNotificationSettings(grid: unknown): Promise<AccountActionResult> {
+  const settings = compactSettings(grid);
+  if (!settings) return { ok: false, message: "Geçersiz bildirim tercihi." };
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, message: "Supabase bağlantısı yapılandırılmamış." };
+
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return { ok: false, requiresAuth: true, message: "Bu işlem için giriş yapmalısınız." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({ user_id: data.user.id, notification_settings: settings }, { onConflict: "user_id" });
+
+  if (error) {
+    console.error("Notification settings save failed:", error);
+    return { ok: false, message: "Tercih kaydedilemedi. Lütfen tekrar deneyin." };
+  }
+
+  revalidatePath("/hesabim");
+  return { ok: true, message: "Bildirim tercihlerin kaydedildi." };
 }

@@ -65,7 +65,7 @@ export default async function AdminPriceAlertsPage() {
         title="Fiyat Alarmları"
         description="Kullanıcıların hedef fiyat alarmlarını, tetiklenen kayıtları ve iptal edilen takipleri izleyin."
         action={
-          <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
             <BellRing size={24} />
           </span>
         }
@@ -110,7 +110,7 @@ export default async function AdminPriceAlertsPage() {
                           </p>
                         ) : null}
                       </td>
-                      <td className="px-4 py-4 font-black text-[#ff6b00]">
+                      <td className="px-4 py-4 font-black text-[#3B66E0]">
                         {formatPrice(alert.targetPrice)}
                       </td>
                       <td className="px-4 py-4">
@@ -155,7 +155,7 @@ function StatCard({
     tone === "green"
       ? "text-green-700"
       : tone === "orange"
-        ? "text-[#ff6b00]"
+        ? "text-[#3B66E0]"
         : "text-black";
 
   return (
@@ -173,7 +173,7 @@ function StatusBadge({ status }: { status: string }) {
     status === "active"
       ? "bg-green-100 text-green-700"
       : status === "triggered"
-        ? "bg-[#fff1e7] text-[#ff6b00]"
+        ? "bg-[#E4ECFF] text-[#3B66E0]"
         : status === "paused"
           ? "bg-amber-100 text-amber-700"
           : "bg-black/7 text-black/45";

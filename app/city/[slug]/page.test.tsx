@@ -346,7 +346,7 @@ describe("city page metadata", () => {
       params: Promise.resolve({ slug: "istanbul" }),
     });
 
-    expect(metadata.title).toBe("İstanbul ikinci el piyasa analizi | 2ElBul");
+    expect(metadata.title).toMatch(/^İstanbul İkinci El İlanları ve Fiyatları \(\S+ \d{4}\) \| 2ElBul$/);
     expect(metadata.alternates?.canonical).toBe("https://2elbul.com/city/istanbul");
     expect(metadata.openGraph?.url).toBe("https://2elbul.com/city/istanbul");
   });
@@ -374,7 +374,8 @@ describe("city page render", () => {
       { slug: "apple", name: "Apple", productCount: 5, latestProductAt: null },
     ]);
     getCategoryCatalogMock.mockResolvedValue([
-      { slug: "telefon", label: "Telefon", productCount: 8, latestListingAt: null },
+      { id: 1, slug: "telefon", label: "Telefon", parentSlug: null, icon: null, productCount: 8, listingCount: 20, latestListingAt: null },
+      { id: 10, slug: "bilgisayar-laptop", label: "Laptop", parentSlug: "bilgisayar", icon: null, productCount: 3, listingCount: 9, latestListingAt: null },
     ]);
   });
 
@@ -456,7 +457,9 @@ describe("city page render", () => {
     );
 
     expect(html).toContain("Galaxy S22 256 GB");
-    expect(html).toContain("https://example.com/listing-2");
+    // Outbound links go through /git so a dead listing is never opened.
+    expect(html).toContain('href="/git/listing-2"');
+    expect(html).not.toContain('href="https://example.com/listing-2"');
     expect(html).toContain("İlana Git");
   });
 

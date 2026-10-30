@@ -1,13 +1,16 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { BellRing, Pause, Play, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
-import { deactivatePriceAlert } from "@/app/price-alerts/actions";
+import { useState, useTransition } from "react";
+import { setPriceAlertStatus } from "@/app/price-alerts/actions";
+import type { PriceAlertStatus } from "@/lib/price-alerts/rules";
 
 export type UserPriceAlert = {
   id: string;
   productName: string;
+  productSlug: string | null;
   targetPrice: number;
   currentPrice: number | null;
   status: string;
@@ -17,6 +20,16 @@ export type UserPriceAlert = {
 export function PriceAlertsList({ alerts }: { alerts: UserPriceAlert[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function changeStatus(alertId: string, status: PriceAlertStatus) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setPriceAlertStatus(alertId, status);
+      if (!result.ok) setError(result.message);
+      router.refresh();
+    });
+  }
 
   if (!alerts.length) {
     return (
@@ -26,6 +39,7 @@ export function PriceAlertsList({ alerts }: { alerts: UserPriceAlert[] }) {
 
   return (
     <div className="mt-4 grid gap-3">
+      {error && <p className="text-sm font-bold text-red-600">{error}</p>}
       {alerts.map((alert) => (
         <div
           key={alert.id}
@@ -33,7 +47,13 @@ export function PriceAlertsList({ alerts }: { alerts: UserPriceAlert[] }) {
         >
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate font-black">{alert.productName}</p>
+              {alert.productSlug ? (
+                <Link href={`/product/${alert.productSlug}`} className="truncate font-black hover:text-[#2A4FBF]">
+                  {alert.productName}
+                </Link>
+              ) : (
+                <p className="truncate font-black">{alert.productName}</p>
+              )}
               <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusClass(alert.status)}`}>
                 {statusLabel(alert.status)}
               </span>
@@ -53,24 +73,39 @@ export function PriceAlertsList({ alerts }: { alerts: UserPriceAlert[] }) {
               </p>
             </div>
           </div>
-          {alert.status !== "cancelled" ? (
-            <button
-              type="button"
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {alert.status === "active" ? (
+              <AlertButton
+                label="Duraklat"
+                icon={<Pause size={16} />}
+                disabled={pending}
+                onClick={() => changeStatus(alert.id, "paused")}
+              />
+            ) : null}
+            {alert.status === "paused" ? (
+              <AlertButton
+                label="Sürdür"
+                icon={<Play size={16} />}
+                disabled={pending}
+                onClick={() => changeStatus(alert.id, "active")}
+              />
+            ) : null}
+            {alert.status === "triggered" ? (
+              <AlertButton
+                label="Yeniden kur"
+                icon={<BellRing size={16} />}
+                disabled={pending}
+                onClick={() => changeStatus(alert.id, "active")}
+              />
+            ) : null}
+            <AlertButton
+              label="İptal"
+              icon={<Trash2 size={16} />}
               disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  await deactivatePriceAlert(alert.id);
-                  router.refresh();
-                })
-              }
-              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-red-200 px-3 text-sm font-bold text-red-600 disabled:opacity-50"
-              title="Alarmı iptal et"
-              aria-label="Alarmı iptal et"
-            >
-              <Trash2 size={16} />
-              İptal
-            </button>
-          ) : null}
+              danger
+              onClick={() => changeStatus(alert.id, "cancelled")}
+            />
+          </div>
         </div>
       ))}
     </div>
@@ -87,7 +122,7 @@ function statusLabel(status: string) {
 
 function statusClass(status: string) {
   if (status === "active") return "bg-green-100 text-green-700";
-  if (status === "triggered") return "bg-[#fff1e7] text-[#ff6b00]";
+  if (status === "triggered") return "bg-[#E4ECFF] text-[#3B66E0]";
   if (status === "paused") return "bg-amber-100 text-amber-700";
   return "bg-black/7 text-black/45";
 }
@@ -106,4 +141,33 @@ function formatDate(value: string) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function AlertButton({
+  label,
+  icon,
+  disabled,
+  danger = false,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      className={`flex h-10 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold disabled:opacity-50 ${
+        danger ? "border-red-200 text-red-600" : "border-black/10 text-black/65 hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
 }

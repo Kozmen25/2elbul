@@ -1,4 +1,12 @@
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import {
+  buildLandingDescription,
+  buildLandingTitle,
+  isIndexableSnapshot,
+  snapshotFromListings,
+} from "@/lib/seo/landing-content";
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -12,6 +20,7 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { FavoriteButton } from "@/components/favorite-button";
+import { FollowProductButton } from "@/components/follow-product-button";
 import { ListingImage } from "@/components/listing-image";
 import { CompareButton } from "@/components/compare-button";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -19,16 +28,14 @@ import { SafeShoppingBanner } from "@/components/safe-shopping-banner";
 import { PriceAlertForm } from "@/components/price-alert-form";
 import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { Listing } from "@/lib/listings";
-import { calculateMarketStats, calculateOpportunityRating } from "@/lib/price-insights";
+import { buildDailyPriceHistory, calculateMarketStats, calculateOpportunityRating } from "@/lib/price-insights";
 import { createProductSlug } from "@/lib/product-slug";
 import {
   analyzeListingPrice,
   buildProductPriceStats,
-  type ListingPriceAnalysis,
   type ProductPriceStats,
 } from "@/lib/price-analysis";
 import {
-  getProductBySlug,
   getProductDetail,
   type ProductBestDeal,
   type ProductDecisionInsight,
@@ -56,10 +63,18 @@ import {
   type ListingPriceHistoryPoint,
 } from "./listing-price-history-chart";
 import { PriceBandPanel } from "./price-band-panel";
+import { SourceComparison } from "./source-comparison";
+import { PriceGuideSection } from "./price-guide-section";
+import { buildSourceComparison } from "@/lib/source-comparison";
+import { toBigintId, toBigintIds } from "@/lib/supabase-ids";
+import { listingOutboundPath } from "@/lib/listing-links";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
 };
+
+/** Listings shown in the main list; the rest stay reachable through the source sites. */
+const MAX_LISTED_LISTINGS = 24;
 
 const formatPrice = (price: number) => formatCurrencyTRY(price);
 
@@ -75,13 +90,16 @@ const formatDate = (date: string) =>
     year: "numeric",
   });
 
+// generateMetadata and the page run in the same request: share one detail load.
+const loadProductDetail = cache((slug: string) => getProductDetail(slug));
+
 export async function generateMetadata({
   params,
 }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const detail = await loadProductDetail(slug);
 
-  if (!product) {
+  if (!detail) {
     return {
       title: "Ürün bulunamadı | 2ElBul",
       description:
@@ -90,40 +108,30 @@ export async function generateMetadata({
     };
   }
 
-  const title = `${product.name} ikinci el fiyatları ve piyasa analizi | 2ElBul`;
-  const description = `${product.name} için ikinci el ilanları, ortalama fiyat, en ucuz ilan, fiyat geçmişi ve güven skoru 2ElBul'da.`;
-  const canonicalUrl = getAbsoluteUrl(`/product/${product.slug}`);
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: canonicalUrl,
-    },
-    openGraph: {
-      title,
-      description,
-      url: canonicalUrl,
-      siteName: "2ElBul",
-      locale: "tr_TR",
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-    },
-  };
+  const { product } = detail;
+  const snapshot = snapshotFromListings(detail.listings);
+  return buildPageMetadata({
+    title: buildLandingTitle("product", product.name, new Date()),
+    description: buildLandingDescription("product", product.name, snapshot),
+    path: `/product/${product.slug}`,
+    // A model without live listings stays reachable but is kept out of the index.
+    noIndex: !isIndexableSnapshot(snapshot),
+    followLinks: true,
+  });
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const detail = await getProductDetail(slug);
+  // The session lookup is independent of the product data: start it first so
+  // both run at the same time.
+  const authPromise = getCurrentUser();
+  const detail = await loadProductDetail(slug);
   if (!detail) notFound();
 
   const {
     product,
     listings,
+    sourceOffers,
     decisionInsight,
     bestDeals,
     relatedProducts,
@@ -143,7 +151,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const highestPrice = marketStats?.highest ?? 0;
   const averagePrice = marketStats?.average ?? 0;
   const marketValue = marketStats?.marketValue ?? 0;
-  const listingPriceHistory = buildListingPriceHistory(listings);
+  const listingPriceHistory: ListingPriceHistoryPoint[] = buildDailyPriceHistory(
+    detail.priceHistory,
+  ).map(({ date, average, lowest, highest, count }) => ({ date, average, lowest, highest, count }));
   const cheapestListings = [...listings]
     .sort((a, b) => a.price - b.price)
     .slice(0, 5);
@@ -160,28 +170,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const bestListingAnalysis = cheapestListings[0]
     ? analyzeListingPrice(cheapestListings[0].price, productPriceStats)
     : analyzeListingPrice(null, productPriceStats);
-  const latestListings = [...listings]
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
-    .slice(0, 5);
   const suspiciousListings = marketValue
     ? listings
         .filter((listing) => listing.price <= marketValue * 0.6)
         .sort((a, b) => a.price - b.price)
         .slice(0, 5)
     : [];
-  const listingPreview = listings.slice(0, 24);
+  const listingsByPrice = [...listings].sort((a, b) => a.price - b.price).slice(0, MAX_LISTED_LISTINGS);
   const favoriteScopeListingIds = [
     ...new Set(
-      [
-        ...suspiciousListings,
-        ...cheapestListings,
-        ...latestListings,
-        ...listingPreview,
-        bestDealListing,
-      ]
+      [...suspiciousListings, ...listingsByPrice, bestDealListing]
         .filter((listing): listing is Listing => Boolean(listing))
         .map((listing) => listing.id),
     ),
@@ -195,10 +193,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     count: listings.filter((listing) => listing.condition === condition).length,
   }));
 
-  const serverSupabase = await createSupabaseServerClient();
-  const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
-    data: { user: null },
-  };
+  const { supabase: serverSupabase, user: authUser } = await authPromise;
+  const authData = { user: authUser };
   const isAuthenticated = Boolean(authData.user);
   let favoriteListingIds: string[] = [];
 
@@ -207,7 +203,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       .from("favorites")
       .select("listing_id")
       .eq("user_id", authData.user.id)
-      .in("listing_id", favoriteScopeListingIds);
+      .in("listing_id", toBigintIds(favoriteScopeListingIds));
 
     if (error) {
       console.error("Supabase product favorites query failed:", error);
@@ -219,6 +215,18 @@ export default async function ProductPage({ params }: ProductPageProps) {
   }
 
   const favoriteIds = new Set(favoriteListingIds);
+
+  let isFollowing = false;
+  if (serverSupabase && authData.user) {
+    const { data: follow, error: followError } = await serverSupabase
+      .from("product_follows")
+      .select("id")
+      .eq("user_id", authData.user.id)
+      .eq("product_id", toBigintId(product.id))
+      .maybeSingle();
+    if (followError) console.error("Supabase product follow query failed:", followError);
+    isFollowing = Boolean(follow);
+  }
   const loginNext = `/product/${product.slug}`;
   const productJsonLd = buildProductJsonLd({
     product,
@@ -249,42 +257,28 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <Breadcrumbs
           items={[
             { label: "Ana Sayfa", href: "/" },
-            ...(product.category
-              ? [{ label: product.category, href: `/category/${createProductSlug(product.category)}` }]
-              : []),
+            ...product.categoryPath.map((category) => ({
+              label: category.label,
+              href: `/category/${category.slug}`,
+            })),
             ...(marketIntelligence.scope.brand
               ? [{ label: marketIntelligence.scope.brand, href: `/brand/${createProductSlug(marketIntelligence.scope.brand)}` }]
               : []),
             { label: product.name },
           ]}
         />
-        <div className="max-w-4xl">
-        <p className="text-sm font-bold text-[#ff6b00]">
-            Karar odaklı ürün analizi
-          </p>
-          <h1 className="mt-2 break-words text-3xl font-black tracking-[-0.045em] sm:text-5xl">
-            {product.name}
-          </h1>
-          <p className="mt-3 text-black/50">
-            Fırsatı, riski ve fiyat avantajını tek ekranda değerlendir.
-          </p>
-        </div>
-
-        <DecisionDashboardHero
+        <ProductSummary
           product={product}
-          marketIntelligence={marketIntelligence}
-          decisionInsight={decisionInsight}
-          bestDealDiscount={bestDealDiscount}
-        />
-
-        <BestDealCard
-            listing={bestDealListing}
-            averagePrice={averagePrice}
-            discountPercent={bestDealDiscount}
-            priceStats={productPriceStats}
-            isFavorite={bestDealListing ? favoriteIds.has(bestDealListing.id) : false}
-            isAuthenticated={isAuthenticated}
-            loginNext={loginNext}
+          listing={bestDealListing}
+          averagePrice={averagePrice}
+          listingCount={listingCount}
+          discountPercent={bestDealDiscount}
+          priceStats={productPriceStats}
+          decisionLabel={marketIntelligence.opportunityAnalysis.recommendation.label}
+          isFavorite={bestDealListing ? favoriteIds.has(bestDealListing.id) : false}
+          isFollowing={isFollowing}
+          isAuthenticated={isAuthenticated}
+          loginNext={loginNext}
         />
 
         <div className="mt-6 max-w-md">
@@ -297,9 +291,33 @@ export default async function ProductPage({ params }: ProductPageProps) {
           />
         </div>
 
-        <PriceAnalysisBox
-          stats={productPriceStats}
-          analysis={bestListingAnalysis}
+        <SourceComparison rows={buildSourceComparison(sourceOffers)} />
+
+        <ProductListingSection
+          title="İlanlar"
+          icon={Store}
+          listings={listingsByPrice}
+          priceStats={productPriceStats}
+          favoriteIds={favoriteIds}
+          isAuthenticated={isAuthenticated}
+          loginNext={loginNext}
+          emptyMessage="Bu ürün için yayında ilan bulunmuyor. Yeni ilanlar geldikçe liste otomatik güncellenecek."
+        />
+
+        <div className="mt-8">
+          <SafeShoppingBanner />
+        </div>
+
+        <div id="piyasa-analizi" className="mt-14 scroll-mt-24">
+          <h2 className="text-2xl font-black tracking-[-0.035em] sm:text-3xl">
+            Piyasa analizi
+          </h2>
+        </div>
+
+        <DecisionDashboardHero
+          marketIntelligence={marketIntelligence}
+          decisionInsight={decisionInsight}
+          bestDealDiscount={bestDealDiscount}
         />
 
         <PriceBandPanel
@@ -308,93 +326,38 @@ export default async function ProductPage({ params }: ProductPageProps) {
           currentPrice={bestDealListing?.price ?? 0}
         />
 
-        <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-          <SectionTitle
-            icon={ChartNoAxesCombined}
-            eyebrow="Fiyat geçmişi"
-            title="Fiyat Geçmişi"
-          />
-          <p className="mt-4 text-sm leading-6 text-black/55">
-            Bu ürün için toplanan ilan fiyatlarının zamana göre değişimi.
-          </p>
+        <section className="mt-8 min-w-0 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
+          <SectionTitle icon={ChartNoAxesCombined} title="Fiyat geçmişi" />
           <ListingPriceHistoryChart points={listingPriceHistory} />
         </section>
 
-        <BestDealsSection deals={bestDeals} />
-
-        <ProductListingSection
-          eyebrow="Riskli fiyat"
-          title="Şüpheli ucuz ilanlar"
-          icon={TriangleAlert}
-          listings={suspiciousListings}
-          priceStats={productPriceStats}
-          favoriteIds={favoriteIds}
-          isAuthenticated={isAuthenticated}
-          loginNext={loginNext}
-          emptyMessage="Piyasanın çok altında şüpheli ilan bulunmadı."
-        />
-
-        <div className="mt-8">
-          <SafeShoppingBanner />
-        </div>
-
-        <ProductListingSection
-          eyebrow="Fiyat avantajı"
-          title="En ucuz ilanlar"
-          icon={Tag}
-          listings={cheapestListings}
-          priceStats={productPriceStats}
-          favoriteIds={favoriteIds}
-          isAuthenticated={isAuthenticated}
-          loginNext={loginNext}
-          emptyMessage="Bu ürün için henüz ilan bulunamadı."
-        />
-
-        <ProductListingSection
-          eyebrow="Yeni fırsatlar"
-          title="Son eklenen ilanlar"
-          icon={Clock3}
-          listings={latestListings}
-          priceStats={productPriceStats}
-          favoriteIds={favoriteIds}
-          isAuthenticated={isAuthenticated}
-          loginNext={loginNext}
-          emptyMessage="Bu ürün için henüz yeni ilan bulunmuyor."
-        />
-
-        <ProductListingSection
-          eyebrow="Tüm kaynaklar"
-          title="İlan listesi"
-          icon={Store}
-          listings={listingPreview}
-          priceStats={productPriceStats}
-          favoriteIds={favoriteIds}
-          isAuthenticated={isAuthenticated}
-          loginNext={loginNext}
-          emptyMessage="Bu ürün için yayında ilan bulunmuyor. Yeni ilanlar geldikçe liste otomatik güncellenecek."
-          matchKey={product.slug}
-        />
-
-        <RelatedProductsSection products={relatedProducts} />
+        {suspiciousListings.length > 0 ? (
+          <ProductListingSection
+            title="Şüpheli ucuz ilanlar"
+            icon={TriangleAlert}
+            listings={suspiciousListings}
+            priceStats={productPriceStats}
+            favoriteIds={favoriteIds}
+            isAuthenticated={isAuthenticated}
+            loginNext={loginNext}
+            emptyMessage=""
+          />
+        ) : null}
 
         <div className="mt-8 grid gap-5 lg:grid-cols-2">
-          <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-            <SectionTitle
-              icon={MapPin}
-              eyebrow="Konum analizi"
-              title="Şehir dağılımı"
-            />
+          <section className="rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
+            <SectionTitle icon={MapPin} title="Şehir dağılımı" />
             {cityCounts.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                 {cityCounts.map(({ city, count }) => (
                   <div
                     key={city}
-                    className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-4"
+                    className="min-w-0 rounded-sm border border-black/20 bg-[#fafaf8] p-4"
                   >
                     <p className="truncate text-sm font-black" title={city}>
                       {city}
                     </p>
-                    <p className="mt-2 text-2xl font-black text-[#ff6b00]">
+                    <p className="mt-2 text-2xl font-black text-[#3B66E0]">
                       {count}
                     </p>
                     <p className="text-xs text-black/40">ilan</p>
@@ -406,20 +369,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
             )}
           </section>
 
-          <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-            <SectionTitle
-              icon={Tag}
-              eyebrow="Cihaz durumu"
-              title="Durum dağılımı"
-            />
+          <section className="rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
+            <SectionTitle icon={Tag} title="Durum dağılımı" />
             <div className="mt-6 grid grid-cols-2 gap-3">
               {conditionCounts.map(({ condition, count }) => (
                 <div
                   key={condition}
-                  className={`rounded-2xl border p-5 ${
+                  className={`rounded-sm border p-5 ${
                     condition === "Yenilenmiş"
                       ? "border-sky-200 bg-sky-50"
-                      : "border-black/8 bg-[#fafaf8]"
+                      : "border-black/20 bg-[#fafaf8]"
                   }`}
                 >
                   <p className="text-sm font-black">{condition}</p>
@@ -427,7 +386,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                     className={`mt-3 text-3xl font-black ${
                       condition === "Yenilenmiş"
                         ? "text-sky-700"
-                        : "text-[#ff6b00]"
+                        : "text-[#3B66E0]"
                     }`}
                   >
                     {count}
@@ -445,18 +404,25 @@ export default async function ProductPage({ params }: ProductPageProps) {
           opportunityAnalysis={marketIntelligence.opportunityAnalysis}
           marketIntelligence={marketIntelligence}
         />
+
+        <PriceGuideSection
+          productName={product.name}
+          productUrl={getAbsoluteUrl(`/product/${product.slug}`)}
+          snapshot={snapshotFromListings(listings)}
+          now={new Date()}
+        />
+
+        <RelatedProductsSection products={relatedProducts} />
       </div>
     </main>
   );
 }
 
 export function DecisionDashboardHero({
-  product,
   marketIntelligence,
   decisionInsight,
   bestDealDiscount,
 }: {
-  product: ProductRecord;
   marketIntelligence: ProductDetailMarketIntelligence;
   decisionInsight: ProductDecisionInsight;
   bestDealDiscount: number | null;
@@ -468,15 +434,12 @@ export function DecisionDashboardHero({
   );
 
   return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="mt-8 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-3xl">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
-            Karar paneli
-          </p>
-          <h2 className="mt-1 break-words text-3xl font-black tracking-[-0.035em] sm:text-4xl">
+          <h3 className="break-words text-2xl font-black tracking-[-0.035em] sm:text-3xl">
             AI Kararı
-          </h2>
+          </h3>
           <p className="mt-3 text-sm leading-6 text-black/55">
             {decisionInsight.smartPrice.summary}
           </p>
@@ -488,20 +451,14 @@ export function DecisionDashboardHero({
         </span>
       </div>
 
-      {product.category ? (
-        <p className="mt-4 inline-flex rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-black text-black/55">
-          Kategori: {product.category}
-        </p>
-      ) : null}
-
       <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-        <div className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 sm:p-6">
+        <div className="rounded-sm border border-[#3B66E0]/20 bg-[#EEF3FF] p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]/75">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]/75">
                 Fırsat skoru
               </p>
-              <p className="mt-2 text-5xl font-black tracking-[-0.08em] text-[#d95700]">
+              <p className="mt-2 text-5xl font-black tracking-[-0.08em] text-[#2A4FBF]">
                 {opportunityAnalysis.opportunityScore}
                 <span className="text-xl text-black/35">/100</span>
               </p>
@@ -509,7 +466,7 @@ export function DecisionDashboardHero({
                 {opportunityAnalysis.recommendation.description}
               </p>
             </div>
-            <div className="rounded-2xl border border-white/70 bg-white/90 px-4 py-3 text-right shadow-sm">
+            <div className="rounded-sm border border-white/70 bg-white/90 px-4 py-3 text-right shadow-sm">
               <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
                 Güçlü fırsat mı?
               </p>
@@ -523,7 +480,7 @@ export function DecisionDashboardHero({
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4 sm:p-5">
+            <div className="min-w-0 rounded-sm border border-[#3B66E0]/20 bg-[#EEF3FF] p-4 sm:p-5">
               <TrustMeter
                 score={marketIntelligence.confidenceScore ?? 0}
                 level={marketIntelligence.confidenceLevel}
@@ -562,7 +519,7 @@ export function DecisionDashboardHero({
             />
           </div>
 
-          <div className="mt-5 rounded-2xl border border-black/8 bg-white p-4">
+          <div className="mt-5 rounded-sm border border-black/20 bg-white p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
               Karar nedenleri
             </p>
@@ -590,14 +547,11 @@ export function DecisionDashboardHero({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-black/8 bg-[#fafaf8] p-5 sm:p-6">
+        <div className="rounded-sm border border-black/20 bg-[#fafaf8] p-5 sm:p-6">
           <p className="text-xs font-black uppercase tracking-[0.08em] text-black/35">
             Piyasa özeti
           </p>
           <p className="mt-3 text-sm font-semibold leading-6 text-black/60">
-            Bu analiz {marketIntelligence.sampleSize} ilan üzerinden oluşturuldu.
-          </p>
-          <p className="mt-4 text-sm font-semibold leading-6 text-black/60">
             Son güncelleme:{" "}
             {formatMarketIntelligenceTimestamp(
               marketIntelligence.analysisGeneratedAt,
@@ -607,7 +561,7 @@ export function DecisionDashboardHero({
             Kullanılan kaynaklar: {sourceLabel}
           </p>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="mt-5 grid grid-cols-3 gap-3">
             <StatCard
               label="Kaynak sayısı"
               value={`${marketIntelligence.marketSummary.sourceCount}`}
@@ -620,65 +574,16 @@ export function DecisionDashboardHero({
               label="Aktif ilan"
               value={`${marketIntelligence.marketSummary.activeListingCount}`}
             />
-            <StatCard
-              label="Duplicate yoğunluğu"
-              value={
-                typeof marketIntelligence.marketSummary.duplicateDensity === "number"
-                  ? `%${Math.round(
-                      marketIntelligence.marketSummary.duplicateDensity * 100,
-                    )}`
-                  : "—"
-              }
-            />
-            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4 sm:p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
-                Güven seviyesi
-              </p>
-              <div className="mt-2">
-                <TrustBadge
-                  level={confidenceToTrustLevel(
-                    marketIntelligence.confidenceLevel,
-                    marketIntelligence.sampleSize,
-                  )}
-                  size="md"
-                />
-              </div>
-            </div>
           </div>
 
           {hasInsufficientData ? (
-            <div className="mt-5 flex gap-3 rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+            <div className="mt-5 flex gap-3 rounded-sm border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
               <TriangleAlert className="mt-0.5 shrink-0" size={17} />
               <span>
                 Yetersiz veri: karar notu daha fazla ilan geldikçe otomatik olarak güçlenecek.
               </span>
             </div>
-          ) : (
-            <div className="mt-5 rounded-2xl border border-green-100 bg-green-50 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-green-800/75">
-                EEAT notu
-              </p>
-              <p className="mt-2 text-sm font-semibold leading-6 text-green-900">
-                Bu karar, güncel ilan verisi ve kaynak çeşitliliği üzerinden üretilmiştir.
-              </p>
-            </div>
-          )}
-
-          <div className="mt-5 rounded-2xl border border-black/8 bg-white p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
-              Kaynak sinyalleri
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {marketIntelligence.sourcesUsed.slice(0, 4).map((source) => (
-                <span
-                  key={source}
-                  className="rounded-full border border-black/8 bg-[#fafaf8] px-3 py-1.5 text-xs font-semibold leading-5 text-black/58"
-                >
-                  {source}
-                </span>
-              ))}
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </section>
@@ -686,7 +591,6 @@ export function DecisionDashboardHero({
 }
 
 function ProductListingSection({
-  eyebrow,
   title,
   icon,
   listings,
@@ -695,9 +599,7 @@ function ProductListingSection({
   isAuthenticated,
   loginNext,
   emptyMessage,
-  matchKey,
 }: {
-  eyebrow: string;
   title: string;
   icon: typeof Tag;
   listings: Listing[];
@@ -706,11 +608,10 @@ function ProductListingSection({
   isAuthenticated: boolean;
   loginNext: string;
   emptyMessage: string;
-  matchKey?: string;
 }) {
   return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle icon={icon} eyebrow={eyebrow} title={title} />
+    <section className="mt-8 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
+      <SectionTitle icon={icon} title={title} />
       {listings.length > 0 ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {listings.map((listing) => (
@@ -721,72 +622,11 @@ function ProductListingSection({
               isFavorite={favoriteIds.has(listing.id)}
               isAuthenticated={isAuthenticated}
               loginNext={loginNext}
-              matchKey={matchKey}
             />
           ))}
         </div>
       ) : (
         <EmptyState text={emptyMessage} />
-      )}
-    </section>
-  );
-}
-
-function BestDealsSection({ deals }: { deals: ProductBestDeal[] }) {
-  return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle icon={Tag} eyebrow="Alternatif ilanlar" title="En İyi Fırsatlar" />
-      {deals.length > 0 ? (
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {deals.map((deal) => (
-            <article
-              key={deal.listing.id}
-              className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-[#fafaf8] p-4"
-            >
-              <span
-                className={`w-fit rounded-full border px-3 py-1.5 text-xs font-black ${deal.className}`}
-              >
-                {deal.label}
-              </span>
-              <h3 className="mt-4 line-clamp-3 break-words text-sm font-black leading-6">
-                {deal.listing.title}
-              </h3>
-              <p className="mt-3 text-2xl font-black tracking-[-0.05em] text-[#ff6b00]">
-                {formatPrice(deal.listing.price)}
-              </p>
-              <p className="mt-2 text-xs font-bold leading-5 text-black/50">
-                Ortalama fiyata göre {formatDealDifference(deal.differencePercent)}.
-              </p>
-              <div className="mt-4 grid gap-2 border-t border-black/7 pt-4 text-xs font-semibold text-black/50">
-                <span className="inline-flex items-center gap-2">
-                  <Store size={14} /> {deal.listing.source}
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <CalendarDays size={14} /> {formatDate(deal.listing.createdAt)}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                {deal.listing.url ? (
-                  <a
-                    href={deal.listing.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="orange-button flex-1 py-2.5 text-sm"
-                  >
-                    İlana git <ArrowUpRight size={16} />
-                  </a>
-                ) : null}
-                <CompareButton
-                  listingId={deal.listing.id}
-                  productName={deal.listing.productName}
-                  compact
-                />
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <EmptyState text="Bu ürün için fırsat karşılaştırması yapılacak ilan bulunmuyor." />
       )}
     </section>
   );
@@ -798,7 +638,7 @@ function RelatedProductsSection({
   products: RelatedProductSummary[];
 }) {
   return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="mt-8 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
       <SectionTitle icon={Store} eyebrow="Benzer ürünler" title="Benzer Ürünler" />
       {products.length > 0 ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -806,14 +646,14 @@ function RelatedProductsSection({
             <Link
               key={product.id}
               href={`/product/${product.slug}`}
-              className="group min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/30 hover:bg-white hover:shadow-[0_18px_45px_rgba(0,0,0,0.06)]"
+              className="group min-w-0 rounded-sm border border-black/20 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/30 hover:bg-white hover:shadow-[0_18px_45px_rgba(0,0,0,0.06)]"
             >
               {product.category ? (
-                <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-black text-black/45">
+                <span className="rounded-full border border-black/20 bg-white px-3 py-1.5 text-[11px] font-black text-black/45">
                   {product.category}
                 </span>
               ) : null}
-              <h3 className="mt-4 break-words text-lg font-black leading-6 group-hover:text-[#ff6b00]">
+              <h3 className="mt-4 break-words text-lg font-black leading-6 group-hover:text-[#3B66E0]">
                 {product.name}
               </h3>
               <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
@@ -829,7 +669,7 @@ function RelatedProductsSection({
                   value={product.minPrice ? formatPrice(product.minPrice) : "—"}
                 />
               </div>
-              <p className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#ff6b00]">
+              <p className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#3B66E0]">
                 Detaya git <ArrowUpRight size={16} />
               </p>
             </Link>
@@ -844,7 +684,7 @@ function RelatedProductsSection({
 
 function RelatedMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-black/8 bg-white p-3">
+    <div className="min-w-0 rounded-sm border border-black/20 bg-white p-3">
       <p className="text-[10px] font-black uppercase tracking-[0.06em] text-black/35">
         {label}
       </p>
@@ -861,14 +701,14 @@ function IntelligenceCard({
   intelligence: ProductIntelligence;
 }) {
   return (
-    <section className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(255,107,0,0.08)] sm:p-8">
+    <section className="rounded-sm border border-[#3B66E0]/20 bg-[#EEF3FF] p-5  sm:p-8">
       <SectionTitle
         icon={ChartNoAxesCombined}
         eyebrow="Karar destek motoru"
         title="2ElBul Intelligence"
       />
-      <div className="mt-5 rounded-2xl border border-[#ff6b00]/20 bg-white p-4">
-        <p className="text-xs font-black uppercase tracking-[0.12em] text-[#d95700]">
+      <div className="mt-5 rounded-sm border border-[#3B66E0]/20 bg-white p-4">
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-[#2A4FBF]">
           Alim onerisi
         </p>
         <h3 className="mt-2 text-2xl font-black tracking-[-0.04em]">
@@ -916,14 +756,14 @@ function IntelligenceMetric({
   badge: string;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-black/8 bg-white p-4">
+    <div className="min-w-0 rounded-sm border border-black/20 bg-white p-4">
       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
         {label}
       </p>
       <p className="mt-2 truncate text-base font-black" title={value}>
         {value}
       </p>
-      <span className="mt-3 inline-flex max-w-full truncate rounded-full bg-[#fff1e7] px-3 py-1 text-[11px] font-black text-[#d95700]">
+      <span className="mt-3 inline-flex max-w-full truncate rounded-full bg-[#E4ECFF] px-3 py-1 text-[11px] font-black text-[#2A4FBF]">
         {badge}
       </span>
     </div>
@@ -938,14 +778,14 @@ function DecisionSupportCard({
   const decision = intelligence.decisionSupport;
 
   return (
-    <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
       <SectionTitle
         icon={Clock3}
         eyebrow="Karar destek"
         title="Satın Alma Tavsiyesi"
       />
 
-      <div className="mt-5 rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+      <div className="mt-5 rounded-sm border border-black/20 bg-[#fafaf8] p-4">
         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${getDecisionBadgeClassName(decision.label)}`}>
           {decision.label}
         </span>
@@ -986,7 +826,7 @@ function AdvancedPriceInsightCard({
   insight: ProductDecisionInsight["smartPrice"];
 }) {
   return (
-    <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
       <SectionTitle
         icon={ChartNoAxesCombined}
         eyebrow="Gelişmiş analiz"
@@ -999,7 +839,7 @@ function AdvancedPriceInsightCard({
         {insight.details.map((detail) => (
           <p
             key={detail}
-            className="rounded-2xl border border-black/8 bg-[#fafaf8] px-4 py-3 text-sm font-semibold leading-6 text-black/58"
+            className="rounded-sm border border-black/20 bg-[#fafaf8] px-4 py-3 text-sm font-semibold leading-6 text-black/58"
           >
             {detail}
           </p>
@@ -1010,7 +850,7 @@ function AdvancedPriceInsightCard({
           {insight.warnings.map((warning) => (
             <p
               key={warning}
-              className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800"
+              className="flex gap-2 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800"
             >
               <TriangleAlert className="mt-0.5 shrink-0" size={17} />
               {warning}
@@ -1030,7 +870,7 @@ function ConfidenceScoreCard({
   const score = insight.score ?? 0;
 
   return (
-    <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
       <SectionTitle icon={Tag} eyebrow="Güven Skoru" title="Karar güveni" />
       <div className="mt-6 flex items-end justify-between gap-4">
         <div>
@@ -1050,7 +890,7 @@ function ConfidenceScoreCard({
       </div>
       <div className="mt-5 h-3 overflow-hidden rounded-full bg-black/8">
         <div
-          className="h-full rounded-full bg-[#ff6b00]"
+          className="h-full rounded-full bg-[#3B66E0]"
           style={{ width: `${insight.score === null ? 12 : score}%` }}
         />
       </div>
@@ -1061,7 +901,7 @@ function ConfidenceScoreCard({
         {insight.reasons.map((reason) => (
           <p
             key={reason}
-            className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-bold leading-6 text-green-800"
+            className="rounded-sm border border-green-100 bg-green-50 px-4 py-3 text-sm font-bold leading-6 text-green-800"
           >
             {reason}
           </p>
@@ -1069,7 +909,7 @@ function ConfidenceScoreCard({
         {insight.warnings.map((warning) => (
           <p
             key={warning}
-            className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800"
+            className="flex gap-2 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-800"
           >
             <TriangleAlert className="mt-0.5 shrink-0" size={17} />
             {warning}
@@ -1080,142 +920,165 @@ function ConfidenceScoreCard({
   );
 }
 
-export function BestDealCard({
+export function ProductSummary({
+  product,
   listing,
   averagePrice,
+  listingCount,
   discountPercent,
   priceStats,
+  decisionLabel,
   isFavorite,
+  isFollowing,
   isAuthenticated,
   loginNext,
 }: {
+  product: ProductRecord;
+  /** The cheapest listing: its photo, price, location, condition and source lead the page. */
   listing: Listing | null;
   averagePrice: number;
+  listingCount: number;
   discountPercent: number | null;
   priceStats: ProductPriceStats | null;
+  decisionLabel: string;
   isFavorite: boolean;
+  isFollowing: boolean;
   isAuthenticated: boolean;
   loginNext: string;
 }) {
-  if (!listing) {
-    return (
-      <section className="rounded-3xl border border-dashed border-black/15 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-        <SectionTitle icon={Tag} eyebrow="En iyi ilan" title="Henüz ilan yok" />
-        <p className="mt-5 text-sm font-semibold leading-6 text-black/45">
-          Bu ürün için yayında ilan geldiğinde en düşük fiyatlı seçenek burada görünecek.
-        </p>
-      </section>
-    );
-  }
-
-  const priceAnalysis = analyzeListingPrice(listing.price, priceStats);
-  const discountText =
-    discountPercent !== null && averagePrice
-      ? `Ortalama fiyata göre %${discountPercent} daha ucuz.`
-      : "Karşılaştırma için daha fazla fiyat verisi gerekiyor.";
+  const category = product.categoryPath[product.categoryPath.length - 1];
+  const priceAnalysis = analyzeListingPrice(listing?.price ?? null, priceStats);
+  const facts = listing
+    ? [
+        { icon: MapPin, label: "Konum", value: listing.city },
+        { icon: Tag, label: "Ürün durumu", value: listing.condition },
+        { icon: Store, label: "İlan kaynağı", value: listing.source },
+        { icon: CalendarDays, label: "İlan tarihi", value: formatDate(listing.createdAt) },
+      ]
+    : [];
 
   return (
-    <section className="rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle icon={Tag} eyebrow="En iyi ilan" title="En avantajlı ilan" />
-      <div className="mt-5">
+    <section className="mt-6 rounded-sm border border-black/20 border-t-[3px] border-t-[#161616] bg-white p-5 sm:p-8">
+      <div className="grid gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:gap-8">
         <ListingImage
-          imageUrl={listing.imageUrl}
-          productName={listing.productName}
-          alt={listing.title}
-          source={listing.source}
+          imageUrl={listing?.imageUrl ?? null}
+          productName={product.name}
+          alt={listing?.title ?? product.name}
+          source={listing?.source}
+          priority
         />
-      </div>
-      <h3 className="mt-4 break-words text-lg font-black leading-6">
-        {listing.title}
-      </h3>
-      <p className="mt-3 text-3xl font-black tracking-[-0.05em] text-[#ff6b00]">
-        {formatPrice(listing.price)}
-      </p>
-      <p className="mt-3 text-sm font-bold text-black/60">{discountText}</p>
-      <span
-        className={`mt-4 inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${priceAnalysis.className}`}
-      >
-        {priceAnalysis.label}
-      </span>
-      <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-semibold text-black/55">
-        <span className="inline-flex items-center gap-2">
-          <Store size={16} /> {listing.source}
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <CalendarDays size={16} /> {formatDate(listing.createdAt)}
-        </span>
-      </div>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <a
-          href={listing.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="orange-button flex-1 py-3"
-        >
-          İlana git <ArrowUpRight size={17} />
-        </a>
-        <FavoriteButton
-          listingId={listing.id}
-          initialIsFavorite={isFavorite}
-          isAuthenticated={isAuthenticated}
-          loginNext={loginNext}
-          compact
-        />
-        <CompareButton
-          listingId={listing.id}
-          productName={listing.productName}
-          compact
-        />
-      </div>
-    </section>
-  );
-}
 
-function PriceAnalysisBox({
-  stats,
-  analysis,
-}: {
-  stats: ProductPriceStats | null;
-  analysis: ListingPriceAnalysis;
-}) {
-  return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
-      <SectionTitle
-        icon={ChartNoAxesCombined}
-        eyebrow="Fiyat analizi"
-        title="Piyasaya göre fiyat durumu"
-      />
-      <p className="mt-4 text-sm leading-6 text-black/55">
-        Bu analiz aynı ürüne ait aktif ilanlar üzerinden hesaplanır.
-      </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <AnalysisStat label="Ortalama fiyat" value={stats ? formatPrice(stats.average) : "—"} />
-        <AnalysisStat label="En düşük fiyat" value={stats ? formatPrice(stats.min) : "—"} />
-        <AnalysisStat label="En yüksek fiyat" value={stats ? formatPrice(stats.max) : "—"} />
-        <AnalysisStat label="İlan sayısı" value={stats ? String(stats.count) : "0"} />
-        <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
-            Fırsat etiketi
-          </p>
-          <span
-            className={`mt-3 inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${analysis.className}`}
-          >
-            {analysis.label}
-          </span>
+        <div className="min-w-0">
+          {category ? (
+            <Link
+              href={`/category/${category.slug}`}
+              className="inline-flex rounded-full border border-black/20 px-3 py-1 text-xs font-black text-black/55 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
+            >
+              {category.label}
+            </Link>
+          ) : null}
+          <h1 className="mt-3 break-words text-3xl font-black tracking-[-0.045em] sm:text-4xl">
+            {product.name}
+          </h1>
+
+          {listing ? (
+            <>
+              <div className="mt-5">
+                <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
+                  En düşük fiyat
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="text-4xl font-black tracking-[-0.05em] text-[#3B66E0] sm:text-5xl">
+                    {formatPrice(listing.price)}
+                  </p>
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${priceAnalysis.className}`}
+                  >
+                    {priceAnalysis.label}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-black/55">
+                  {listingCount} ilan
+                  {averagePrice ? ` · ortalama ${formatPrice(averagePrice)}` : ""}
+                  {discountPercent ? ` · ortalamanın %${discountPercent} altında` : ""}
+                </p>
+              </div>
+
+              <dl className="mt-5 grid grid-cols-2 gap-3">
+                {facts.map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="min-w-0 rounded-sm border border-black/15 bg-[#fafaf8] p-3">
+                    <dt className="flex items-center gap-1.5 text-xs font-bold text-black/40">
+                      <Icon size={14} /> {label}
+                    </dt>
+                    <dd className="mt-1 break-words text-sm font-black">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <AlsoListedOn alsoOn={listing.alsoOn} />
+
+              <div className="mt-5 flex items-center gap-3">
+                <a
+                  href={listingOutboundPath(listing.id)}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="orange-button flex-1 whitespace-nowrap px-5 py-3 sm:flex-none"
+                >
+                  İlana git <ArrowUpRight size={17} />
+                </a>
+                <FavoriteButton
+                  listingId={listing.id}
+                  initialIsFavorite={isFavorite}
+                  isAuthenticated={isAuthenticated}
+                  loginNext={loginNext}
+                  compact
+                />
+                <CompareButton
+                  listingId={listing.id}
+                  productName={listing.productName}
+                  compact
+                />
+              </div>
+
+              <div className="mt-4">
+                <FollowProductButton
+                  productId={product.id}
+                  initialFollowing={isFollowing}
+                  isAuthenticated={isAuthenticated}
+                  loginNext={loginNext}
+                />
+              </div>
+
+              <a
+                href="#piyasa-analizi"
+                className="mt-5 flex flex-wrap items-center gap-2 text-sm font-bold text-black/55 hover:text-[#2A4FBF]"
+              >
+                <span
+                  className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${getDecisionBadgeClassName(decisionLabel)}`}
+                >
+                  {decisionLabel}
+                </span>
+                Piyasa analizini gör ↓
+              </a>
+            </>
+          ) : (
+            <p className="mt-5 text-sm font-semibold leading-6 text-black/50">
+              Bu ürün için şu an yayında ilan yok. Takip ederek yeni ilan geldiğinde haber alabilirsiniz.
+            </p>
+          )}
+          {!listing && (
+            <div className="mt-4">
+              <FollowProductButton
+                productId={product.id}
+                initialFollowing={isFollowing}
+                isAuthenticated={isAuthenticated}
+                loginNext={loginNext}
+              />
+            </div>
+          )}
         </div>
       </div>
     </section>
-  );
-}
-
-function AnalysisStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
-        {label}
-      </p>
-      <p className="mt-2 break-words text-lg font-black">{value}</p>
-    </div>
   );
 }
 
@@ -1225,7 +1088,6 @@ function ListingCard({
   isFavorite,
   isAuthenticated,
   loginNext,
-  matchKey,
   trustLevel,
 }: {
   listing: Listing;
@@ -1233,13 +1095,12 @@ function ListingCard({
   isFavorite: boolean;
   isAuthenticated: boolean;
   loginNext: string;
-  matchKey?: string;
   trustLevel?: ReturnType<typeof confidenceToTrustLevel>;
 }) {
   const priceAnalysis = analyzeListingPrice(listing.price, priceStats);
 
   return (
-    <article className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-[#fafaf8] p-5">
+    <article className="flex min-w-0 flex-col rounded-sm border border-black/20 bg-[#fafaf8] p-5">
       <ListingImage
         imageUrl={listing.imageUrl}
         productName={listing.productName}
@@ -1274,7 +1135,7 @@ function ListingCard({
         </div>
       </div>
       <h3 className="mt-4 break-words font-black leading-6">{listing.title}</h3>
-      <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
+      <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#3B66E0]">
         {formatPrice(listing.price)}
       </p>
       <span
@@ -1282,6 +1143,7 @@ function ListingCard({
       >
         {priceAnalysis.label}
       </span>
+      <AlsoListedOn alsoOn={listing.alsoOn} />
       <div className="mt-5 grid gap-2.5 border-t border-black/7 pt-4 text-sm text-black/55">
         <p className="flex items-center gap-2">
           <MapPin size={16} /> {listing.city}
@@ -1290,32 +1152,39 @@ function ListingCard({
           <Store size={16} /> {listing.source}
         </p>
         <p className="flex items-center gap-2">
-          <Tag size={16} /> {listing.condition}
-        </p>
-        <p className="flex items-center gap-2">
           <CalendarDays size={16} /> {formatDate(listing.createdAt)}
         </p>
-        {matchKey ? (
-          <p className="flex items-center gap-2 break-all">
-            <Tag size={16} /> Eşleşme: {matchKey}
-          </p>
-        ) : null}
       </div>
       <a
-        href={listing.url}
+        href={listingOutboundPath(listing.id)}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener noreferrer nofollow"
         className="orange-button mt-5 py-3"
       >
         İlana git <ArrowUpRight size={17} />
       </a>
-      <div className="mt-3 flex items-center justify-end">
-        <CompareButton
-          listingId={listing.id}
-          productName={listing.productName}
-        />
-      </div>
     </article>
+  );
+}
+
+/** The same item on other platforms (duplicate group): shown, never counted twice. */
+function AlsoListedOn({ alsoOn }: { alsoOn: Listing["alsoOn"] }) {
+  if (!alsoOn || alsoOn.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-black/50">
+      <span>Aynı ilan:</span>
+      {alsoOn.map((other) => (
+        <a
+          key={other.id}
+          href={listingOutboundPath(other.id)}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="rounded-full border border-black/15 bg-white px-2.5 py-1 font-bold transition hover:border-[#3B66E0]/40 hover:text-[#2A4FBF]"
+        >
+          {other.source} {formatPrice(other.price)}
+        </a>
+      ))}
+    </div>
   );
 }
 
@@ -1325,21 +1194,21 @@ function SectionTitle({
   title,
 }: {
   icon: typeof Tag;
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
 }) {
   return (
-    <div className="flex items-end gap-3">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+    <div className="flex items-center gap-3">
+      <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-[#E4ECFF] text-[#3B66E0]">
         <Icon size={21} />
       </span>
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
-          {eyebrow}
-        </p>
-        <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
-          {title}
-        </h2>
+        {eyebrow ? (
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
+            {eyebrow}
+          </p>
+        ) : null}
+        <h2 className="text-2xl font-black tracking-[-0.035em]">{title}</h2>
       </div>
     </div>
   );
@@ -1358,10 +1227,10 @@ function StatCard({
 }) {
   return (
     <div
-      className={`min-w-0 rounded-2xl border p-4 sm:p-5 ${
+      className={`min-w-0 rounded-sm border p-4 sm:p-5 ${
         accent
-          ? "border-[#ff6b00]/20 bg-[#fff7f1]"
-          : "border-black/8 bg-white"
+          ? "border-[#3B66E0]/20 bg-[#EEF3FF]"
+          : "border-black/20 bg-white"
       } ${wide ? "min-[420px]:col-span-2 lg:col-span-1" : ""}`}
     >
       <p className="text-xs font-bold uppercase tracking-[0.07em] text-black/40">
@@ -1369,7 +1238,7 @@ function StatCard({
       </p>
       <p
         className={`mt-2 break-words text-lg font-black tracking-[-0.03em] ${
-          accent ? "text-[#ff6b00]" : ""
+          accent ? "text-[#3B66E0]" : ""
         }`}
       >
         {value}
@@ -1380,42 +1249,10 @@ function StatCard({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="mt-6 rounded-2xl border border-dashed border-black/15 bg-[#fafaf8] px-6 py-10 text-center text-sm font-semibold text-black/45">
+    <div className="mt-6 rounded-sm border border-dashed border-black/15 bg-[#fafaf8] px-6 py-10 text-center text-sm font-semibold text-black/45">
       {text}
     </div>
   );
-}
-
-function buildListingPriceHistory(
-  listings: Listing[],
-): ListingPriceHistoryPoint[] {
-  const grouped = new Map<string, number[]>();
-
-  for (const listing of listings) {
-    const date = getListingHistoryDate(listing);
-    if (!date || !Number.isFinite(listing.price) || listing.price <= 0) continue;
-    grouped.set(date, [...(grouped.get(date) ?? []), listing.price]);
-  }
-
-  return [...grouped.entries()]
-    .map(([date, prices]) => {
-      const total = prices.reduce((sum, price) => sum + price, 0);
-      return {
-        date,
-        average: Math.round(total / prices.length),
-        lowest: Math.min(...prices),
-        count: prices.length,
-      };
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function getListingHistoryDate(listing: Listing) {
-  const rawDate = listing.createdAt || listing.updatedAt;
-  if (!rawDate) return null;
-  const date = new Date(rawDate);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
 }
 
 function formatDealDifference(value: number | null) {
@@ -1459,6 +1296,12 @@ function getDecisionBadgeClassName(
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
+async function getCurrentUser() {
+  const supabase = await createSupabaseServerClient();
+  const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
+  return { supabase, user: data.user };
+}
+
 function buildProductJsonLd({
   product,
   listingCount,
@@ -1493,6 +1336,7 @@ function buildProductJsonLd({
               price: deal.listing.price,
               url: deal.listing.url,
               availability: "https://schema.org/InStock",
+              itemCondition: "https://schema.org/UsedCondition",
               seller: {
                 "@type": "Organization",
                 name: deal.listing.source,
@@ -1505,9 +1349,13 @@ function buildProductJsonLd({
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
+    description: `${product.name} için ikinci el ilanları, piyasa fiyat aralığı ve fiyat analizi.`,
     category: product.category ?? undefined,
     url: productUrl,
-    brand: brandName ?? undefined,
+    image:
+      bestDeals.find((deal) => deal.listing.imageUrl)?.listing.imageUrl ??
+      getAbsoluteUrl("/og-image.png"),
+    brand: brandName ? { "@type": "Brand", name: brandName } : undefined,
     offers,
   };
 }

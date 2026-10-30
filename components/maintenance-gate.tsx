@@ -22,7 +22,7 @@ export async function MaintenanceGate({
   return (
     <section className="grid min-h-[60vh] place-items-center bg-[#fafaf8] px-4 py-16">
       <div className="max-w-lg rounded-3xl border border-black/8 bg-white p-8 text-center shadow-[0_18px_60px_rgba(0,0,0,0.05)]">
-        <p className="text-sm font-black uppercase tracking-[0.15em] text-[#ff6b00]">
+        <p className="text-sm font-black uppercase tracking-[0.15em] text-[#3B66E0]">
           Bakım modu
         </p>
         <h1 className="mt-3 text-3xl font-black tracking-[-0.04em]">

@@ -1,9 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+import { requireScriptAdminClient } from "./script-client";
 
-const sb = createClient(
-  "https://ozbzxhhorhrslpeccgsl.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96Ynp4aGhvcmhyc2xwZWNjZ3NsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTI4NTcwNSwiZXhwIjoyMDk2ODYxNzA1fQ.f7F1NyPgIPcabcyKEffZqoeZ3yhdzMQVVXBVw_oujXs"
-);
+const sb = requireScriptAdminClient();
 
 async function main() {
   console.log("=== STEP 1: SCHEMA VERIFICATION ===\n");
@@ -56,26 +53,11 @@ async function main() {
   const fnTest = await sb.rpc("slugify_product_name", { value: "test" });
   console.log("  slugify_product_name (reference):", fnTest.error?.message ?? fnTest.data);
 
-  // Try calling the function via PostgREST directly (it's a function, not an RPC)
-  const fnRes = await fetch(
-    "https://ozbzxhhorhrslpeccgsl.supabase.co/rest/v1/rpc/compute_normalized_key",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96Ynp4aGhvcmhyc2xwZWNjZ3NsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTI4NTcwNSwiZXhwIjoyMDk2ODYxNzA1fQ.f7F1NyPgIPcabcyKEffZqoeZ3yhdzMQVVXBVw_oujXs",
-        Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96Ynp4aGhvcmhyc2xwZWNjZ3NsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTI4NTcwNSwiZXhwIjoyMDk2ODYxNzA1fQ.f7F1NyPgIPcabcyKEffZqoeZ3yhdzMQVVXBVw_oujXs",
-      },
-      body: JSON.stringify({ value: "iPhone 15 Pro Max 256GB" }),
-    }
-  );
-  if (fnRes.ok) {
-    const data = await fnRes.json();
-    console.log("  compute_normalized_key('iPhone 15 Pro Max 256GB'):", data);
+  const fnRes = await sb.rpc("compute_normalized_key", { value: "iPhone 15 Pro Max 256GB" });
+  if (fnRes.error) {
+    console.log("  compute_normalized_key RPC:", fnRes.error.message.slice(0, 100));
   } else {
-    const err = await fnRes.text();
-    console.log("  compute_normalized_key RPC:", fnRes.status, err.slice(0, 100));
+    console.log("  compute_normalized_key('iPhone 15 Pro Max 256GB'):", fnRes.data);
   }
 
   // 2b. Test the trigger by inserting a row and immediately deleting it

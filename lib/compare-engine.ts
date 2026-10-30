@@ -8,6 +8,7 @@ import type { Listing } from "@/lib/listings";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { calculatePriceAdvantagePercent } from "@/lib/opportunity-engine";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
+import { toBigintId } from "@/lib/supabase-ids";
 
 export type CompareCandidateKey = number;
 
@@ -174,7 +175,7 @@ async function resolveProductSlugForListing(
   const { data, error } = await supabase
     .from("listings")
     .select("product_id")
-    .eq("id", listingId)
+    .eq("id", toBigintId(listingId))
     .maybeSingle();
 
   if (error || !data?.product_id) return null;
@@ -182,7 +183,7 @@ async function resolveProductSlugForListing(
   const { data: product, error: productError } = await supabase
     .from("products")
     .select("id, name, slug")
-    .eq("id", String(data.product_id))
+    .eq("id", toBigintId(data.product_id))
     .maybeSingle();
 
   if (productError || !product) return null;

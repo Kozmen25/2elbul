@@ -1,11 +1,14 @@
 import { AdminPageHeader } from "@/components/admin-ui";
 import { ADMIN_EMAILS } from "@/lib/admin";
+import { getCategoryTree } from "@/lib/categories";
 import {
+  getHeaderCategorySettings,
   getSiteGeneralSettings,
   getSiteMaintenanceSettings,
 } from "@/lib/site-settings";
 import { isMissingSiteSettingsTable } from "@/lib/listing-status";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { HeaderCategoriesForm } from "./header-categories-form";
 import { SettingsForm } from "./settings-form";
 
 export default async function AdminSettingsPage() {
@@ -19,10 +22,19 @@ export default async function AdminSettingsPage() {
     }
   }
 
-  const [general, maintenance] = await Promise.all([
+  const [general, maintenance, headerSettings, categoryTree] = await Promise.all([
     getSiteGeneralSettings(),
     getSiteMaintenanceSettings(),
+    getHeaderCategorySettings(),
+    getCategoryTree(),
   ]);
+  const headerOptions = categoryTree
+    .filter((main) => !main.isFallback)
+    .map((main) => ({
+      slug: main.slug,
+      name: main.name,
+      children: main.children.map((child) => ({ slug: child.slug, name: child.name })),
+    }));
 
   return (
     <>
@@ -34,6 +46,11 @@ export default async function AdminSettingsPage() {
       <SettingsForm
         general={general}
         maintenance={maintenance}
+        settingsAvailable={settingsAvailable}
+      />
+      <HeaderCategoriesForm
+        options={headerOptions}
+        selectedSlugs={headerSettings.slugs}
         settingsAvailable={settingsAvailable}
       />
       <section className="mt-5 rounded-2xl border border-black/7 bg-white p-5 sm:p-6">

@@ -1,5 +1,6 @@
 "use client";
 
+import { getNotificationLink } from "@/lib/notification-link";
 import { Bell, ArrowRight, CheckCheck } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -63,11 +64,7 @@ export function NotificationDropdown({ initialUnreadCount = 0 }: { initialUnread
   }
 
   function getLink(notif: Notification): string {
-    const meta = notif.metadata;
-    if (meta?.product_id) return `/product/${meta.product_id}`;
-    if (notif.type === "new_listing" && meta?.query) return `/search?q=${encodeURIComponent(String(meta.query))}`;
-    if (meta?.listing_id) return `/listing/${meta.listing_id}`;
-    return "/bildirimler";
+    return getNotificationLink(notif, "/bildirimler");
   }
 
   return (
@@ -94,7 +91,7 @@ export function NotificationDropdown({ initialUnreadCount = 0 }: { initialUnread
               <button
                 type="button"
                 onClick={markAllRead}
-                className="flex items-center gap-1 text-xs font-semibold text-[#ff6b00] hover:underline"
+                className="flex items-center gap-1 text-xs font-semibold text-[#3B66E0] hover:underline"
               >
                 <CheckCheck size={14} /> Tümünü okundu işaretle
               </button>
@@ -116,7 +113,7 @@ export function NotificationDropdown({ initialUnreadCount = 0 }: { initialUnread
                   href={getLink(notif)}
                   onClick={() => setOpen(false)}
                   className={`flex flex-col gap-1 border-b border-black/4 px-4 py-3 transition last:border-0 hover:bg-black/2 ${
-                    !notif.read_at ? "bg-[#fff8f0]" : ""
+                    !notif.read_at ? "bg-[#EEF3FF]" : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -124,7 +121,7 @@ export function NotificationDropdown({ initialUnreadCount = 0 }: { initialUnread
                       {notif.title}
                     </span>
                     {!notif.read_at && (
-                      <span className="mt-1 size-2 shrink-0 rounded-full bg-[#ff6b00]" />
+                      <span className="mt-1 size-2 shrink-0 rounded-full bg-[#3B66E0]" />
                     )}
                   </div>
                   <p className="line-clamp-2 text-xs text-black/50">
@@ -141,7 +138,7 @@ export function NotificationDropdown({ initialUnreadCount = 0 }: { initialUnread
           <Link
             href="/bildirimler"
             onClick={() => setOpen(false)}
-            className="flex items-center justify-center gap-1.5 border-t border-black/8 px-4 py-3 text-sm font-semibold text-[#ff6b00] transition hover:bg-black/2"
+            className="flex items-center justify-center gap-1.5 border-t border-black/8 px-4 py-3 text-sm font-semibold text-[#3B66E0] transition hover:bg-black/2"
           >
             Tüm bildirimleri gör <ArrowRight size={15} />
           </Link>

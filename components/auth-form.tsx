@@ -1,11 +1,12 @@
 "use client";
 
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/auth/password-policy";
 import Link from "next/link";
-import { LockKeyhole, Mail, TriangleAlert } from "lucide-react";
-import { useActionState, useState } from "react";
+import { Eye, EyeOff, LockKeyhole, Mail, TriangleAlert } from "lucide-react";
+import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import type { AuthState } from "@/app/auth/actions";
-import { AvatarPicker } from "@/components/avatar-picker";
+import { AvatarPickerDialog } from "@/components/avatar-picker-dialog";
 
 type AuthFormProps = {
   mode: "login" | "signup";
@@ -29,18 +30,15 @@ export function AuthForm({
   };
   const [state, formAction] = useActionState(action, formInitialState);
   const isLogin = mode === "login";
-  const [avatarPreset, setAvatarPreset] = useState("");
 
   return (
-    <form
-      action={formAction}
-      className="mt-7 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-8"
-    >
+    <form action={formAction}>
       <input type="hidden" name="next" value={next} />
 
       {state.message && (
         <div
-          className={`mb-5 flex gap-3 rounded-xl border p-4 text-sm ${
+          role={state.status === "error" ? "alert" : "status"}
+          className={`mb-5 flex gap-3 rounded-xl border p-3.5 text-sm ${
             state.status === "success"
               ? "border-green-200 bg-green-50 text-green-800"
               : "border-red-200 bg-red-50 text-red-700"
@@ -51,101 +49,127 @@ export function AuthForm({
         </div>
       )}
 
-      <div className="grid gap-5">
-        <label>
-          <span className="mb-2 block text-sm font-bold">E-posta</span>
+      <div className="grid gap-4">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-bold">E-posta</span>
           <span className="relative block">
             <Mail
               size={18}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-black/35"
+              aria-hidden="true"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-black/45"
             />
             <input
               type="email"
               name="email"
               autoComplete="email"
               required
-              className="field h-13 pl-11 pr-4"
+              defaultValue={state.email ?? ""}
+              className="field h-12 pl-11 pr-4"
               placeholder="ornek@email.com"
             />
           </span>
         </label>
 
-        <label>
-          <span className="mb-2 block text-sm font-bold">Şifre</span>
-          <span className="relative block">
-            <LockKeyhole
-              size={18}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-black/35"
-            />
-            <input
-              type="password"
-              name="password"
-              autoComplete={isLogin ? "current-password" : "new-password"}
-              required
-              minLength={6}
-              className="field h-13 pl-11 pr-4"
-              placeholder="En az 6 karakter"
-            />
-          </span>
-        </label>
-
-        {isLogin && (
-          <p className="-mt-2 text-sm">
-            <Link
-              href="/sifre-sifirla"
-              className="font-semibold text-[#ff6b00] hover:underline"
-            >
-              Şifremi unuttum
-            </Link>
-          </p>
-        )}
+        <PasswordField
+          name="password"
+          label="Şifre"
+          autoComplete={isLogin ? "current-password" : "new-password"}
+          minLength={isLogin ? undefined : MIN_PASSWORD_LENGTH}
+          placeholder={isLogin ? "Şifreniz" : PASSWORD_HINT}
+          trailingLink={
+            isLogin ? (
+              <Link
+                href="/sifre-sifirla"
+                className="text-sm font-semibold text-[#2A4FBF] hover:underline"
+              >
+                Şifremi unuttum
+              </Link>
+            ) : null
+          }
+        />
 
         {!isLogin && (
-          <label>
-            <span className="mb-2 block text-sm font-bold">Şifre tekrarı</span>
-            <span className="relative block">
-              <LockKeyhole
-                size={18}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-black/35"
-              />
-              <input
-                type="password"
-                name="confirmPassword"
-                autoComplete="new-password"
-                required
-                minLength={6}
-                className="field h-13 pl-11 pr-4"
-                placeholder="Şifrenizi tekrar girin"
-              />
-            </span>
-          </label>
+          <PasswordField
+            name="confirmPassword"
+            label="Şifre tekrarı"
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            placeholder="Şifrenizi tekrar girin"
+          />
         )}
 
-        {!isLogin && (
-          <div>
-            <span className="mb-2 block text-sm font-bold">Avatarın</span>
-            <input type="hidden" name="avatarPreset" value={avatarPreset} />
-            <AvatarPicker onChange={(id) => setAvatarPreset(id)} />
-            <p className="mt-2 text-xs text-black/45">
-              İstediğin avatari seç; boş bırakırsan hesabına otomatik bir avatar
-              atanır.
-            </p>
-          </div>
-        )}
+        {!isLogin && <AvatarPickerDialog name="avatarPreset" />}
       </div>
 
-      <SubmitButton label={isLogin ? "Giriş yap" : "Kayıt ol"} />
+      <SubmitButton label={isLogin ? "Giriş yap" : "Hesap oluştur"} />
 
-      <p className="mt-5 text-center text-sm text-black/50">
+      <p className="mt-5 text-center text-sm text-black/60">
         {isLogin ? "Henüz hesabınız yok mu?" : "Zaten hesabınız var mı?"}{" "}
         <Link
           href={isLogin ? "/kayit" : "/giris"}
-          className="font-bold text-[#ff6b00] hover:underline"
+          className="font-bold text-[#2A4FBF] hover:underline"
         >
           {isLogin ? "Kayıt ol" : "Giriş yap"}
         </Link>
       </p>
     </form>
+  );
+}
+
+function PasswordField({
+  name,
+  label,
+  autoComplete,
+  minLength,
+  placeholder,
+  trailingLink = null,
+}: {
+  name: string;
+  label: string;
+  autoComplete: string;
+  minLength?: number;
+  placeholder: string;
+  trailingLink?: ReactNode;
+}) {
+  const [visible, setVisible] = useState(false);
+  const inputId = `auth-${name}`;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <label htmlFor={inputId} className="text-sm font-bold">
+          {label}
+        </label>
+        {trailingLink}
+      </div>
+      <span className="relative block">
+        <LockKeyhole
+          size={18}
+          aria-hidden="true"
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-black/45"
+        />
+        <input
+          id={inputId}
+          type={visible ? "text" : "password"}
+          name={name}
+          autoComplete={autoComplete}
+          required
+          minLength={minLength}
+          className="field h-12 pl-11 pr-12"
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((value) => !value)}
+          aria-label={visible ? "Şifreyi gizle" : "Şifreyi göster"}
+          aria-pressed={visible}
+          aria-controls={inputId}
+          className="absolute right-2 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-black/55 transition hover:bg-black/5 hover:text-black"
+        >
+          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -156,7 +180,7 @@ function SubmitButton({ label }: { label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="orange-button mt-6 w-full py-4 disabled:cursor-not-allowed disabled:opacity-60"
+      className="orange-button mt-6 w-full py-3.5 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? "İşleniyor..." : label}
     </button>

@@ -1,29 +1,56 @@
 import { describe, expect, it } from "vitest";
 import {
-  CATEGORY_ROUTES,
   buildBrandDistribution,
   buildCategoryFaqItems,
   buildCategoryJsonLd,
   buildEmptyCategoryPageData,
-  findCategoryRoute,
-  matchProductToRoute,
+  isCategoryAlias,
   normalizeCategorySlug,
+  resolveCanonicalSlug,
+  scopeFromCategory,
+  type CategoryScope,
 } from "./category-intelligence";
+import type { Category } from "@/lib/categories";
 import { buildMarketIntelligence } from "@/lib/market-intelligence";
 import type { MarketIntelligenceListing } from "@/lib/market-intelligence";
-import { buildOpportunityAnalysis } from "@/lib/opportunity-engine";
 import { calculateProductIntelligence } from "@/lib/intelligence-engine";
 import type { MarketPulseItem } from "@/lib/market-pulse";
 
-const phoneRoute = findCategoryRoute("telefon")!;
-const consoleRoute = findCategoryRoute("konsol")!;
-const computerRoute = findCategoryRoute("bilgisayar")!;
-const vehicleRoute = findCategoryRoute("arac")!;
-const realEstateRoute = findCategoryRoute("emlak")!;
-const partsRoute = findCategoryRoute("yedek-parca")!;
-const homeRoute = findCategoryRoute("ev-yasam")!;
-const tvRoute = findCategoryRoute("tv-ses")!;
-const accessoryRoute = findCategoryRoute("aksesuar")!;
+function makeCategory(overrides: Partial<Category> & Pick<Category, "id" | "slug" | "name">): Category {
+  return {
+    parentId: null,
+    icon: null,
+    shortDescription: `${overrides.name} ikinci el piyasa analizi`,
+    longDescription: `${overrides.name} için ikinci el fiyat rehberi.`,
+    expectedProductType: null,
+    displayOrder: 0,
+    isFallback: false,
+    ...overrides,
+  };
+}
+
+const phoneRoute: CategoryScope = {
+  slug: "telefon",
+  label: "Telefon",
+  shortDescription: "Cep telefonu ikinci el piyasa analizi",
+  longDescription: "iPhone, Samsung Galaxy ve diğer telefonlar için ikinci el fiyat rehberi.",
+  expectedProductType: "primary_product",
+  parent: null,
+};
+const consoleRoute: CategoryScope = {
+  slug: "konsol",
+  label: "Oyun Konsolu",
+  shortDescription: "PlayStation, Xbox ve Nintendo ikinci el analizi",
+  longDescription: "Oyun konsolları için ikinci el fiyat rehberi.",
+  parent: null,
+};
+const laptopRoute: CategoryScope = {
+  slug: "bilgisayar-laptop",
+  label: "Laptop",
+  shortDescription: "Laptop ikinci el piyasa analizi",
+  longDescription: "Laptop için ikinci el fiyat rehberi.",
+  parent: { slug: "bilgisayar", label: "Bilgisayar" },
+};
 
 function makeMarketIntelligence(sampleSize = 12) {
   const listings = Array.from({ length: sampleSize }, (_, index) => {
@@ -67,22 +94,6 @@ function makeMarketIntelligence(sampleSize = 12) {
   });
 }
 
-function makeOpportunityAnalysis() {
-  const marketIntelligence = makeMarketIntelligence();
-  return buildOpportunityAnalysis({
-    marketIntelligence,
-    intelligence: calculateProductIntelligence({
-      listings: Array.from({ length: 12 }, (_, index) => ({
-        price: 25000 + index * 100,
-        createdAt: "2026-07-01T00:00:00.000Z",
-      })),
-    }),
-    duplicateSummary: null,
-    analyzedAt: marketIntelligence.analysisGeneratedAt,
-    latestListingAt: "2026-07-05T10:00:00.000Z",
-  });
-}
-
 const topOpportunity: MarketPulseItem = {
   productName: "iPhone 13",
   href: "/product/iphone-13",
@@ -98,149 +109,80 @@ const topOpportunity: MarketPulseItem = {
   searchCount: 18,
 };
 
-describe("category route registry", () => {
-  it("exposes all nine required category slugs", () => {
-    const slugs = CATEGORY_ROUTES.map((route) => route.slug).sort();
-    expect(slugs).toEqual(
-      [
-        "aksesuar",
-        "arac",
-        "bilgisayar",
-        "emlak",
-        "ev-yasam",
-        "konsol",
-        "telefon",
-        "tv-ses",
-        "yedek-parca",
-      ].sort(),
-    );
-  });
-
-  it("resolves known slugs regardless of casing/diacritics", () => {
-    expect(findCategoryRoute("telefon")?.slug).toBe("telefon");
-    expect(findCategoryRoute("Telefon")?.slug).toBe("telefon");
-    expect(findCategoryRoute("TV-Ses")?.slug).toBe("tv-ses");
-    expect(findCategoryRoute("yedek-parca")?.slug).toBe("yedek-parca");
-  });
-
-  it("resolves common Turkish aliases to canonical slugs", () => {
-    expect(findCategoryRoute("cep-telefonu")?.slug).toBe("telefon");
-    expect(findCategoryRoute("cep-telefon")?.slug).toBe("telefon");
-    expect(findCategoryRoute("akilli-telefon")?.slug).toBe("telefon");
-    expect(findCategoryRoute("dizustu")?.slug).toBe("bilgisayar");
-    expect(findCategoryRoute("playstation")?.slug).toBe("konsol");
-    expect(findCategoryRoute("araba")?.slug).toBe("arac");
-    expect(findCategoryRoute("televizyon")?.slug).toBe("tv-ses");
-    expect(findCategoryRoute("konut")?.slug).toBe("emlak");
-    expect(findCategoryRoute("telefon-aksesuari")?.slug).toBe("aksesuar");
-  });
-
-  it("normalizes aliases consistently for URLs", () => {
-    expect(normalizeCategorySlug("cep-telefonu")).toBe("telefon");
-    expect(normalizeCategorySlug("Cep Telefonu")).toBe("telefon");
-    expect(normalizeCategorySlug("TV")).toBe("tv-ses");
-    expect(normalizeCategorySlug("dizüstü bilgisayar")).toBe("bilgisayar");
-  });
-
-  it("returns null for unknown categories so the page can 404", () => {
-    expect(findCategoryRoute("bilinmeyen-kategori")).toBeNull();
-    expect(findCategoryRoute("")).toBeNull();
-  });
-
-  it("normalizes slug input consistently with the product slug helper", () => {
-    expect(normalizeCategorySlug("TV & Ses")).toBe("tv-ses");
+describe("category slugs and aliases", () => {
+  it("keeps canonical slugs unchanged regardless of casing/diacritics", () => {
+    expect(normalizeCategorySlug("telefon")).toBe("telefon");
+    expect(normalizeCategorySlug("Telefon")).toBe("telefon");
+    expect(normalizeCategorySlug("TV-Ses")).toBe("tv-ses");
     expect(normalizeCategorySlug("Yedek Parça")).toBe("yedek-parca");
+    expect(isCategoryAlias("telefon")).toBe(false);
+  });
+
+  it("redirects common Turkish aliases to canonical category slugs", () => {
+    expect(resolveCanonicalSlug("cep-telefonu")).toBe("telefon");
+    expect(resolveCanonicalSlug("Cep Telefonu")).toBe("telefon");
+    expect(resolveCanonicalSlug("akilli-telefon")).toBe("telefon");
+    expect(resolveCanonicalSlug("dizüstü bilgisayar")).toBe("bilgisayar-laptop");
+    expect(resolveCanonicalSlug("playstation")).toBe("konsol-playstation");
+    expect(resolveCanonicalSlug("araba")).toBe("arac-otomobil");
+    expect(resolveCanonicalSlug("TV")).toBe("tv-ses");
+    expect(resolveCanonicalSlug("telefon-aksesuari")).toBe("aksesuar");
+    expect(isCategoryAlias("cep-telefonu")).toBe(true);
+  });
+
+  it("redirects old slugs derived from category display names", () => {
+    expect(resolveCanonicalSlug("TV ve Ses Sistemleri")).toBe("tv-ses");
+    expect(resolveCanonicalSlug("Ev ve Yaşam")).toBe("ev-yasam");
+    expect(resolveCanonicalSlug("Oyun Konsolu")).toBe("konsol");
+  });
+
+  it("redirects removed duplicate subcategories to their surviving twin", () => {
+    expect(resolveCanonicalSlug("bilgisayar-parcalari")).toBe("yedek-parca-bilgisayar");
+    expect(resolveCanonicalSlug("aksesuar-kulaklik")).toBe("tv-ses-kulaklik");
   });
 });
 
-describe("matchProductToRoute", () => {
-  it("matches phone products by category and name keywords", () => {
-    expect(matchProductToRoute("iPhone 13 128 GB", "Telefon", phoneRoute)).toBe(true);
-    expect(matchProductToRoute("Samsung Galaxy S23", "Telefon", phoneRoute)).toBe(true);
-    expect(matchProductToRoute("Xiaomi Redmi Note 12", "Cep Telefonu", phoneRoute)).toBe(true);
+describe("scopeFromCategory", () => {
+  const computer = makeCategory({ id: 2, slug: "bilgisayar", name: "Bilgisayar", expectedProductType: "primary_product" });
+  const laptop = makeCategory({ id: 10, slug: "bilgisayar-laptop", name: "Laptop", parentId: 2 });
+
+  it("describes a main category without a parent", () => {
+    const scope = scopeFromCategory({ category: computer, parent: null, children: [laptop] });
+    expect(scope).toMatchObject({ slug: "bilgisayar", label: "Bilgisayar", parent: null, expectedProductType: "primary_product" });
   });
 
-  it("matches console products via playstation/ps5 keywords", () => {
-    expect(matchProductToRoute("PlayStation 5 Slim", "Oyun Konsolu", consoleRoute)).toBe(true);
-    expect(matchProductToRoute("Xbox Series X", null, consoleRoute)).toBe(true);
-  });
-
-  it("matches computer products via macbook/laptop keywords", () => {
-    expect(matchProductToRoute("MacBook Air M2", "Bilgisayar", computerRoute)).toBe(true);
-    expect(matchProductToRoute("Lenovo ThinkPad T14", null, computerRoute)).toBe(true);
-  });
-
-  it("matches vehicle and real estate routes by category keywords", () => {
-    expect(matchProductToRoute("Volkswagen Golf", "Otomobil", vehicleRoute)).toBe(true);
-    expect(matchProductToRoute("3+1 Daire", "Konut", realEstateRoute)).toBe(true);
-  });
-
-  it("matches yedek-parca and ev-yasam routes by keyword inclusion", () => {
-    expect(matchProductToRoute("RTX 3060 Ekran Kartı", null, partsRoute)).toBe(true);
-    expect(matchProductToRoute("Buzdolabı Çamaşır Makinesi", null, homeRoute)).toBe(true);
-  });
-
-  it("rejects products that hit exclude keywords for the route", () => {
-    expect(matchProductToRoute("iPad Air", "Tablet", phoneRoute)).toBe(false);
-    expect(matchProductToRoute("MacBook Pro", "Bilgisayar", phoneRoute)).toBe(false);
-  });
-
-  it("rejects products that match no keyword for the route", () => {
-    expect(matchProductToRoute("Kedimama 10kg", "Diğer", phoneRoute)).toBe(false);
-    expect(matchProductToRoute("Drone Mini", "Hobi", vehicleRoute)).toBe(false);
-  });
-
-  it("does not match tv-ses for unrelated long product names", () => {
-    expect(matchProductToRoute("iPhone 13 128 GB", "Telefon", tvRoute)).toBe(false);
-  });
-
-  it("matches accessory products by name keywords", () => {
-    expect(matchProductToRoute("iPhone 13 Kılıf", "Aksesuar", accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("Samsung Şarj Aleti", null, accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("Powerbank 20000mAh", null, accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("Ekran Koruyucu iPhone", null, accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("USB C Kablo", null, accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("Telefon Tutucu Araba", null, accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("Batarya iPhone 11", null, accessoryRoute)).toBe(true);
-    expect(matchProductToRoute("Adaptör Hızlı Şarj", null, accessoryRoute)).toBe(true);
-  });
-
-  it("rejects phone products from accessory route via exclude keywords", () => {
-    expect(matchProductToRoute("iPhone 13 128 GB", "Telefon", accessoryRoute)).toBe(false);
-    expect(matchProductToRoute("Samsung Galaxy S23", "Telefon", accessoryRoute)).toBe(false);
+  it("links a subcategory to its parent and inherits the expected product type", () => {
+    const scope = scopeFromCategory({ category: laptop, parent: computer, children: [] });
+    expect(scope.parent).toEqual({ slug: "bilgisayar", label: "Bilgisayar" });
+    expect(scope.expectedProductType).toBe("primary_product");
   });
 });
 
 describe("buildCategoryFaqItems", () => {
   const marketIntelligence = makeMarketIntelligence();
-  const opportunityAnalysis = makeOpportunityAnalysis();
   const faqItems = buildCategoryFaqItems({
     categoryName: "Telefon",
-    shortDescription: "Cep telefonu ikinci el piyasa analizi",
-    listingCount: marketIntelligence.marketSummary.totalListingCount,
-    productCount: 8,
-    sourceCount: marketIntelligence.marketSummary.sourceCount,
     marketIntelligence,
-    opportunityAnalysis,
   });
 
-  it("produces five category-safe FAQ entries", () => {
-    expect(faqItems).toHaveLength(5);
+  it("answers user-facing price questions with the category name", () => {
+    expect(faqItems).toHaveLength(4);
+    expect(faqItems[0].question).toBe("İkinci el Telefon fiyatları ne kadar?");
     faqItems.forEach((item) => {
-      expect(item.question.length).toBeGreaterThan(10);
       expect(item.answer.length).toBeGreaterThan(20);
     });
   });
 
-  it("keeps FAQ answers general and category-named", () => {
-    expect(faqItems[0].question).toContain("Telefon");
-    expect(faqItems[0].answer).toContain("Telefon");
-    expect(faqItems.some((item) => item.answer.includes("programmatic SEO"))).toBe(true);
+  it("quotes live listing and price numbers instead of internal jargon", () => {
+    expect(faqItems[0].answer).toContain("12 ilan");
+    expect(faqItems[1].answer).toContain("25.000");
+    const copy = faqItems.map((item) => `${item.question} ${item.answer}`).join(" ");
+    expect(copy).not.toMatch(/programmatic SEO|Market Intelligence|Opportunity Engine|fallback|duplicate/i);
   });
 
-  it("references listing and source counts in the FAQ copy", () => {
-    const sourceFaq = faqItems.find((item) => item.question.includes("Kaynak"));
-    expect(sourceFaq?.answer).toContain("kaynak");
+  it("references the source count", () => {
+    const sourceFaq = faqItems.find((item) => item.question.includes("platform"));
+    expect(sourceFaq?.answer).toContain("3 farklı platform");
   });
 });
 
@@ -277,6 +219,20 @@ describe("buildCategoryJsonLd", () => {
     expect(elements[0].name).toBe("Ana Sayfa");
     expect(elements[1].name).toBe("Telefon");
     expect(elements[1].item).toBe("https://2elbul.com/category/telefon");
+  });
+
+  it("puts the parent category into a subcategory's breadcrumb", () => {
+    const documents = buildCategoryJsonLd({
+      route: laptopRoute,
+      categoryUrl: "https://2elbul.com/category/bilgisayar-laptop",
+      summary: "Laptop özeti",
+      faqItems: [],
+      topOpportunities: [],
+    });
+    const breadcrumb = documents.find((document) => document["@type"] === "BreadcrumbList");
+    const elements = (breadcrumb as { itemListElement: Array<{ name: string; position: number }> }).itemListElement;
+    expect(elements.map((element) => element.name)).toEqual(["Ana Sayfa", "Bilgisayar", "Laptop"]);
+    expect(elements.map((element) => element.position)).toEqual([1, 2, 3]);
   });
 
   it("emits FAQ schema mirroring the faq items", () => {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
+import { PASSWORD_HINT } from "@/lib/auth/password-policy";
 import { isRecoverySession } from "@/lib/auth/recovery";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { NewPasswordForm } from "./new-password-form";
@@ -14,17 +15,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * Only a session that was minted by the password-recovery email link may set a
- * new password here. A normal (already logged in) user reaching this page is
- * bounced back to login — this is not the password-change screen for an
- * authenticated account, which Aşama 2 does via /hesabim.
+ * Only a session created by a password-reset e-mail link within the last few
+ * minutes may set a new password here (lib/auth/recovery.ts). A logged-in user
+ * changes their password from /hesabim instead, where the current password is
+ * required.
  */
 export default async function NewPasswordPage() {
   const supabase = await createSupabaseServerClient();
-  const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
 
-  if (!isRecoverySession(data.user)) {
-    redirect("/giris?error=verification_failed");
+  if (!supabase || !(await isRecoverySession(supabase))) {
+    redirect("/sifre-sifirla?error=link_expired");
   }
 
   return (
@@ -39,8 +39,7 @@ export default async function NewPasswordPage() {
               Yeni şifreni belirle
             </h1>
             <p className="mt-2 text-sm text-black/50">
-              Sıfırlama bağlantısına ulaştın. En az 6 karakterlik yeni bir şifre
-              seç.
+              Sıfırlama bağlantısına ulaştın. Yeni bir şifre seç ({PASSWORD_HINT.toLowerCase()}).
             </p>
           </div>
           <NewPasswordForm />

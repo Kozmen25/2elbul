@@ -9,8 +9,16 @@ import { getSiteGeneralSettings } from "@/lib/site-settings";
 import { getMetadataBase, getAbsoluteUrl } from "@/lib/site-url";
 
 export const viewport: Viewport = {
-  themeColor: "#ff6b00",
+  width: "device-width",
+  initialScale: 1,
+  // Lets full-bleed layouts respect the notch / home indicator via env(safe-area-inset-*).
+  viewportFit: "cover",
+  themeColor: "#3B66E0",
 };
+
+// Bump when the icon files change: a new URL makes browsers drop the cached favicon.
+const ICON_VERSION = "2";
+const icon = (path: string) => `${path}?v=${ICON_VERSION}`;
 
 export async function generateMetadata(): Promise<Metadata> {
   const general = await getSiteGeneralSettings();
@@ -20,13 +28,13 @@ export async function generateMetadata(): Promise<Metadata> {
     description: general.siteDescription,
     icons: {
       icon: [
-        { url: "/favicon.ico" },
-        { url: "/icon.svg", type: "image/svg+xml" },
-        { url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },
-        { url: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png" },
+        { url: icon("/favicon.ico") },
+        { url: icon("/icon.svg"), type: "image/svg+xml" },
+        { url: icon("/android-chrome-192x192.png"), sizes: "192x192", type: "image/png" },
+        { url: icon("/android-chrome-512x512.png"), sizes: "512x512", type: "image/png" },
       ],
-      apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-      other: [{ rel: "manifest", url: "/manifest.json" }],
+      apple: [{ url: icon("/apple-touch-icon.png"), sizes: "180x180", type: "image/png" }],
+      other: [{ rel: "manifest", url: icon("/manifest.json") }],
     },
     openGraph: {
       title: `${general.siteName} | İkinci Elin Doğru Fiyatı`,

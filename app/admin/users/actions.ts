@@ -4,19 +4,19 @@ import { revalidatePath } from "next/cache";
 import { isAdminEmail, requireAdminUser } from "@/lib/admin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { logAdminAction } from "@/lib/auth/audit";
+import { createRecoveryEmailClient } from "@/lib/auth/recovery-email";
 import { getSiteUrl } from "@/lib/site-url";
 
-const AUTH_CALLBACK_PATH = "/auth/callback";
+const RECOVERY_LANDING_PATH = "/auth/recovery";
 const ADMIN_USERS_PATH = "/admin/users";
 
 /**
- * Password-reset redirect target. Mirrors the auth flow's own origin so an
- * admin-triggered reset email points the user at the same callback that a
- * self-service reset uses. The callback URL is derived at call time, never
- * persisted, and never surfaces the one-time recovery token.
+ * Where an admin-triggered password-reset link lands (implicit flow, see
+ * lib/auth/recovery-email.ts). Derived at call time, never persisted, and the
+ * one-time recovery token is never surfaced.
  */
 function resetRedirect() {
-  return `${getSiteUrl().replace(/\/$/, "")}${AUTH_CALLBACK_PATH}`;
+  return `${getSiteUrl().replace(/\/$/, "")}${RECOVERY_LANDING_PATH}`;
 }
 
 export type AdminActionResult = {
@@ -73,16 +73,14 @@ export async function resetUserPassword(userId: string): Promise<AdminActionResu
     return { ok: false, message: "Kullanıcının e-posta adresi bulunamadı." };
   }
 
-  // goTrueAdminApi doesn't type resetPasswordForEmail even though it exists at
-  // runtime (an email-recovery flow, not a password read). Call it through a
-  // minimal structural type. Never surface or log the recovery link or token.
-  const adminApi = supabase.auth.admin as unknown as {
-    resetPasswordForEmail: (
-      email: string,
-      opts: { redirectTo?: string }
-    ) => Promise<{ error: { message: string } | null }>;
-  };
-  const { error } = await adminApi.resetPasswordForEmail(email, {
+  // resetPasswordForEmail lives on the regular auth client, not auth.admin, so
+  // a dedicated implicit-flow client sends it (the admin client only looked up
+  // the address). Never surface or log the recovery link or token.
+  const mailer = createRecoveryEmailClient();
+  if (!mailer) {
+    return { ok: false, message: "Supabase bağlantısı yapılandırılmamış." };
+  }
+  const { error } = await mailer.auth.resetPasswordForEmail(email, {
     redirectTo: resetRedirect(),
   });
   if (error) {

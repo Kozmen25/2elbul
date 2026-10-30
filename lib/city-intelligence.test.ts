@@ -10,7 +10,6 @@ import {
 } from "./city-intelligence";
 import { buildMarketIntelligence } from "@/lib/market-intelligence";
 import type { MarketIntelligenceListing } from "@/lib/market-intelligence";
-import { buildOpportunityAnalysis } from "@/lib/opportunity-engine";
 import { calculateProductIntelligence } from "@/lib/intelligence-engine";
 import type { MarketPulseItem } from "@/lib/market-pulse";
 import type { CityListingRow } from "./city-intelligence";
@@ -78,22 +77,6 @@ function makeMarketIntelligence(sampleSize = 12) {
     decisionInsight: null,
     duplicateSummary: null,
     analyzedAt: "2026-07-05T10:00:00.000Z",
-  });
-}
-
-function makeOpportunityAnalysis() {
-  const marketIntelligence = makeMarketIntelligence();
-  return buildOpportunityAnalysis({
-    marketIntelligence,
-    intelligence: calculateProductIntelligence({
-      listings: Array.from({ length: 12 }, (_, index) => ({
-        price: 25000 + index * 100,
-        createdAt: "2026-07-01T00:00:00.000Z",
-      })),
-    }),
-    duplicateSummary: null,
-    analyzedAt: marketIntelligence.analysisGeneratedAt,
-    latestListingAt: "2026-07-05T10:00:00.000Z",
   });
 }
 
@@ -192,33 +175,25 @@ describe("buildCityCatalog", () => {
 
 describe("buildCityFaqItems", () => {
   const marketIntelligence = makeMarketIntelligence();
-  const opportunityAnalysis = makeOpportunityAnalysis();
   const faqItems = buildCityFaqItems({
     cityName: "İstanbul",
-    listingCount: marketIntelligence.marketSummary.totalListingCount,
-    productCount: 8,
-    sourceCount: marketIntelligence.marketSummary.sourceCount,
     marketIntelligence,
-    opportunityAnalysis,
   });
 
-  it("produces five city-safe FAQ entries", () => {
-    expect(faqItems).toHaveLength(5);
-    faqItems.forEach((item) => {
-      expect(item.question.length).toBeGreaterThan(10);
-      expect(item.answer.length).toBeGreaterThan(20);
-    });
-  });
-
-  it("mentions the city name in the FAQ copy", () => {
+  it("answers user-facing questions with the city name", () => {
+    expect(faqItems).toHaveLength(4);
     expect(faqItems[0].question).toContain("İstanbul");
-    expect(faqItems[0].answer).toContain("İstanbul");
-    expect(faqItems.some((item) => item.answer.includes("programmatic SEO"))).toBe(true);
+    expect(faqItems[0].answer).toContain("İstanbul ikinci el ilanları");
   });
 
-  it("references listing and source counts in the FAQ copy", () => {
-    const sourceFaq = faqItems.find((item) => item.question.includes("Kaynak"));
-    expect(sourceFaq?.answer).toContain("kaynak");
+  it("does not leak internal jargon", () => {
+    const copy = faqItems.map((item) => `${item.question} ${item.answer}`).join(" ");
+    expect(copy).not.toMatch(/programmatic SEO|Market Intelligence|Opportunity Engine|fallback/i);
+  });
+
+  it("references the source count", () => {
+    const sourceFaq = faqItems.find((item) => item.question.includes("platform"));
+    expect(sourceFaq?.answer).toContain("farklı platform");
   });
 });
 

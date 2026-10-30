@@ -74,7 +74,7 @@ export function ConfirmDialog({
                 disabled={pending}
                 onClick={confirm}
                 className={`rounded-xl px-4 py-3 font-bold text-white disabled:opacity-50 ${
-                  danger ? "bg-red-600" : "bg-[#ff6b00]"
+                  danger ? "bg-red-600" : "bg-[#3B66E0]"
                 }`}
               >
                 {pending ? pendingLabel : confirmLabel}

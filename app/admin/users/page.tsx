@@ -112,16 +112,16 @@ export default async function AdminUsersPage({
                 return (
                   <tr
                     key={user.id}
-                    className="group border-t border-black/7 transition hover:bg-[#fffaf6]"
+                    className="group border-t border-black/7 transition hover:bg-[#EEF3FF]"
                   >
                     <td className="px-4 py-4">
                       <Link
                         href={`/admin/users/${user.id}`}
-                        className="inline-flex items-center gap-2 font-black hover:text-[#d95700]"
+                        className="inline-flex items-center gap-2 font-black hover:text-[#2A4FBF]"
                       >
                         {user.email ?? "E-posta yok"}
                         {isAdmin && (
-                          <span className="grid size-5 place-items-center rounded-md bg-[#fff1e7] text-[#d95700]">
+                          <span className="grid size-5 place-items-center rounded-md bg-[#E4ECFF] text-[#2A4FBF]">
                             <ShieldCheck size={13} />
                           </span>
                         )}

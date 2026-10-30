@@ -1,3 +1,11 @@
+import { buildPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = buildPageMetadata({
+  title: "Gizlilik | 2ElBul",
+  description: "2ElBul'un kullanıcı ve ilan verilerini nasıl sakladığı ve kullandığı hakkında bilgi.",
+  path: "/gizlilik",
+});
+
 export default function PrivacyPage() {
   return (
     <InfoPage title="Gizlilik">

@@ -1,3 +1,11 @@
+import { buildPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = buildPageMetadata({
+  title: "Kullanım Şartları | 2ElBul",
+  description: "2ElBul fiyat rehberini kullanırken geçerli olan şartlar ve sorumluluklar.",
+  path: "/kullanim-sartlari",
+});
+
 export default function TermsPage() {
   return (
     <section className="container-shell min-h-[60vh] py-12 sm:py-16">

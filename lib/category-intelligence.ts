@@ -1,18 +1,21 @@
 import { cache } from "react";
 import type { ConfidenceLevel } from "@/lib/confidence-engine";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
-import { isMissingStatusColumn, isMissingAttributesColumn, isMissingProductCategoryColumn, isMissingListingUpdatedAtColumn } from "@/lib/listing-status";
+import { isMissingStatusColumn, isMissingListingUpdatedAtColumn } from "@/lib/listing-status";
 import { calculateProductIntelligence } from "@/lib/intelligence-engine";
+import {
+  buildLandingFaqItems,
+  snapshotFromMarketIntelligence,
+} from "@/lib/seo/landing-content";
 import { buildMarketIntelligence, type MarketIntelligence, type MarketIntelligenceListing } from "@/lib/market-intelligence";
 import {
   dominantProductType,
   extractProductTypeFromAttributes,
-  filterListingsByProductType,
   toConfidenceResult,
   toConfidenceLevel,
 } from "@/lib/market-intelligence/helpers";
 import { buildMarketPulse, type MarketPulse, type MarketPulseItem } from "@/lib/market-pulse";
-import { formatBrandDisplayName, extractBrand, normalizeSearchText } from "@/lib/normalization";
+import { formatBrandDisplayName, extractBrand } from "@/lib/normalization";
 import { createProductSlug } from "@/lib/product-slug";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
@@ -26,22 +29,45 @@ import {
   type OpportunityAnalysis,
 } from "@/lib/opportunity-engine";
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
+import { toBigintIds } from "@/lib/supabase-ids";
+import {
+  EMPTY_CATEGORY_STATS,
+  getCategoryBySlug,
+  getCategoryScopeIds,
+  getCategoryStats,
+  getNavigationCategoryTree,
+  isCategoryVisible,
+  type Category,
+  type ResolvedCategory,
+} from "@/lib/categories";
 
-export type CategoryRoute = {
+/**
+ * What a category page / JSON-LD needs to know about the category it renders.
+ * Built from a public.categories row (see scopeFromCategory).
+ */
+export type CategoryScope = {
   slug: string;
   label: string;
   shortDescription: string;
   longDescription: string;
-  matchKeywords: string[];
-  excludeKeywords: string[];
   expectedProductType?: string;
-  attributeFilters?: string[];
+  parent?: { slug: string; label: string } | null;
 };
 
-export type CategoryCatalogEntry = {
+export type CategorySubcategoryLink = {
   slug: string;
   label: string;
   productCount: number;
+};
+
+export type CategoryCatalogEntry = {
+  id: number;
+  slug: string;
+  label: string;
+  parentSlug: string | null;
+  icon: string | null;
+  productCount: number;
+  listingCount: number;
   latestListingAt: string | null;
 };
 
@@ -164,7 +190,8 @@ export type CategoryPageData = {
   shortDescription: string;
   longDescription: string;
   expectedProductType?: string;
-  attributeFilters?: string[];
+  parent: { slug: string; label: string } | null;
+  subcategories: CategorySubcategoryLink[];
   productCount: number;
   listingCount: number;
   marketIntelligence: MarketIntelligence;
@@ -174,328 +201,49 @@ export type CategoryPageData = {
   topOpportunities: MarketPulseItem[];
   popularProducts: MarketPulseItem[];
   latestListings: CategoryListingRecord[];
+  gridListings: CategoryListingRecord[];
   brandDistribution: CategoryBrandDistributionEntry[];
   faqItems: CategoryFaqItem[];
   jsonLd: CategoryJsonLdDocument[];
 };
 
-export const CATEGORY_ROUTES: CategoryRoute[] = [
-  {
-    slug: "telefon",
-    label: "Telefon",
-    shortDescription: "Cep telefonu ikinci el piyasa analizi",
-    longDescription:
-      "iPhone, Samsung Galaxy, Xiaomi ve diğer akıllı telefonlar için ikinci el fiyat rehberi, fırsat sinyalleri ve kaynak dağılımı.",
-    matchKeywords: [
-      "telefon",
-      "cep telefonu",
-      "akilli telefon",
-      "smartphone",
-      "iphone",
-      "samsung galaxy s",
-      "samsung galaxy a",
-      "samsung galaxy z",
-      "xiaomi",
-      "redmi",
-      "poco",
-      "oppo",
-      "vivo",
-      "honor",
-      "huawei",
-      "realme",
-      "general mobile",
-      "oneplus",
-      "google pixel",
-    ],
-    excludeKeywords: ["tablet", "ipad", "watch", "saat", "kulaklik", "airpods", "konsol", "laptop", "bilgisayar", "ekran koruyucu", "kılıf", "kilif", "sarj aleti", "şarj aleti", "kablo", "powerbank", "batarya", "tutucu", "adaptr", "adapter", "lens", "selfie çubuğu", "monopod", "kizak", "kızak", "hub", "mause", "mouse", "klavye", "aksesuar"],
-    expectedProductType: "primary_product",
-  },
-  {
-    slug: "bilgisayar",
-    label: "Bilgisayar",
-    shortDescription: "Laptop ve masaüstü bilgisayar ikinci el analizi",
-    longDescription:
-      "MacBook, laptop, notebook ve masaüstü bilgisayarlar için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istihbaratı.",
-    matchKeywords: [
-      "bilgisayar",
-      "laptop",
-      "notebook",
-      "macbook",
-      "imac",
-      "masaustu",
-      "oyuncu bilgisayari",
-      "gaming pc",
-      "thinkpad",
-      "ideapad",
-      "victus",
-      "pavilion",
-      "monster",
-      "asus rog",
-      "lenovo",
-      "dell",
-      "hp laptop",
-      "acer",
-      "chromebook",
-    ],
-    excludeKeywords: ["tablet", "ipad", "telefon", "iphone", "konsol", "ekran karti", "ekran kartı", "monitor", "monitoru"],
-    expectedProductType: "primary_product",
-  },
-  {
-    slug: "konsol",
-    label: "Oyun Konsolu",
-    shortDescription: "PlayStation, Xbox ve Nintendo ikinci el analizi",
-    longDescription:
-      "PlayStation 5, Xbox, Nintendo Switch ve oyun konsolları için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istihbaratı.",
-    matchKeywords: [
-      "konsol",
-      "oyun konsolu",
-      "playstation",
-      "ps5",
-      "ps4",
-      "xbox",
-      "series s",
-      "series x",
-      "nintendo",
-      "switch",
-      "dualsense",
-      "wii",
-    ],
-    excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "tablet", "nintendo switch lite joy"],
-    expectedProductType: "primary_product",
-  },
-  {
-    slug: "tv-ses",
-    label: "TV ve Ses Sistemleri",
-    shortDescription: "Televizyon, ses sistemi ve kulaklık ikinci el analizi",
-    longDescription:
-      "Smart TV, OLED, QLED, soundbar, hoparlör ve kulaklık için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istahbaratı.",
-    matchKeywords: [
-      "tv",
-      "televizyon",
-      "smart tv",
-      "oled",
-      "qled",
-      "led tv",
-      "ses sistemi",
-      "soundbar",
-      "hoparlor",
-      "hoparlör",
-      "kulaklik",
-      "kulaklık",
-      "airpods",
-      "galaxy buds",
-      "jbl",
-      "marshall",
-      "monitor",
-      "monitoru",
-      "ekran",
-    ],
-    excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "konsol", "playstation", "ps5", "tablet"],
-    expectedProductType: "primary_product",
-  },
-  {
-    slug: "arac",
-    label: "Araç",
-    shortDescription: "Otomobil, motosiklet ve araç ikinci el analizi",
-    longDescription:
-      "Otomobil, motosiklet, SUV ve ticari araçlar için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istihbaratı.",
-    matchKeywords: [
-      "arac",
-      "vasita",
-      "otomobil",
-      "araba",
-      "motosiklet",
-      "motor scooter",
-      "suv",
-      "pickup",
-      "minivan",
-      "panelvan",
-      "ticari arac",
-      "elektrikli arac",
-      "karavan",
-      "klasik arac",
-      "hasarli arac",
-    ],
-    excludeKeywords: ["telefon", "laptop", "emlak", "daire", "arsa", "yedek parca", "ekran karti"],
-  },
-  {
-    slug: "emlak",
-    label: "Emlak",
-    shortDescription: "Konut, arsa ve iş yeri ikinci el analizi",
-    longDescription:
-      "Konut, daire, villa, arsa ve iş yerleri için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istihbaratı.",
-    matchKeywords: [
-      "emlak",
-      "konut",
-      "daire",
-      "villa",
-      "arsa",
-      "tarla",
-      "isyeri",
-      "is yeri",
-      "ofis",
-      "dukkan",
-      "magaza",
-      "kiralik",
-      "satilik",
-      "rezidans",
-      "devre mulk",
-    ],
-    excludeKeywords: ["arac", "otomobil", "telefon", "laptop", "yedek parca"],
-  },
-  {
-    slug: "yedek-parca",
-    label: "Yedek Parça ve Donanım",
-    shortDescription: "Otomotiv, telefon ve bilgisayar yedek parça analizi",
-    longDescription:
-      "Otomotiv ekipmanları, telefon yedek parça, ekran kartı, işlemci ve bilgisayar donanımı için ikinci el fiyat rehberi.",
-    matchKeywords: [
-      "yedek parca",
-      "yedek parça",
-      "ekran karti",
-      "ekran kartı",
-      "islemci",
-      "anakart",
-      "ram",
-      "ssd",
-      "hdd",
-      "psu",
-      "jant",
-      "lastik",
-      "far",
-      "tampon",
-      "oto teyp",
-      "batarya",
-      "sarj soketi",
-      "rezistans",
-    ],
-    excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "arac ", "otomobil", "emlak"],
-    expectedProductType: "spare_part",
-  },
-  {
-    slug: "ev-yasam",
-    label: "Ev ve Yaşam",
-    shortDescription: "Beyaz eşya, mobilya ve ev elektroniği analizi",
-    longDescription:
-      "Beyaz eşya, mobilya, klima, süpürge, ev elektroniği ve ev dekorasyonu için ikinci el fiyat rehberi ve piyasa istihbaratı.",
-    matchKeywords: [
-      "beyaz esya",
-      "beyaz eşya",
-      "mobilya",
-      "klima",
-      "supurge",
-      "süpürge",
-      "camasir",
-      "çamaşır",
-      "bulasik",
-      "bulaşık",
-      "firin",
-      "fırın",
-      "ocak",
-      "utu",
-      "ütü",
-      "dekorasyon",
-      "hali",
-      "halı",
-      "perde",
-      "avize",
-      "buzdolabi",
-      "buzdolabı",
-      "derin dondurucu",
-      "kahve makinesi",
-      "blender",
-      "airfryer",
-      "mikrodalga",
-    ],
-    excludeKeywords: ["telefon", "iphone", "laptop", "bilgisayar", "konsol", "tv", "arac", "emlak"],
-  },
-  {
-    slug: "aksesuar",
-    label: "Telefon Aksesuarı",
-    shortDescription: "Telefon aksesuarları ikinci el piyasa analizi",
-    longDescription:
-      "Kılıf, şarj aleti, powerbank, ekran koruyucu, kablo, batarya, tutucu, adaptör ve diğer telefon aksesuarları için ikinci el fiyat rehberi, fırsat sinyalleri ve piyasa istihbaratı.",
-    matchKeywords: [
-      "aksesuar",
-      "kılıf",
-      "kilif",
-      "şarj aleti",
-      "sarj aleti",
-      "şarj cihazı",
-      "sarj cihazi",
-      "powerbank",
-      "power bank",
-      "ekran koruyucu",
-      "ekran koruma",
-      "kablo",
-      "data kablosu",
-      "tutucu",
-      "telefon tutucu",
-      "batarya",
-      "yedek pil",
-      "adaptör",
-      "adapter",
-      "donusturucu",
-      "dönüştürücü",
-      "lens kiti",
-      "selfie çubuğu",
-      "selfie cubugu",
-      "monopod",
-    ],
-    excludeKeywords: [
-      "laptop",
-      "bilgisayar",
-      "tv",
-      "televizyon",
-      "konsol",
-      "playstation",
-      "arac",
-      "otomobil",
-      "emlak",
-      "daire",
-    ],
-    expectedProductType: "accessory",
-  },
-];
-
-const CATEGORY_CATALOG_PAGE_SIZE = 1000;
 const CATEGORY_LISTING_BATCH_SIZE = 100;
+const CATEGORY_PRODUCT_PAGE_SIZE = 1000;
 const SEARCH_LIMIT = 1000;
 
 /**
- * Common Turkish URL variants that should resolve to canonical category slugs.
- * Keys are already normalized (lowercased, diacritics removed, hyphenated).
+ * URL variants that redirect to canonical category slugs (old links, common
+ * Turkish spellings). Keys are already normalized (lowercased, diacritics
+ * removed, hyphenated). Canonical slugs themselves live in public.categories.
  */
 const CATEGORY_ALIASES: Record<string, string> = {
   "cep-telefonu": "telefon",
   "cep-telefon": "telefon",
   "akilli-telefon": "telefon",
-  "dizustu": "bilgisayar",
-  "dizustu-bilgisayar": "bilgisayar",
+  "dizustu": "bilgisayar-laptop",
+  "dizustu-bilgisayar": "bilgisayar-laptop",
+  "laptop": "bilgisayar-laptop",
+  "notebook": "bilgisayar-laptop",
+  "tablet": "bilgisayar-tablet",
   "pc": "bilgisayar",
-  "oyun-bilgisayari": "bilgisayar",
-  "playstation": "konsol",
+  "oyun-bilgisayari": "bilgisayar-masaustu",
+  "playstation": "konsol-playstation",
   "oyun-konsolu": "konsol",
-  "televizyon": "tv-ses",
+  "televizyon": "tv-ses-televizyon",
   "tv": "tv-ses",
-  "otomobil": "arac",
-  "araba": "arac",
-  "konut": "emlak",
-  "daire": "emlak",
+  "tv-ve-ses-sistemleri": "tv-ses",
+  "kulaklik": "tv-ses-kulaklik",
+  "otomobil": "arac-otomobil",
+  "araba": "arac-otomobil",
+  "konut": "emlak-konut",
+  "daire": "emlak-konut",
   "telefon-aksesuari": "aksesuar",
+  "ev-ve-yasam": "ev-yasam",
+  "yedek-parca-ve-donanim": "yedek-parca",
+  // Removed duplicate subcategories (2026-09-30)
+  "bilgisayar-parcalari": "yedek-parca-bilgisayar",
+  "aksesuar-kulaklik": "tv-ses-kulaklik",
 };
-
-export function findCategoryRoute(slug: string): CategoryRoute | null {
-  const normalized = normalizeCategorySlug(slug);
-  if (!normalized) return null;
-  const direct = CATEGORY_ROUTES.find((route) => route.slug === normalized);
-  if (direct) return direct;
-  const canonical = CATEGORY_ALIASES[normalized];
-  if (canonical) {
-    return CATEGORY_ROUTES.find((route) => route.slug === canonical) ?? null;
-  }
-  return null;
-}
 
 export function normalizeCategorySlug(input: string): string {
   const slug = createProductSlug(input);
@@ -509,9 +257,7 @@ export function normalizeCategorySlug(input: string): string {
  * Use this in pages to decide whether to redirect alias URLs.
  */
 export function resolveCanonicalSlug(input: string): string {
-  const normalized = createProductSlug(input);
-  const aliasTarget = CATEGORY_ALIASES[normalized];
-  return aliasTarget ?? normalized;
+  return normalizeCategorySlug(input);
 }
 
 /**
@@ -522,111 +268,81 @@ export function isCategoryAlias(input: string): boolean {
   return normalized in CATEGORY_ALIASES;
 }
 
-export function matchProductToRoute(
-  productName: string,
-  productCategory: string | null,
-  route: CategoryRoute,
-  productAttributes?: unknown,
-): boolean {
-  // PUE-first: if the product has a productType, use it to match against the
-  // route's expectedProductType. This overrides keyword matching entirely.
-  if (route.expectedProductType && productAttributes) {
-    const productType = extractProductTypeFromAttributes(productAttributes);
-    if (productType === route.expectedProductType) {
-      return true;
-    }
-    if (productType !== null) {
-      return false;
-    }
-  }
-
-  const normalizedCategory = normalizeSearchText(productCategory ?? "");
-  const normalizedName = normalizeSearchText(productName ?? "");
-
-  if (
-    route.excludeKeywords.some((keyword) => {
-      const normalizedKeyword = normalizeSearchText(keyword);
-      return (
-        (normalizedCategory && normalizedCategory.includes(normalizedKeyword)) ||
-        normalizedName.includes(normalizedKeyword)
-      );
-    })
-  ) {
-    return false;
-  }
-
-  return route.matchKeywords.some((keyword) => {
-    const normalizedKeyword = normalizeSearchText(keyword);
-    return (
-      (normalizedCategory && normalizedCategory.includes(normalizedKeyword)) ||
-      normalizedName.includes(normalizedKeyword)
-    );
-  });
+export function scopeFromCategory(resolved: ResolvedCategory): CategoryScope {
+  const { category, parent } = resolved;
+  const shortDescription = category.shortDescription ?? `${category.name} ikinci el piyasa analizi`;
+  return {
+    slug: category.slug,
+    label: category.name,
+    shortDescription,
+    longDescription: category.longDescription ?? shortDescription,
+    expectedProductType:
+      category.expectedProductType ?? parent?.expectedProductType ?? undefined,
+    parent: parent ? { slug: parent.slug, label: parent.name } : null,
+  };
 }
 
+/**
+ * Every visible category (main categories each followed by their
+ * subcategories) with the same counts the menu and homepage show.
+ */
 export const getCategoryCatalog = cache(async (): Promise<CategoryCatalogEntry[]> => {
-  const supabase = createSupabaseClient();
-  if (!supabase) {
-    return CATEGORY_ROUTES.map((route) => ({
-      slug: route.slug,
-      label: route.label,
-      productCount: 0,
-      latestListingAt: null,
-    }));
-  }
-
-  const products = await fetchAllProducts(supabase);
-  const listings = await fetchAllListingsForCatalog(supabase, products);
-
-  return CATEGORY_ROUTES.map((route) => {
-    const routeProducts = products.filter((product) =>
-      matchProductToRoute(product.name, product.category, route, product.attributes),
-    );
-    const routeProductIds = new Set(routeProducts.map((product) => product.id));
-    const routeListings = listings.filter((listing) =>
-      routeProductIds.has(listing.productId),
-    );
-    const latestListingAt = routeListings.reduce<string | null>(
-      (latest, listing) => chooseLatestTimestamp(latest, listing.updatedAt ?? listing.createdAt),
-      null,
-    );
-
+  const [tree, stats] = await Promise.all([getNavigationCategoryTree(), getCategoryStats()]);
+  const toEntry = (category: Category, parentSlug: string | null): CategoryCatalogEntry => {
+    const entry = stats.get(category.id) ?? EMPTY_CATEGORY_STATS;
     return {
-      slug: route.slug,
-      label: route.label,
-      productCount: routeProducts.length,
-      latestListingAt,
+      id: category.id,
+      slug: category.slug,
+      label: category.name,
+      parentSlug,
+      icon: category.icon,
+      productCount: entry.productCount,
+      listingCount: entry.listingCount,
+      latestListingAt: entry.latestListingAt,
     };
-  });
+  };
+  return tree.flatMap((main) => [
+    toEntry(main, null),
+    ...main.children.map((child) => toEntry(child, main.slug)),
+  ]);
 });
+
+const CATEGORY_GRID_PAGE_SIZE = 60;
 
 export const getCategoryPageData = cache(
   async (categorySlug: string): Promise<CategoryPageData | null> => {
-    const route = findCategoryRoute(categorySlug);
-    if (!route) return null;
+    const resolved = await getCategoryBySlug(resolveCanonicalSlug(categorySlug));
+    if (!resolved) return null;
+
+    const route = scopeFromCategory(resolved);
+    const stats = await getCategoryStats();
+    const subcategories: CategorySubcategoryLink[] = resolved.children
+      .filter((child) => isCategoryVisible(child, stats))
+      .map((child) => ({
+        slug: child.slug,
+        label: child.name,
+        productCount: stats.get(child.id)?.productCount ?? 0,
+      }));
 
     const supabase = createSupabaseClient();
     if (!supabase) {
-      return buildEmptyCategoryPageData(route);
+      return buildEmptyCategoryPageData(route, subcategories);
     }
 
-    const products = await fetchAllProducts(supabase);
-    const categoryProducts = products.filter((product) =>
-      matchProductToRoute(product.name, product.category, route, product.attributes),
-    );
+    // Membership comes only from products.category_id (this category and its
+    // subcategories) — the same rule the menu and homepage counts use.
+    const categoryProducts = await fetchCategoryProducts(supabase, getCategoryScopeIds(resolved));
 
     const productLookup = new Map(categoryProducts.map((product) => [product.id, product]));
     const productIds = [...productLookup.keys()];
     const listingRows = await fetchCategoryListings(supabase, productIds);
     const searchDemands = await fetchSearchDemands(supabase);
     const listings = buildCategoryListings(listingRows, productLookup);
+    const filteredListings = listings;
     const dominantType = dominantProductType(categoryProducts);
-    const filteredListings = dominantType
-      ? (filterListingsByProductType(listings, dominantType, productLookup) as CategoryListingRecord[])
-      : listings;
 
     if (!categoryProducts.length && !listings.length) {
-      return buildEmptyCategoryPageData(route);
+      return buildEmptyCategoryPageData(route, subcategories);
     }
 
     const latestListingAt = getLatestListingTimestamp(listings);
@@ -689,7 +405,9 @@ export const getCategoryPageData = cache(
         confidenceScore: listing.confidenceScore,
         confidenceLevel: listing.confidenceLevel,
       })),
-      productLookup,
+      // No productLookup: that would re-partition listings by product type,
+      // but membership here is already decided by products.category_id —
+      // every listing of every product in the category counts.
       intelligence,
       decisionInsight: {
         confidence: toConfidenceResult(
@@ -720,30 +438,18 @@ export const getCategoryPageData = cache(
         createdAt: listing.createdAt,
       })),
       searches: buildCategorySearches(searchDemands),
-      expectedProductType: route.expectedProductType,
-      productLookup: new Map(categoryProducts.map((p) => [p.id, { attributes: p.attributes }])),
     });
     const topOpportunities = marketPulse.topOpportunities.slice(0, 6);
     const popularProducts =
       marketPulse.mostSearchedProducts.length > 0
         ? marketPulse.mostSearchedProducts.slice(0, 6)
         : marketPulse.mostListedProducts.slice(0, 6);
-    const latestListings = [...filteredListings]
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
-          a.productName.localeCompare(b.productName, "tr"),
-      )
-      .slice(0, 6);
+    const latestListings = latestFirst(filteredListings).slice(0, 6);
+    const gridListings = latestFirst(filteredListings).slice(0, CATEGORY_GRID_PAGE_SIZE);
     const brandDistribution = buildBrandDistribution(categoryProducts, filteredListings);
     const faqItems = buildCategoryFaqItems({
       categoryName: route.label,
-      shortDescription: route.shortDescription,
-      listingCount: marketIntelligence.marketSummary.totalListingCount,
-      productCount: categoryProducts.length,
-      sourceCount: marketIntelligence.marketSummary.sourceCount,
       marketIntelligence,
-      opportunityAnalysis,
     });
     const jsonLd = buildCategoryJsonLd({
       route,
@@ -755,12 +461,13 @@ export const getCategoryPageData = cache(
 
     return {
       categorySlug: route.slug,
-      categoryName: route.label,
+    categoryName: route.label,
       categoryUrl,
       shortDescription: route.shortDescription,
       longDescription: route.longDescription,
       expectedProductType: route.expectedProductType,
-      attributeFilters: route.attributeFilters,
+      parent: route.parent ?? null,
+      subcategories,
       productCount: categoryProducts.length,
       listingCount: marketIntelligence.marketSummary.totalListingCount,
       marketIntelligence,
@@ -770,6 +477,7 @@ export const getCategoryPageData = cache(
       topOpportunities,
       popularProducts,
       latestListings,
+      gridListings,
       brandDistribution,
       faqItems,
       jsonLd,
@@ -777,7 +485,18 @@ export const getCategoryPageData = cache(
   },
 );
 
-export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageData {
+function latestFirst(listings: CategoryListingRecord[]) {
+  return [...listings].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
+      a.productName.localeCompare(b.productName, "tr"),
+  );
+}
+
+export function buildEmptyCategoryPageData(
+  route: CategoryScope,
+  subcategories: CategorySubcategoryLink[] = [],
+): CategoryPageData {
   const categoryUrl = getAbsoluteUrl(`/category/${route.slug}`);
   const emptyIntelligence = calculateProductIntelligence({ listings: [] });
   const emptyDecisionInsight = buildProductDecisionInsight(route.label, [], []);
@@ -814,12 +533,7 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
   const emptyPulse = buildMarketPulse({ products: [], listings: [] });
   const faqItems = buildCategoryFaqItems({
     categoryName: route.label,
-    shortDescription: route.shortDescription,
-    listingCount: 0,
-    productCount: 0,
-    sourceCount: 0,
     marketIntelligence,
-    opportunityAnalysis,
   });
   const jsonLd = buildCategoryJsonLd({
     route,
@@ -836,7 +550,8 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
     shortDescription: route.shortDescription,
     longDescription: route.longDescription,
     expectedProductType: route.expectedProductType,
-    attributeFilters: route.attributeFilters,
+    parent: route.parent ?? null,
+    subcategories,
     productCount: 0,
     listingCount: 0,
     marketIntelligence,
@@ -846,6 +561,7 @@ export function buildEmptyCategoryPageData(route: CategoryRoute): CategoryPageDa
     topOpportunities: [],
     popularProducts: [],
     latestListings: [],
+    gridListings: [],
     brandDistribution: [],
     faqItems,
     jsonLd,
@@ -897,54 +613,15 @@ export function buildBrandDistribution(
     .slice(0, 8);
 }
 
+/** User-facing FAQ, answered from live market numbers (shared with every landing page). */
 export function buildCategoryFaqItems({
   categoryName,
-  shortDescription,
-  listingCount,
-  productCount,
-  sourceCount,
   marketIntelligence,
-  opportunityAnalysis,
 }: {
   categoryName: string;
-  shortDescription: string;
-  listingCount: number;
-  productCount: number;
-  sourceCount: number;
-  marketIntelligence: MarketIntelligence;
-  opportunityAnalysis: OpportunityAnalysis;
+  marketIntelligence: Pick<MarketIntelligence, "priceAnalysis" | "marketSummary">;
 }): CategoryFaqItem[] {
-  const listingText =
-    listingCount > 0
-      ? `${listingCount.toLocaleString("tr-TR")} ilan`
-      : "henüz yeterli ilan";
-  const sourceText =
-    sourceCount > 0
-      ? `${sourceCount.toLocaleString("tr-TR")} kaynak`
-      : "kaynak çeşitliliği oluşmadan";
-
-  return [
-    {
-      question: `${categoryName} kategori sayfası nasıl hazırlanıyor?`,
-      answer: `2ElBul, ${categoryName} kategorisindeki ürünleri ve bu ürünlere bağlı ilanları tek yerde toplar. ${shortDescription.toLowerCase()}. Market Intelligence, Opportunity Engine ve Product Matcher çıktıları birlikte kullanılır.`,
-    },
-    {
-      question: `${categoryName} kategorisinde en iyi fırsatlar nasıl seçiliyor?`,
-      answer: `Fırsat skoru, risk seviyesi, confidence ve duplicate yoğunluğu birlikte değerlendirilir. Bu sayfada ${categoryName} için en güçlü sinyaller öne çıkarılır.`,
-    },
-    {
-      question: "Yetersiz veri ne zaman gösterilir?",
-      answer: `${categoryName} için ${listingText} oluştuğunda ve yeterli karşılaştırma kurulamadığında güvenli fallback gösterilir; karar notu veri çoğaldıkça otomatik güçlenir.`,
-    },
-    {
-      question: "Kaynak sayısı neden önemli?",
-      answer: `${sourceText} analiz yapmak fiyat bandını daha güvenilir hale getirir. ${marketIntelligence.sampleSize.toLocaleString("tr-TR")} ilan üzerinden üretilen kararlar daha dengeli olur.`,
-    },
-    {
-      question: "Bu sayfa SEO için neden uygun?",
-      answer: `${categoryName} sayfası kategori bazlı, kanonik ve tekrar üretilebilir bir analiz katmanı sunar. Bu yapı programmatic SEO için ölçeklenebilir bir temel oluşturur.`,
-    },
-  ];
+  return buildLandingFaqItems("category", categoryName, snapshotFromMarketIntelligence(marketIntelligence));
 }
 
 export function buildCategoryJsonLd({
@@ -954,7 +631,7 @@ export function buildCategoryJsonLd({
   faqItems,
   topOpportunities,
 }: {
-  route: CategoryRoute;
+  route: CategoryScope;
   categoryUrl: string;
   summary: string;
   faqItems: CategoryFaqItem[];
@@ -990,9 +667,19 @@ export function buildCategoryJsonLd({
           name: "Ana Sayfa",
           item: getAbsoluteUrl("/"),
         },
+        ...(route.parent
+          ? [
+              {
+                "@type": "ListItem" as const,
+                position: 2,
+                name: route.parent.label,
+                item: getAbsoluteUrl(`/category/${route.parent.slug}`),
+              },
+            ]
+          : []),
         {
           "@type": "ListItem",
-          position: 2,
+          position: route.parent ? 3 : 2,
           name: route.label,
           item: categoryUrl,
         },
@@ -1119,58 +806,37 @@ function getLatestListingTimestamp(listings: CategoryListingRecord[]) {
   return latest;
 }
 
-async function fetchAllProducts(
+async function fetchCategoryProducts(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  categoryIds: number[],
 ): Promise<CategoryProductRecord[]> {
   const products: CategoryProductRecord[] = [];
-  let offset = 0;
-  let includeCategory = true;
-  let includeAttributes = true;
-
-  while (true) {
-    const cols = ["id", "name", "slug"];
-    if (includeCategory) cols.push("category");
-    if (includeAttributes) cols.push("attributes");
-    const columns = cols.join(", ");
-    const result = await supabase
+  for (let offset = 0; ; offset += CATEGORY_PRODUCT_PAGE_SIZE) {
+    const { data, error } = await supabase
       .from("products")
-      .select(columns)
+      .select("id, name, slug, category, attributes, created_at")
+      .in("category_id", categoryIds)
       .order("id", { ascending: true })
-      .range(offset, offset + CATEGORY_CATALOG_PAGE_SIZE - 1);
+      .range(offset, offset + CATEGORY_PRODUCT_PAGE_SIZE - 1);
 
-    if (result.error) {
-      if (includeCategory && isMissingProductCategoryColumn(result.error)) {
-        includeCategory = false;
-        continue;
-      }
-      if (includeAttributes && isMissingAttributesColumn(result.error)) {
-        includeAttributes = false;
-        continue;
-      }
-
-      console.error("Category product query failed:", result.error);
-      return [];
+    if (error) {
+      console.error("Category product query failed:", error);
+      return products;
     }
 
-    const rows = (result.data ?? []) as unknown as CategoryProductRow[];
-    products.push(
-      ...rows
-        .filter((row) => !isPublicDemoProductName(String(row.name)))
-        .map((row) => ({
-          id: String(row.id),
-          name: String(row.name),
-          slug: row.slug ? String(row.slug) : createProductSlug(String(row.name)),
-          category: "category" in row && row.category ? String(row.category) : null,
-          attributes: "attributes" in row ? row.attributes : undefined,
-          createdAt: row.created_at ? String(row.created_at) : null,
-        })),
-    );
-
-    if (rows.length < CATEGORY_CATALOG_PAGE_SIZE) break;
-    offset += CATEGORY_CATALOG_PAGE_SIZE;
+    for (const row of data ?? []) {
+      if (isPublicDemoProductName(row.name)) continue;
+      products.push({
+        id: String(row.id),
+        name: row.name,
+        slug: row.slug ?? createProductSlug(row.name),
+        category: row.category,
+        attributes: row.attributes,
+        createdAt: row.created_at,
+      });
+    }
+    if ((data ?? []).length < CATEGORY_PRODUCT_PAGE_SIZE) return products;
   }
-
-  return products;
 }
 
 async function fetchCategoryListings(
@@ -1184,20 +850,6 @@ async function fetchCategoryListings(
   }
 
   return listings;
-}
-
-async function fetchAllListingsForCatalog(
-  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
-  products: CategoryProductRecord[],
-) {
-  const productIds = products.map((product) => product.id);
-  const rows = await fetchCategoryListings(supabase, productIds);
-  const productLookup = new Map(products.map((product) => [product.id, product]));
-  return buildCategoryListings(rows, productLookup).map((listing) => ({
-    productId: listing.productId,
-    createdAt: listing.createdAt,
-    updatedAt: listing.updatedAt,
-  }));
 }
 
 async function fetchCategoryListingBatch(
@@ -1226,7 +878,7 @@ async function fetchCategoryListingBatch(
       ...(useStatusColumn ? ["status"] : []),
     ].join(", ");
 
-    let query = supabase.from("listings").select(columns).in("product_id", productIds);
+    let query = supabase.from("listings").select(columns).in("product_id", toBigintIds(productIds));
     if (useStatusColumn) {
       query = query.in("status", ["published", "active"]);
     }
@@ -1295,15 +947,6 @@ function buildCategorySearches(
     createdAt: demand.createdAt,
   }));
 }
-
-type CategoryProductRow = {
-  id: string | number;
-  name: string;
-  slug?: string | null;
-  category?: string | null;
-  attributes?: unknown;
-  created_at?: string | null;
-};
 
 type CategoryListingRow = {
   id: string | number;

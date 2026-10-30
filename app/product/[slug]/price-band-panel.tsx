@@ -1,21 +1,10 @@
 import type { MarketStats } from "@/lib/price-insights";
-import { calculateOpportunityRating } from "@/lib/price-insights";
+import { calculateOpportunityRating, calculatePriceTrend } from "@/lib/price-insights";
 import type { ListingPriceHistoryPoint } from "./listing-price-history-chart";
 import { formatCurrencyTRY } from "@/lib/formatters";
 
-function computeSevenDayChange(points: ListingPriceHistoryPoint[]): {
-  direction: "up" | "down" | "stable";
-  changePercent: number | null;
-} {
-  if (points.length < 2) return { direction: "stable", changePercent: null };
-  const latest = points[points.length - 1].average;
-  const baseline =
-    points.length >= 8 ? points[points.length - 8].average : points[0].average;
-  const changePercent = Math.round(((latest - baseline) / baseline) * 100);
-  if (changePercent > 3) return { direction: "up", changePercent };
-  if (changePercent < -3) return { direction: "down", changePercent };
-  return { direction: "stable", changePercent };
-}
+/** The price band's trend window; the label on screen says "7 günlük". */
+const TREND_WINDOW_DAYS = 7;
 
 export function PriceBandPanel({
   marketStats,
@@ -33,7 +22,7 @@ export function PriceBandPanel({
     marketStats.marketValue,
     marketStats.count,
   );
-  const trend = computeSevenDayChange(listingPriceHistory);
+  const trend = calculatePriceTrend(listingPriceHistory, TREND_WINDOW_DAYS);
 
   const bandRange = marketStats.highest - marketStats.lowest;
   const currentPercent =
@@ -49,10 +38,10 @@ export function PriceBandPanel({
       : 50;
 
   return (
-    <section className="mt-8 min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="mt-8 min-w-0 rounded-sm border border-black/20 bg-white p-5  sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
             Fiyat bandı
           </p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
@@ -89,10 +78,10 @@ export function PriceBandPanel({
 
           {/* Current price marker */}
           <div
-            className="absolute top-0 h-8 w-1 rounded-sm bg-[#ff6b00] shadow-[0_0_6px_rgba(255,107,0,0.5)]"
+            className="absolute top-0 h-8 w-1 rounded-sm bg-[#3B66E0] shadow-[0_0_6px_rgba(59,102,224,0.5)]"
             style={{ left: `${currentPercent}%` }}
           >
-            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-[#ff6b00]">
+            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-[#3B66E0]">
               Bu ilan
             </div>
           </div>
@@ -114,7 +103,7 @@ export function PriceBandPanel({
       </div>
 
       {/* Trend and market value row */}
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-black/8 bg-black/[0.02] px-4 py-3">
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-sm border border-black/20 bg-black/[0.02] px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wide text-black/40">
             Piyasa değeri
@@ -130,16 +119,16 @@ export function PriceBandPanel({
           </span>
           <span
             className={`text-sm font-black ${
-              trend.direction === "up"
+              trend?.direction === "rising"
                 ? "text-red-500"
-                : trend.direction === "down"
+                : trend?.direction === "falling"
                   ? "text-green-600"
                   : "text-black/55"
             }`}
           >
-            {trend.changePercent !== null
-              ? `${trend.direction === "up" ? "+" : ""}${trend.changePercent}%`
-              : "—"}
+            {trend
+              ? `${trend.changePercent > 0 ? "+" : ""}${trend.changePercent.toLocaleString("tr-TR")}%`
+              : "Veri yok"}
           </span>
         </div>
       </div>
@@ -149,7 +138,7 @@ export function PriceBandPanel({
 
 function StatBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-black/8 bg-black/[0.02] p-3">
+    <div className="rounded-sm border border-black/20 bg-black/[0.02] p-3">
       <p className="text-[10px] font-bold uppercase tracking-wide text-black/40">
         {label}
       </p>

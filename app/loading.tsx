@@ -3,7 +3,7 @@ import { SkeletonCard, SkeletonLine, SkeletonShell } from "@/components/skeleton
 export default function HomeLoading() {
   return (
     <section className="min-h-[calc(100vh-145px)] bg-[#fafaf8]">
-      <div className="bg-gradient-to-b from-[#fff8f0] to-[#fafaf8] py-16 sm:py-24">
+      <div className="bg-gradient-to-b from-[#EEF3FF] to-[#fafaf8] py-16 sm:py-24">
         <div className="container-shell">
           <div className="mx-auto max-w-2xl text-center">
             <SkeletonLine className="mx-auto mb-6 h-12 w-3/4 rounded-lg" />

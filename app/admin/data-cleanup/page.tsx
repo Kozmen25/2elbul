@@ -215,7 +215,7 @@ export default async function AdminDataCleanupPage() {
       ) : (
         <section className="min-w-0 rounded-2xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(0,0,0,0.04)]">
           <div className="flex items-center gap-3 border-b border-black/8 p-5">
-            <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+            <span className="grid size-10 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
               <FileSearch size={20} />
             </span>
             <div>
@@ -243,7 +243,7 @@ export default async function AdminDataCleanupPage() {
                 {candidates.map((candidate) => (
                   <tr key={`${candidate.type}-${candidate.id}`}>
                     <td className="px-4 py-4">
-                      <span className="rounded-full bg-[#fff1e7] px-3 py-1 text-xs font-black text-[#d95700]">
+                      <span className="rounded-full bg-[#E4ECFF] px-3 py-1 text-xs font-black text-[#2A4FBF]">
                         {candidate.type}
                       </span>
                     </td>

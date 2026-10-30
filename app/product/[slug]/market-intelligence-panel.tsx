@@ -21,7 +21,7 @@ export function MarketIntelligencePanel({
   );
 
   return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="mt-8 rounded-sm border border-black/20 bg-white p-5  sm:p-8">
       <PanelHeader
         icon={ChartNoAxesCombined}
         eyebrow="Market Intelligence"
@@ -33,7 +33,7 @@ export function MarketIntelligencePanel({
       </p>
 
       <div
-        className={`mt-4 rounded-2xl border px-4 py-3 ${
+        className={`mt-4 rounded-sm border px-4 py-3 ${
           hasEnoughData
             ? "border-green-100 bg-green-50 text-green-800"
             : "border-amber-200 bg-amber-50 text-amber-800"
@@ -79,12 +79,12 @@ export function MarketIntelligencePanel({
         <MarketMetric
           label="Fırsat skoru"
           value={`${marketIntelligence.opportunity.score}/100`}
-          toneClassName="border-[#ff6b00]/20 bg-[#fff7f1] text-[#d95700]"
+          toneClassName="border-[#3B66E0]/20 bg-[#EEF3FF] text-[#2A4FBF]"
         />
       </div>
 
       <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-        <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+        <div className="rounded-sm border border-black/20 bg-[#fafaf8] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
             Kullanılan kaynaklar
           </p>
@@ -103,7 +103,7 @@ export function MarketIntelligencePanel({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-black/8 bg-[#fafaf8] p-4">
+        <div className="rounded-sm border border-black/20 bg-[#fafaf8] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
             Analiz güncelleme zamanı
           </p>
@@ -117,7 +117,7 @@ export function MarketIntelligencePanel({
       </div>
 
       {!hasEnoughData ? (
-        <div className="mt-5 flex gap-3 rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+        <div className="mt-5 flex gap-3 rounded-sm border border-dashed border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
           <TriangleAlert className="mt-0.5 shrink-0" size={17} />
           <span>Yetersiz veri: yorumun gücü sınırlı, daha fazla ilan geldikçe panel otomatik güçlenecek.</span>
         </div>
@@ -179,14 +179,14 @@ function formatMarketPrice(value: number | null) {
 function MarketMetric({
   label,
   value,
-  toneClassName = "border-black/8 bg-[#fafaf8] text-black/65",
+  toneClassName = "border-black/20 bg-[#fafaf8] text-black/65",
 }: {
   label: string;
   value: string;
   toneClassName?: string;
 }) {
   return (
-    <div className={`min-w-0 rounded-2xl border p-4 ${toneClassName}`}>
+    <div className={`min-w-0 rounded-sm border p-4 ${toneClassName}`}>
       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
         {label}
       </p>
@@ -208,11 +208,11 @@ function PanelHeader({
 }) {
   return (
     <div className="flex items-end gap-3">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+      <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-[#E4ECFF] text-[#3B66E0]">
         <Icon size={21} />
       </span>
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
           {eyebrow}
         </p>
         <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">

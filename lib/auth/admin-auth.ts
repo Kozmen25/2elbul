@@ -14,7 +14,10 @@ export async function verifyAdmin(): Promise<NextResponse | null> {
     error: null,
   };
 
-  if (error) console.error("[verifyAdmin] auth error:", error);
+  // No session is the normal anonymous case (e.g. uptime checks), not an error.
+  if (error && error.name !== "AuthSessionMissingError") {
+    console.error("[verifyAdmin] auth error:", error);
+  }
   if (!user) {
     return NextResponse.json(
       { ok: false, error: "Bu işlem için giriş yapmalısınız." },

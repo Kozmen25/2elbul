@@ -7,6 +7,7 @@ import { createListingExternalId } from "@/lib/bots/listing-sync";
 import { LISTING_CONDITIONS, LISTING_SOURCES } from "@/lib/listings";
 import { findOrCreateMatchedProduct } from "@/lib/product-matcher";
 import { getRecordString, isRecord } from "@/lib/records";
+import { toBigintId } from "@/lib/supabase-ids";
 
 export type ImportError = {
   index: number;
@@ -117,6 +118,7 @@ export async function importAdminListings(
         title: listing.title,
         productName: listing.productName,
         source: listing.source,
+        price: listing.price,
       });
       productId = matchedProduct.id;
     } catch (error) {
@@ -128,7 +130,7 @@ export async function importAdminListings(
     const { error: listingInsertError } = await supabase
       .from("listings")
       .insert({
-        product_id: productId,
+        product_id: toBigintId(productId),
         external_id: createListingExternalId(listing.url),
         title: listing.title,
         price: listing.price,

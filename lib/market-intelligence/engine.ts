@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { buildMarketPriceAnalysis } from "./price-analysis";
 import { buildMarketSummary } from "./market-summary";
+import { buildMarketOpportunityFromAnalysis } from "./opportunity";
 import {
   normalizeAnalysisTimestamp,
   roundDecimal,
@@ -91,23 +92,7 @@ export function buildMarketIntelligence(
       analyzedAt: input.analyzedAt,
       latestListingAt: null,
     });
-    opportunity = {
-      score: opportunityAnalysis.opportunityScore,
-      label: opportunityAnalysis.recommendation.action === "buy_now"
-        ? "Güçlü fırsat" as const
-        : opportunityAnalysis.recommendation.action === "watch"
-          ? "Takip etmeye değer" as const
-          : opportunityAnalysis.recommendation.action === "avoid"
-            ? "Dikkatli incele" as const
-            : opportunityAnalysis.recommendation.action === "insufficient_data"
-              ? "Veri yetersiz" as const
-              : "Normal piyasa" as const,
-      explanation: opportunityAnalysis.recommendation.description,
-      action: opportunityAnalysis.recommendation.action === "avoid"
-        ? "wait" as const
-        : opportunityAnalysis.recommendation.action,
-      discountPercent: null,
-    };
+    opportunity = buildMarketOpportunityFromAnalysis(opportunityAnalysis);
   } else {
     opportunity = {
       score: 0,

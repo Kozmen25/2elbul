@@ -15,7 +15,7 @@ export function AdminPageHeader({
     <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div>
         {eyebrow && (
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff6b00]">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#3B66E0]">
             {eyebrow}
           </p>
         )}
@@ -46,7 +46,7 @@ export function AdminStatCard({
     <div className="min-w-0 rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-bold text-black/45">{label}</p>
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
           <Icon size={20} />
         </span>
       </div>

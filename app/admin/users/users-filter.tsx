@@ -72,7 +72,7 @@ export function UsersFilter({
                 updateHref(href);
               }
             }}
-            className="w-full rounded-xl border border-black/10 bg-[#fafaf8] py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[#ff6b00] focus:bg-white"
+            className="w-full rounded-xl border border-black/10 bg-[#fafaf8] py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[#3B66E0] focus:bg-white"
           />
         </div>
         <div className="flex items-center gap-3 text-sm text-black/45">
@@ -97,8 +97,8 @@ export function UsersFilter({
               }}
               className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
                 active
-                  ? "bg-[#ff6b00] text-white"
-                  : "bg-[#fafaf8] text-black/55 hover:bg-[#fff1e7] hover:text-[#d95700]"
+                  ? "bg-[#3B66E0] text-white"
+                  : "bg-[#fafaf8] text-black/55 hover:bg-[#E4ECFF] hover:text-[#2A4FBF]"
               }`}
             >
               {label}

@@ -1,11 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { requireScriptAdminClient } from "./script-client";
 import { analyzeProduct } from "../lib/product-understanding";
 
-const SUPABASE_URL = "https://ozbzxhhorhrslpeccgsl.supabase.co";
-const SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96Ynp4aGhvcmhyc2xwZWNjZ3NsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTI4NTcwNSwiZXhwIjoyMDk2ODYxNzA1fQ.f7F1NyPgIPcabcyKEffZqoeZ3yhdzMQVVXBVw_oujXs";
-
-const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+const sb = requireScriptAdminClient();
 const BATCH_SIZE = 100;
 const RATE_LIMIT_MS = 500;
 

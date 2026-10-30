@@ -14,6 +14,10 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getGlobalContext } from "@/lib/taxonomy/context";
 import { analyzeProduct } from "@/lib/product-understanding";
+import { extractBrand } from "@/lib/normalization";
+import type { Json } from "@/lib/database.types";
+import { toBigintId } from "@/lib/supabase-ids";
+import { regroupProducts } from "@/lib/duplicate-engine/group-repository";
 
 export async function importListings(
   source: ImportSource,
@@ -83,12 +87,17 @@ export async function importListings(
     }
   }
 
-  // Phase 1: Batch-resolve all product matches
+  // Phase 1: Batch-resolve all product matches. Brand and price are passed
+  // through so the accessory/spare-part vs primary-product classifier (and
+  // its ProductType compatibility guard against cross-type merges) has the
+  // signals it needs — previously omitted, which silently disabled the
+  // brand-aware accessory shortcut and price-threshold checks.
   const inputs: BatchMatcherInput[] = normalizedListings.map(({ listing }) => {
     const understanding = analyzeProduct({
       title: listing.title,
       price: listing.price,
       marketplaceCategory: listing.category ?? undefined,
+      brand: extractBrand(listing.title) ?? undefined,
     });
     return {
       title: listing.title,
@@ -96,6 +105,7 @@ export async function importListings(
       category: listing.category,
       source,
       attributes: { productUnderstanding: understanding },
+      price: listing.price,
     };
   });
 
@@ -122,7 +132,7 @@ export async function importListings(
     try {
       const { error: listingError } = await supabase.from("listings").upsert(
         {
-          product_id: matchedProduct.id,
+          product_id: toBigintId(matchedProduct.id),
           external_id: listing.externalId,
           title: listing.title,
           price: listing.price,
@@ -135,45 +145,40 @@ export async function importListings(
           status: "published",
           published_at: listing.publishedAt,
           imported_at: new Date().toISOString(),
-          raw_payload: listing.rawPayload,
+          // Parsed CSV/XLSX row; supabase-js serializes it with JSON.stringify.
+          raw_payload: listing.rawPayload as Json,
         },
         { onConflict: "source,external_id" },
       );
 
       if (listingError) throw new Error(listingError.message);
       result.imported += 1;
-
-      // Analyze product type (non-fatal — engine failure doesn't roll back listing)
-      try {
-        const understanding = analyzeProduct({
-          title: listing.title,
-          price: listing.price,
-          sourceId: listing.sourceId ? String(listing.sourceId) : undefined,
-          marketplaceCategory: listing.category ?? undefined,
-        });
-
-        // Store product understanding result in products.attributes JSONB
-        const { error: attrError } = await supabase
-          .from("products")
-          .update({ attributes: { productUnderstanding: understanding } })
-          .eq("id", matchedProduct.id);
-
-        if (attrError) {
-          console.warn(
-            `[Import] Failed to update attributes for product ${matchedProduct.id}: ${attrError.message}`,
-          );
-        }
-      } catch (engineError) {
-        console.warn(
-          `[Import] Product Understanding Engine failed for "${listing.title}": ${engineError instanceof Error ? engineError.message : "Unknown error"}`,
-        );
-      }
+      // products.attributes.productUnderstanding is set once, during the
+      // Phase 1 match (see batchFindOrCreateMatchedProducts →
+      // ensureProductUnderstanding), and never overwritten by a later
+      // listing import — previously this block unconditionally re-ran
+      // analyzeProduct() per listing and clobbered it, so a product's
+      // classification (and condition) was effectively "whichever listing
+      // happened to import last," not a stable, evidence-based value.
     } catch (error) {
       result.failed += 1;
       result.errors.push({
         index,
         message: error instanceof Error ? error.message : "Bilinmeyen hata",
       });
+    }
+  }
+
+  // The imported listings may duplicate ones already on other platforms.
+  // Best effort: the daily regroup pass repairs anything this misses.
+  if (result.imported > 0) {
+    try {
+      await regroupProducts(
+        supabase,
+        matchedProducts.flatMap((product) => (product ? [product.id] : [])),
+      );
+    } catch (error) {
+      console.error("Duplicate regroup after import failed:", error);
     }
   }
 

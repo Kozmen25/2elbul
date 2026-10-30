@@ -107,6 +107,10 @@ export function isMissingListingUpdatedAtColumn(error: unknown) {
   return isMissingColumn(error, "updated_at");
 }
 
+export function isMissingDuplicateGroupColumn(error: unknown) {
+  return isMissingColumn(error, "duplicate_group_id");
+}
+
 export function isMissingProductCategoryColumn(error: unknown) {
   return isMissingColumn(error, "category");
 }
@@ -154,4 +158,22 @@ export function isMissingIntegrationSettingsColumn(error: unknown) {
       "last_success",
     ].some((column) => text.includes(column))
   );
+}
+
+/** Listing statuses that are shown on the site and may be linked to. */
+export const PUBLIC_LISTING_STATUSES = ["published", "active"] as const;
+
+export function isPublicListingStatus(status: string | null | undefined): boolean {
+  return PUBLIC_LISTING_STATUSES.some((value) => value === status);
+}
+
+/**
+ * Columns written when an admin sets a listing's status by hand. Putting a
+ * listing back on the site clears the automatic deactivation reason and the
+ * dead-link streak; any other status keeps them for the record.
+ */
+export function manualStatusFields(status: string) {
+  return isPublicListingStatus(status)
+    ? { status, inactive_reason: null, availability_gone_count: 0, availability_gone_since: null }
+    : { status };
 }

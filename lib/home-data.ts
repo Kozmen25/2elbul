@@ -1,10 +1,9 @@
+import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
 import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
 import { buildMarketPulse, type MarketPulse } from "@/lib/market-pulse";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
-import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
-import { getCategoryForProductType } from "@/lib/taxonomy/product-type-mapping";
 import { ACCESSORY_PATTERNS } from "@/lib/product-understanding/accessory-patterns";
 
 export type { MarketPulseItem } from "@/lib/market-pulse";
@@ -47,11 +46,6 @@ export type PriceOpportunity = HomeListing & {
   discountRate: number;
 };
 
-export type PopularCategory = {
-  name: string;
-  listingCount: number;
-};
-
 export type SourceSummary = {
   source: string;
   listingCount: number;
@@ -66,7 +60,6 @@ export type HomeData = {
   popularProducts: PopularProduct[];
   popularListedProducts: PopularListedProduct[];
   priceDrops: PriceDrop[];
-  popularCategories: PopularCategory[];
   marketPulse: MarketPulse;
   error: string;
 };
@@ -103,7 +96,6 @@ export async function getHomeData(): Promise<HomeData> {
     popularProducts: [],
     popularListedProducts: [],
     priceDrops: [],
-    popularCategories: [],
     marketPulse: buildMarketPulse({ products: [], listings: [] }),
     error: "",
   };
@@ -195,16 +187,9 @@ export async function getHomeData(): Promise<HomeData> {
       const price = Number(listing.price);
       if (!product || !Number.isFinite(price) || price <= 0) return null;
 
-      let category = product.category ?? null;
-
-      // Product Understanding Engine override: resolve category from PUE productType.
-      // This catches cases like "iPhone 14 Pro Max Ekran Koruyucu" where the
-      // product IS an accessory even if the product name matches a phone pattern.
-      const pueProductType = extractProductTypeFromAttributes(product.attributes);
-      const pueCategory = getCategoryForProductType(pueProductType);
-      if (pueCategory) {
-        category = pueCategory;
-      }
+      // products.category mirrors products.category_id (DB trigger), so this
+      // is the same category the menu and /category pages show.
+      const category = product.category ?? null;
 
       return {
         id: String(listing.id),
@@ -219,7 +204,7 @@ export async function getHomeData(): Promise<HomeData> {
         condition: listing.condition,
         imageUrl: listing.image_url ? String(listing.image_url) : null,
         createdAt: listing.created_at,
-        productType: pueProductType,
+        productType: extractProductTypeFromAttributes(product.attributes),
         previousPrice:
           listing.previous_price == null
             ? null
@@ -438,11 +423,6 @@ export async function getHomeData(): Promise<HomeData> {
     .sort((a, b) => b.discountRate - a.discountRate)
     .slice(0, 6);
 
-  const categoryCounts = new Map<string, number>();
-  for (const listing of primaryListings) {
-    const category = listing.category?.trim() || "Diğer";
-    categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
-  }
   const summarizedSources = [
     "Sahibinden",
     "Letgo",
@@ -474,10 +454,6 @@ export async function getHomeData(): Promise<HomeData> {
     popularProducts,
     popularListedProducts,
     priceDrops,
-    popularCategories: [...categoryCounts.entries()]
-      .map(([name, listingCount]) => ({ name, listingCount }))
-      .sort((a, b) => b.listingCount - a.listingCount)
-      .slice(0, 6),
     marketPulse: buildMarketPulse({
       products: products.map((product) => ({
         id: product.id,

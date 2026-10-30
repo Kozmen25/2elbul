@@ -1,7 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { toBigintId } from "@/lib/supabase-ids";
+
+const FAVORITE_ERROR_MESSAGE = "Favori işlemi tamamlanamadı. Lütfen tekrar deneyin.";
+const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 export type FavoriteActionResult = {
   ok: boolean;
@@ -37,20 +40,21 @@ export async function setFavorite(
     };
   }
 
+  const listingKey = toBigintId(listingId);
+  if (!Number.isSafeInteger(listingKey) || listingKey <= 0) {
+    return { ok: false, isFavorite: false, message: "Geçersiz ilan." };
+  }
+
   const { data: existingFavorite, error: lookupError } = await supabase
     .from("favorites")
     .select("id")
     .eq("user_id", user.id)
-    .eq("listing_id", listingId)
+    .eq("listing_id", listingKey)
     .maybeSingle();
 
   if (lookupError) {
     console.error("Supabase favorite lookup failed:", lookupError);
-    return {
-      ok: false,
-      isFavorite: false,
-      message: lookupError.message,
-    };
+    return { ok: false, isFavorite: false, message: FAVORITE_ERROR_MESSAGE };
   }
 
   if (existingFavorite) {
@@ -62,36 +66,24 @@ export async function setFavorite(
 
     if (deleteError) {
       console.error("Supabase favorite delete failed:", deleteError);
-      return {
-        ok: false,
-        isFavorite: true,
-        message: deleteError.message,
-      };
+      return { ok: false, isFavorite: true, message: FAVORITE_ERROR_MESSAGE };
     }
 
-    revalidatePath("/search");
-    revalidatePath("/favoriler");
-    revalidatePath("/hesabim");
     return { ok: true, isFavorite: false };
   }
 
   const { error: insertError } = await supabase.from("favorites").insert({
     user_id: user.id,
-    listing_id: listingId,
+    listing_id: listingKey,
   });
 
-  if (insertError) {
+  if (insertError && insertError.code !== POSTGRES_UNIQUE_VIOLATION) {
     console.error("Supabase favorite insert failed:", insertError);
-    return {
-      ok: false,
-      isFavorite: false,
-      message: insertError.message,
-    };
+    return { ok: false, isFavorite: false, message: FAVORITE_ERROR_MESSAGE };
   }
+  // A unique violation means a parallel request (double click) already added
+  // it — the listing is a favorite, which is what the user asked for.
 
-  revalidatePath("/search");
-  revalidatePath("/favoriler");
-  revalidatePath("/hesabim");
 
   return { ok: true, isFavorite: true };
 }

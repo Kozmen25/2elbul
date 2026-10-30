@@ -1,4 +1,12 @@
+import {
+  MIN_PRICE_COMPARISON_SAMPLE,
+  calculateMarketStats,
+  classifyPricePosition,
+  type PricePosition,
+} from "@/lib/price-insights";
+
 export type PriceAnalysisLabel =
+  | "Şüpheli ucuz"
   | "Çok iyi fırsat"
   | "Piyasanın altında"
   | "Normal fiyat"
@@ -31,6 +39,11 @@ export type PricePoint = {
 
 const insufficientClassName = "border-slate-200 bg-slate-50 text-slate-600";
 
+/**
+ * Per-product price figures from the listings currently on sale. The average
+ * is the trimmed market average (calculateMarketStats), so one absurd listing
+ * cannot drag every other listing's label; min and max stay the raw extremes.
+ */
 export function buildProductPriceStats(
   listings: PricePoint[],
 ): Record<string, ProductPriceStats> {
@@ -44,21 +57,19 @@ export function buildProductPriceStats(
     grouped.set(productId, [...(grouped.get(productId) ?? []), price]);
   }
 
-  return Object.fromEntries(
-    [...grouped.entries()].map(([productId, prices]) => {
-      const total = prices.reduce((sum, price) => sum + price, 0);
-      return [
-        productId,
-        {
-          productId,
-          count: prices.length,
-          average: Math.round(total / prices.length),
-          min: Math.min(...prices),
-          max: Math.max(...prices),
-        },
-      ];
-    }),
-  );
+  const stats: Record<string, ProductPriceStats> = {};
+  for (const [productId, prices] of grouped) {
+    const market = calculateMarketStats(prices);
+    if (!market) continue;
+    stats[productId] = {
+      productId,
+      count: market.count,
+      average: market.average,
+      min: market.lowest,
+      max: market.highest,
+    };
+  }
+  return stats;
 }
 
 export function analyzeListingPrice(
@@ -66,7 +77,7 @@ export function analyzeListingPrice(
   stats: ProductPriceStats | null | undefined,
 ): ListingPriceAnalysis {
   const numericPrice = Number(price);
-  if (!stats || stats.count < 3 || !Number.isFinite(numericPrice) || numericPrice <= 0) {
+  if (!stats || stats.count < MIN_PRICE_COMPARISON_SAMPLE || !Number.isFinite(numericPrice) || numericPrice <= 0) {
     return {
       label: "Yetersiz veri",
       count: stats?.count ?? 0,
@@ -93,18 +104,25 @@ export function analyzeListingPrice(
   };
 }
 
+const POSITION_LABELS: Record<PricePosition, PriceAnalysisLabel> = {
+  suspicious: "Şüpheli ucuz",
+  great: "Çok iyi fırsat",
+  below: "Piyasanın altında",
+  normal: "Normal fiyat",
+  expensive: "Pahalı",
+  very_expensive: "Çok pahalı",
+};
+
 export function getPriceAnalysisLabel(
   differencePercent: number,
 ): PriceAnalysisLabel {
-  if (differencePercent <= -15) return "Çok iyi fırsat";
-  if (differencePercent < -5) return "Piyasanın altında";
-  if (differencePercent <= 10) return "Normal fiyat";
-  if (differencePercent <= 25) return "Pahalı";
-  return "Çok pahalı";
+  return POSITION_LABELS[classifyPricePosition(differencePercent)];
 }
 
 export function getPriceAnalysisClassName(label: PriceAnalysisLabel) {
   switch (label) {
+    case "Şüpheli ucuz":
+      return "border-red-200 bg-red-50 text-red-700";
     case "Çok iyi fırsat":
       return "border-green-200 bg-green-50 text-green-700";
     case "Piyasanın altında":

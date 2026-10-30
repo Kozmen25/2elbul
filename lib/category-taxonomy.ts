@@ -1,4 +1,9 @@
 import { normalizeCategoryText as newNormalizeCategoryText } from "./normalization";
+import { getSynonymRegistry } from "./search/synonym-registry";
+import {
+  limitSearchTerms,
+  MAX_SEARCH_EXPANSION_TERMS,
+} from "./search/term-budget";
 
 export type CategoryNode = {
   id: string;
@@ -307,6 +312,12 @@ export function expandQueryByTaxonomy(query: string): ExpandedTaxonomyQuery {
     }
   }
 
+  // Synonym composition — product-type equivalence (laptop ↔ notebook).
+  // Additive only; never removes taxonomy terms. Brands are not synonymized.
+  const synonym = getSynonymRegistry().expandQuery(query);
+  for (const phrase of synonym.phraseVariants) addTerm(termMap, phrase);
+  for (const term of synonym.terms) addTerm(termMap, term);
+
   return {
     query: query.trim().replace(/\s+/g, " "),
     normalizedQuery,
@@ -337,8 +348,17 @@ export function isBroadCategoryQuery(query: string) {
   return match.depth <= 1 && match.matchType !== "keyword";
 }
 
-export function getExpandedSearchTerms(query: string) {
-  return expandQueryByTaxonomy(query).terms;
+/**
+ * Production search terms: taxonomy + synonym registry, budget-capped for
+ * PostgREST OR/ilike latency. Prefer `@/lib/search/query-expansion` when you
+ * need expansion metadata (matched groups, truncation flag).
+ */
+export function getExpandedSearchTerms(query: string): string[] {
+  return limitSearchTerms(
+    expandQueryByTaxonomy(query).terms,
+    query,
+    MAX_SEARCH_EXPANSION_TERMS,
+  );
 }
 
 function node(

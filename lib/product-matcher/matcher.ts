@@ -11,6 +11,7 @@ import {
 import { isDuplicateError } from "./helpers";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { analyzeProduct } from "@/lib/product-understanding";
+import { extractBrand } from "@/lib/normalization";
 import type {
   BatchMatchCandidate,
   BatchMatcherInput,
@@ -76,6 +77,7 @@ export async function findOrCreateMatchedProduct({
   source,
   resolver,
   attributes,
+  price,
 }: FindOrCreateMatchedProductInput): Promise<MatchedProduct> {
   const state = prepareMatcherState(title, productName, resolver, attributes);
   const confidence = buildProductConfidenceMetadata(state.signals, {
@@ -102,6 +104,7 @@ export async function findOrCreateMatchedProduct({
         matchedProduct.attributes,
         title,
         category,
+        price,
       );
       return {
         id: matchedProduct.id,
@@ -153,6 +156,7 @@ export async function findOrCreateMatchedProduct({
           : undefined,
         title,
         category,
+        price,
       );
       return {
         id: duplicateLookup.data.id,
@@ -179,6 +183,7 @@ export async function findOrCreateMatchedProduct({
       undefined,
       title,
       category,
+      price,
     ),
     ...confidence,
   };
@@ -212,13 +217,20 @@ async function ensureProductUnderstanding(
   existingAttributes: unknown,
   title: string,
   category: string | null | undefined,
+  price?: number | null,
 ) {
   const hasUnderstanding = hasProductUnderstanding(existingAttributes);
   if (hasUnderstanding) return existingAttributes;
 
+  // Brand and price are strong signals for the accessory/spare-part vs
+  // primary-product classifier (ACCESSORY_ONLY_BRANDS shortcut, brand-aware
+  // price thresholds) — previously omitted here, which silently disabled
+  // those signals for every product understanding computed during matching.
   const understanding = analyzeProduct({
     title,
     marketplaceCategory: category ?? undefined,
+    brand: extractBrand(title) ?? undefined,
+    price: typeof price === "number" ? price : undefined,
   });
 
   const { error } = await supabase
@@ -298,6 +310,7 @@ export async function batchFindOrCreateMatchedProducts(
           existing.attributes,
           inputs[i].title,
           inputs[i].category || state.signals.category,
+          inputs[i].price,
         );
         results.push({
           id: existing.id,
@@ -384,6 +397,7 @@ export async function batchFindOrCreateMatchedProducts(
           "attributes" in product ? (product as { attributes?: unknown }).attributes : undefined,
           inputs[i].title,
           inputs[i].category || state.signals.category,
+          inputs[i].price,
         );
         results[i] = {
           id: product.id,
@@ -409,6 +423,7 @@ export async function batchFindOrCreateMatchedProducts(
           "attributes" in cp ? (cp as { attributes?: unknown }).attributes : undefined,
           inputs[i].title,
           inputs[i].category || state.signals.category,
+          inputs[i].price,
         );
         results[i] = {
           id: cp.id,

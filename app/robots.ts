@@ -7,7 +7,25 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin", "/api", "/hesabim", "/favoriler"],
+      disallow: [
+        "/admin",
+        "/api",
+        "/auth",
+        "/hesabim",
+        "/favoriler",
+        "/bildirimler",
+        "/price-alerts",
+        "/saved-searches",
+        "/listing-ekle",
+        "/ilan-ekle",
+        "/giris",
+        "/kayit",
+        "/sifre-sifirla",
+        "/yeni-sifre",
+        // Outbound redirects to listing sources and their "gone" page.
+        "/git",
+        "/ilan-yayinda-degil",
+      ],
     },
     sitemap: `${siteUrl}/sitemap.xml`,
   };

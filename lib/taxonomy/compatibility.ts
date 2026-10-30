@@ -1,4 +1,4 @@
-import type { ProductRecord } from "@/lib/product-detail";
+import type { ProductSummary } from "@/lib/product-detail";
 
 export type CompatibilityMatchType =
   | "exact_device"
@@ -7,7 +7,7 @@ export type CompatibilityMatchType =
   | "model";
 
 export type CompatibleProduct = {
-  product: ProductRecord;
+  product: ProductSummary;
   matchType: CompatibilityMatchType;
   matchStrength: number;
   matchedValue: string;
@@ -39,8 +39,8 @@ function extractCompatibilityField(
  * on the source product, or when no candidates match.
  */
 export function getCompatibleProducts(
-  product: ProductRecord,
-  allProducts: ProductRecord[],
+  product: ProductSummary,
+  allProducts: ProductSummary[],
 ): CompatibleProduct[] {
   const compatibleDevice = extractCompatibilityField(product.attributes, "compatibleDevice");
   const compatibleFamily = extractCompatibilityField(product.attributes, "compatibleFamily");

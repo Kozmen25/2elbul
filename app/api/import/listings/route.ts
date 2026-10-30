@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBearerToken, secretsMatch } from "@/lib/auth/cron-auth";
 import { importListings } from "@/lib/import/import-listings";
 import type {
   ImportSource,
@@ -20,12 +21,8 @@ const supportedSources = new Set<ImportSource>([
 
 export async function POST(request: Request) {
   const configuredApiKey = process.env.IMPORT_API_KEY?.trim();
-  const authorization = request.headers.get("authorization");
 
-  if (
-    !configuredApiKey ||
-    authorization !== `Bearer ${configuredApiKey}`
-  ) {
+  if (!configuredApiKey || !secretsMatch(readBearerToken(request), configuredApiKey)) {
     return NextResponse.json({ error: "Yetkisiz istek." }, { status: 401 });
   }
 

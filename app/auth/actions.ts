@@ -1,22 +1,39 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import {
+  authRateLimitMessage,
+  checkAuthRateLimit,
+  type AuthRateLimitedAction,
+} from "@/lib/auth/auth-rate-limit";
+import { safeNextPath } from "@/lib/auth/confirm";
+import { validateNewPassword } from "@/lib/auth/password-policy";
+import { getRequestOrigin } from "@/lib/auth/origin";
+import { NEW_PASSWORD_PATH, isRecoverySession } from "@/lib/auth/recovery";
 import { isPresetAvatarId } from "@/lib/preset-avatars";
-import { getSiteUrl } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { recordEvent } from "@/lib/analytics/events";
-
-const AUTH_CALLBACK_PATH = "/auth/callback";
-
-function authCallbackOrigin() {
-  return `${getSiteUrl().replace(/\/$/, "")}${AUTH_CALLBACK_PATH}`;
-}
+import { getClientIp } from "@/lib/rate-limit";
 
 export type AuthState = {
   status: "idle" | "error" | "success";
   message: string;
+  /**
+   * The e-mail that was submitted. React clears uncontrolled fields after a
+   * form action finishes, so the form uses this as the field's default value
+   * to keep the address after an error.
+   */
+  email?: string;
 };
+
+/** Error message when this attempt is over the brute-force limit, else null. */
+async function rateLimitError(action: AuthRateLimitedAction, account: string): Promise<string | null> {
+  const ip = getClientIp({ headers: await headers() });
+  const decision = checkAuthRateLimit(action, { ip, account });
+  return decision.allowed ? null : authRateLimitMessage(decision.retryAfterMinutes);
+}
 
 export async function login(
   _previousState: AuthState,
@@ -34,12 +51,12 @@ export async function login(
     return { status: "error", message: "Supabase bağlantısı yapılandırılmamış." };
   }
 
-  if (!email || password.length < 6) {
-    return {
-      status: "error",
-      message: "Geçerli bir e-posta ve en az 6 karakterli şifre girin.",
-    };
+  if (!email || !password) {
+    return { status: "error", message: "E-posta ve şifrenizi girin.", email };
   }
+
+  const limited = await rateLimitError("login", email);
+  if (limited) return { status: "error", message: limited, email };
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -48,6 +65,7 @@ export async function login(
     return {
       status: "error",
       message: authErrorMessage(error.message),
+      email,
     };
   }
 
@@ -74,15 +92,13 @@ export async function signUp(
     return { status: "error", message: "Supabase bağlantısı yapılandırılmamış." };
   }
 
-  if (!email || password.length < 6) {
-    return {
-      status: "error",
-      message: "Geçerli bir e-posta ve en az 6 karakterli şifre girin.",
-    };
+  if (!email) {
+    return { status: "error", message: "Geçerli bir e-posta adresi girin.", email };
   }
 
-  if (password !== confirmPassword) {
-    return { status: "error", message: "Şifreler birbiriyle eşleşmiyor." };
+  const passwordError = validateNewPassword(password, confirmPassword);
+  if (passwordError) {
+    return { status: "error", message: passwordError, email };
   }
 
   // Optional user-chosen avatar id; the DB trigger defaults to a deterministic
@@ -90,15 +106,21 @@ export async function signUp(
   const userData: Record<string, string> = {};
   if (avatarPreset) {
     if (!isPresetAvatarId(avatarPreset)) {
-      return { status: "error", message: "Geçersiz avatar seçildi." };
+      return { status: "error", message: "Geçersiz avatar seçildi.", email };
     }
     userData.avatar = avatarPreset;
   }
 
+  const limited = await rateLimitError("signup", email);
+  if (limited) return { status: "error", message: limited, email };
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: authCallbackOrigin(), data: userData },
+    options: {
+      emailRedirectTo: `${await getRequestOrigin()}/auth/callback`,
+      data: userData,
+    },
   });
 
   if (error) {
@@ -106,6 +128,7 @@ export async function signUp(
     return {
       status: "error",
       message: authErrorMessage(error.message),
+      email,
     };
   }
 
@@ -155,11 +178,19 @@ export async function resetPassword(
   }
 
   if (!email) {
-    return { status: "error", message: "Geçerli bir e-posta adresi girin." };
+    return { status: "error", message: "Geçerli bir e-posta adresi girin.", email };
   }
 
+  const limited = await rateLimitError("password-reset", email);
+  if (limited) return { status: "error", message: limited, email };
+
+  // With Supabase's default e-mail template the link returns to
+  // /auth/callback?code=… on this same host (where the PKCE verifier cookie was
+  // just stored) and `next` sends the user on to the new-password page. Custom
+  // templates from supabase/email-templates use /auth/confirm instead.
+  const origin = await getRequestOrigin();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: authCallbackOrigin(),
+    redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(NEW_PASSWORD_PATH)}`,
   });
 
   if (error) {
@@ -167,6 +198,7 @@ export async function resetPassword(
     return {
       status: "error",
       message: resetErrorMessage(error.message),
+      email,
     };
   }
 
@@ -177,10 +209,10 @@ export async function resetPassword(
 }
 
 /**
- * Sets a new password. The caller must already hold a session that came from
- * the recovery flow (the /yeni-sifre page gates on `amr: recovery`). When the
- * new password is persisted the recovery session is discarded so the user logs
- * in again with the fresh password.
+ * Sets a new password after a password-reset e-mail link. Only a session that
+ * was created by such a link within the last few minutes may do this without
+ * the old password (see lib/auth/recovery.ts). On success every session of the
+ * user is ended so the new password has to be used to log in again.
  */
 export async function updatePassword(
   _previousState: AuthState,
@@ -194,33 +226,112 @@ export async function updatePassword(
     return { status: "error", message: "Supabase bağlantısı yapılandırılmamış." };
   }
 
-  if (password.length < 6) {
+  if (!(await isRecoverySession(supabase))) {
     return {
       status: "error",
-      message: "Yeni şifre en az 6 karakter olmalıdır.",
+      message: "Şifre sıfırlama bağlantınızın süresi dolmuş. Lütfen yeni bir bağlantı isteyin.",
     };
   }
 
-  if (password !== confirmPassword) {
-    return { status: "error", message: "Şifreler birbiriyle eşleşmiyor." };
+  const passwordError = validateNewPassword(password, confirmPassword);
+  if (passwordError) {
+    return { status: "error", message: passwordError };
   }
 
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
     console.error("Supabase password update failed:", error);
-    return {
-      status: "error",
-      message: "Şifre güncellenemedi. Lütfen tekrar deneyin.",
-    };
+    return { status: "error", message: authErrorMessage(error.message) };
   }
 
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: "global" });
   redirect("/giris?reset=success");
 }
 
-function safeNextPath(value: string, fallback = "/") {
-  return value.startsWith("/") && !value.startsWith("//") ? value : fallback;
+/**
+ * Turns the tokens from an implicit-flow reset link (read from the URL
+ * fragment by /auth/recovery) into a session. Only a session that was created
+ * by a reset link is kept; anything else is discarded.
+ */
+export async function startRecoverySession(accessToken: string, refreshToken: string): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase || !accessToken || !refreshToken) return false;
+
+  const { error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) {
+    console.error("Supabase recovery session failed:", error.message);
+    return false;
+  }
+
+  if (!(await isRecoverySession(supabase))) {
+    await supabase.auth.signOut();
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Changes the password of a logged-in user. The current password is verified
+ * first so a hijacked or unattended session cannot silently take over the
+ * account.
+ */
+export async function changePassword(
+  _previousState: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    return { status: "error", message: "Supabase bağlantısı yapılandırılmamış." };
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+  const email = userData.user?.email;
+  if (!userData.user || !email) {
+    return { status: "error", message: "Bu işlem için giriş yapmalısınız." };
+  }
+
+  if (!currentPassword) {
+    return { status: "error", message: "Mevcut şifrenizi girin." };
+  }
+
+  const passwordError = validateNewPassword(password, confirmPassword);
+  if (passwordError) {
+    return { status: "error", message: passwordError };
+  }
+
+  if (password === currentPassword) {
+    return { status: "error", message: "Yeni şifre mevcut şifrenizden farklı olmalıdır." };
+  }
+
+  const limited = await rateLimitError("password-change", userData.user.id);
+  if (limited) return { status: "error", message: limited };
+
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email,
+    password: currentPassword,
+  });
+  if (verifyError) {
+    return { status: "error", message: "Mevcut şifre hatalı." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    console.error("Supabase password change failed:", error);
+    return { status: "error", message: authErrorMessage(error.message) };
+  }
+
+  // Sign out every other device; this session stays logged in.
+  await supabase.auth.signOut({ scope: "others" });
+
+  return { status: "success", message: "Şifren güncellendi. Diğer cihazlardaki oturumların kapatıldı." };
 }
 
 function resetErrorMessage(message: string) {
@@ -244,6 +355,9 @@ function authErrorMessage(message: string) {
   }
   if (normalized.includes("already registered")) {
     return "Bu e-posta adresiyle daha önce kayıt olunmuş.";
+  }
+  if (normalized.includes("different from the old password")) {
+    return "Yeni şifre eskisinden farklı olmalıdır.";
   }
   if (normalized.includes("password")) {
     return "Şifre güvenlik gereksinimlerini karşılamıyor.";

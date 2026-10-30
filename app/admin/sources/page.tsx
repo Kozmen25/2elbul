@@ -1,6 +1,8 @@
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { loadSourceStats } from "@/lib/source-stats";
 import { SourceManager, type AdminSource } from "./source-manager";
+import { SourceStatsTable } from "./source-stats-table";
 
 export default async function AdminSourcesPage() {
   const supabase = createSupabaseAdminClient();
@@ -74,6 +76,13 @@ export default async function AdminSourcesPage() {
     createdAt: String(source.created_at),
   }));
 
+  const sourceStats = supabase
+    ? await loadSourceStats(supabase).catch((error) => {
+        console.error("Admin source stats failed:", error);
+        return null;
+      })
+    : null;
+
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden">
       <AdminPageHeader
@@ -94,6 +103,8 @@ export default async function AdminSourcesPage() {
           `supabase/source-integration-settings.sql` dosyasını çalıştırın.
         </div>
       )}
+
+      {sourceStats ? <SourceStatsTable stats={sourceStats} /> : null}
 
       {!supabase || sourceError ? (
         <AdminEmpty>

@@ -72,73 +72,131 @@ Projedeki `.gitignore`, `.env*` dosyalarını yok sayar ve yalnızca
 `.env.example` dosyasının repoya eklenmesine izin verir. `.vercelignore` da
 Vercel CLI ile doğrudan deploy sırasında yerel ortam dosyalarını dışarıda tutar.
 
-## Supabase Auth Kurulumu
+## E-posta Servisi
 
-Uygulama e-posta ve şifre ile kayıt, giriş ve çıkış akışlarını destekler.
+Tüm e-postalar admin panelindeki **E-posta** sayfasından (`/admin/email`) girilen SMTP ayarıyla gönderilir.
+SMTP şifresi veritabanında AES-256-GCM ile şifrelenir (anahtar: `EMAIL_SETTINGS_ENCRYPTION_KEY`).
 
-1. Supabase panelinde **Authentication > Providers > Email** bölümünü açın.
-2. Email provider seçeneğini etkinleştirin.
-3. **Authentication > URL Configuration** bölümünde Site URL değerini yerelde
-   `http://localhost:3000`, production ortamında Vercel alan adınız olarak
-   ayarlayın.
-4. Redirect URLs listesine aşağıdaki adresleri ekleyin:
+| E-posta | Nasıl gider |
+|---|---|
+| Kayıt onayı, şifre sıfırlama, giriş bağlantısı | Supabase "Send Email" hook'u bu e-postaları `/api/auth/email-hook` adresine yönlendirir; uygulama şablonu hazırlayıp SMTP ile gönderir |
+| Fiyat alarmı, fiyat düşüşü, kayıtlı arama | Günlük cron, uygulama içi bildirimin e-posta kopyasını gönderir (kullanıcı Hesabım'dan kapatabilir) |
+| Test e-postası | Admin panelindeki düğme |
 
-```text
-http://localhost:3000/auth/callback
-https://your-domain.vercel.app/auth/callback
+İlk kurulum:
+
+```bash
+npm run email:keys        # EMAIL_SETTINGS_ENCRYPTION_KEY ve SEND_EMAIL_HOOK_SECRET üretir
 ```
 
-5. `.env.local` ve Vercel ortam değişkenlerine `NEXT_PUBLIC_SITE_URL` ekleyin.
+1. İki değişkeni `.env.local` ve Vercel'e ekleyip siteyi yeniden yayınlayın.
+2. `/admin/email` sayfasında SMTP bilgilerini girip "Test e-postası gönder" ile deneyin.
+3. Hesap e-postalarını bu sisteme bağlayın (Supabase'in yerleşik göndericisi yerine):
 
-E-posta doğrulaması açıksa kayıt işleminden sonra kullanıcıya doğrulama e-postası
-gönderilir. Doğrulama bağlantısı `/auth/callback` rotasında oturuma çevrilir.
+```bash
+npm run email:hook -- enable --url https://www.2elbul.com/api/auth/email-hook
+npm run email:hook -- status
+npm run email:hook -- disable   # Supabase yerleşik gönderimine geri döner
+```
+
+3. adımdan önce 1. adım tamamlanmamışsa kayıt ve şifre sıfırlama çalışmaz; komut gizli anahtar yoksa hook'u açmayı reddeder.
+E-posta servisi kapalıyken hook hata döner (kullanıcı "e-posta gönderilemedi" görür), cron ise hiçbir şey denemez.
+Gönderim sonuçları admin panelinde listelenir; e-posta içeriği ve bağlantılar kaydedilmez, kayıtlar 90 gün sonra silinir.
+
+## Supabase Auth Kurulumu
+
+Uygulama e-posta ve şifre ile kayıt, giriş, çıkış, şifre sıfırlama ve şifre
+değiştirme akışlarını destekler. Bu ayarlar **her Supabase projesi için ayrı**
+yapılır: yerel/test projesi ve canlı sitenin kullandığı proje birbirinden
+bağımsızdır, aynı adımlar ikisinde de uygulanmalıdır.
+
+1. Supabase panelinde **Authentication > Providers > Email** bölümünü açıp
+   Email provider'ı etkinleştirin.
+2. **Authentication > URL Configuration** bölümünde Site URL ve Redirect URLs
+   değerlerini ayarlayın. Komutla da yapılabilir (`SUPABASE_ACCESS_TOKEN` gerekir):
+
+```bash
+# canlı proje
+npm run db:auth-config -- --site-url https://www.2elbul.com
+# yerel/test proje
+npm run db:auth-config -- --site-url http://localhost:3000
+```
+
+   Komut şifre kuralını (`password_min_length` = 8, `lib/auth/password-policy.ts`
+   ile aynı), Site URL'yi ve `Redirect URLs` listesini (`<adres>/**`) günceller.
+3. `.env.local` ve Vercel ortam değişkenlerine `NEXT_PUBLIC_SITE_URL` ekleyin.
+
+### E-posta gönderimi (önemli)
+
+Supabase'in yerleşik e-posta göndericisi yalnızca deneme içindir: saatte 2
+e-posta ile sınırlıdır ve proje ekibi dışındaki adreslere güvenilir şekilde
+ulaşmaz. **Gerçek kullanıcılar için kayıt onayı ve şifre sıfırlama e-postaları
+bir özel SMTP servisi (Resend, Brevo vb.) bağlanmadan çalışmaz.** SMTP
+**Authentication > SMTP Settings** bölümünden bağlanır.
+
+SMTP bağlandıktan sonra e-posta şablonlarını da güncellemeniz önerilir:
+
+```bash
+npm run db:auth-config -- --templates
+```
+
+Şablonlar (`supabase/email-templates/`) bağlantıyı `/auth/confirm?token_hash=...`
+adresine yönlendirir. Supabase'in varsayılan bağlantıları (PKCE) yalnızca
+e-postayı isteyen tarayıcıda açılırsa çalışır; bu şablonlarla bağlantı telefonda
+ya da başka bir tarayıcıda da açılabilir. Ücretsiz planda, özel SMTP olmadan
+şablon değiştirmeye Supabase izin vermez.
+
+### Akışlar
+
+| Akış | Sayfa / rota | Not |
+|---|---|---|
+| Kayıt | `/kayit` | Onay e-postası gönderir. Şifre en az 8 karakter. |
+| Giriş | `/giris` | Başarısız denemede e-posta alanı korunur; `?next=` ile istenen sayfaya döner. |
+| Şifre sıfırlama isteği | `/sifre-sifirla` | E-posta kayıtlı olsun olmasın aynı yanıt verilir. |
+| Bağlantı (varsayılan şablon) | `/auth/callback?code=...&next=/yeni-sifre` | Yalnızca isteğin yapıldığı tarayıcıda çalışır. |
+| Bağlantı (özel şablon) | `/auth/confirm?token_hash=...&type=recovery` | Her cihazda çalışır. |
+| Bağlantı (admin tetiklemeli) | `/auth/recovery#access_token=...` | Admin panelindeki "Şifre sıfırlama bağlantısı gönder". |
+| Yeni şifre | `/yeni-sifre` | Yalnızca e-posta bağlantısından gelen ve son 15 dakikada açılmış oturum kullanabilir (`lib/auth/recovery.ts`). Başarılı olunca tüm oturumlar kapatılır. |
+| Şifre değiştirme | `/hesabim` > Güvenlik | Mevcut şifre doğrulanır; diğer cihazlardaki oturumlar kapatılır. |
+
 Header giriş durumuna göre `Giriş Yap` ve `Kayıt Ol` ya da `Hesabım`,
 `Favoriler` ve `Çıkış Yap` bağlantılarını gösterir.
 
 ## Supabase Veritabanı Kurulumu
 
-1. Supabase panelinde **SQL Editor** bölümünü açın.
-2. `supabase/schema.sql` dosyasının tamamını çalıştırın.
-3. SQL, `products`, `listings`, `search_events`, `favorites` ve
-   `price_alerts` tablolarını, indeksleri,
-   fiyat değişim trigger'ını ve RLS politikalarını oluşturur.
-4. Beş başlangıç ürünü `products` tablosuna otomatik eklenir.
+Şema değişiklikleri `supabase/migrations/` klasöründeki, sırayla numaralanmış
+dosyalarla yönetilir (`YYYYMMDDHHMMSS_aciklama.sql`, Supabase CLI formatı).
+Hangi dosyanın uygulandığı veritabanında
+`supabase_migrations.schema_migrations` tablosunda tutulur; aynı dosya iki kez
+uygulanmaz.
 
-Tablolar daha önce boş olarak oluşturulduysa aynı SQL dosyasını tekrar
-çalıştırabilirsiniz. Script mevcut tabloları silmez; eksik `product_id`,
-`status`, fiyat ve ilan alanlarını ekleyerek şemayı tamamlar.
+Gerekli ortam değişkeni (yalnızca yerel araçlar için, sunucuya konmaz):
+`SUPABASE_ACCESS_TOKEN` — Supabase panelinde **Account → Access Tokens**.
 
-### Onerilen SQL Calisma Sirasi
-
-Yeni kurulumda veya eksik migration tamamlamada Supabase SQL Editor icinde
-asagidaki dosyalari bu sirayla calistirin:
-
-```text
-supabase/schema.sql
-supabase/product-slugs.sql
-supabase/listing-images.sql
-supabase/listing-status.sql
-supabase/favorites.sql
-supabase/sources-and-bots.sql
-supabase/source-bot-publish-mode.sql
-supabase/source-integration-settings.sql
-supabase/bot-scheduler.sql
-supabase/bot-sync.sql
-supabase/migrations/bot-center-monitoring.sql
-supabase/price-history.sql
-supabase/price-alerts.sql
-supabase/search-demand-queue.sql
-supabase/site-settings.sql
-supabase/production-hardening.sql
+```bash
+npm run db:status    # uygulanan / bekleyen migration'lar
+npm run db:migrate   # bekleyenleri sırayla uygular (her dosya tek transaction)
+npm run db:types     # lib/database.types.ts dosyasını canlı şemadan üretir
 ```
 
-`supabase/bot-sync.sql` dosyasi bot senkronizasyon RPC'sini ve fiyat gecmisi
-tetiklerini tamamlar. `supabase/price-history.sql` dosyasi tek basina fiyat
-gecmisi tablosunu kurmak icin de tekrar calistirilabilir.
-`supabase/production-hardening.sql` yayin oncesi RLS policy'lerini sertlestirir:
-anon kullanicilar yalnizca `published` veya `active` ilanlari okuyabilir,
-favoriler sadece kullanicinin kendi kayitlarina aciktir, `sources` ve
-`bot_runs` public policy almaz.
+Yeni bir değişiklik için `supabase/migrations/` altına bir sonraki numarayla
+yeni dosya ekleyin. **Uygulanmış bir migration dosyasını düzenlemeyin**;
+düzeltmeyi yeni bir dosyayla yapın.
+
+### Sıfırdan kurulum
+
+`20260930000000_baseline.sql`, migration takibi başlamadan önceki şemadır ve
+canlı projede yalnızca "uygulandı" olarak işaretlenmiştir. Boş, yeni bir
+Supabase projesinde önce bu dosyayı SQL Editor'de elle çalıştırın, sonra
+`npm run db:migrate` çalıştırın.
+
+### Eski SQL dosyaları (@deprecated)
+
+`supabase/*.sql` (kök klasör) ve `supabase/legacy/migrations/` altındaki
+dosyalar yalnızca geçmiş kaydı olarak tutulur; içerikleri baseline'a ve
+numaralı migration'lara taşınmıştır. Yeni kurulumda çalıştırmayın.
+`supabase/legacy/migrations/activate-*.sql` dosyaları şema değil, botları
+canlıda açan operasyonel kararlardır ve bilinçli olarak uygulanmamıştır.
 
 ### Tablolar
 
@@ -176,6 +234,27 @@ supabase/listing-images.sql
 `listings.image_url` boşsa veya uzak görsel yüklenemezse uygulama ürün adına
 göre telefon, ekran kartı, konsol, laptop veya genel SVG görseli gösterir.
 
+### İlan Ekleme (`/listing-ekle`)
+
+Giriş yapmış kullanıcılar başka bir sitedeki ilanı üç adımda gönderir:
+
+1. **Ürün:** Ürün adı yazılarak aranır (`/api/products/lookup`); ilan, takip edilen bir ürüne bağlanır.
+2. **Detaylar:** Başlık, fiyat (yazarken `25.000` biçimine çevrilir), durum, şehir (81 il, yazarak aranır),
+   ilan bağlantısı ve site. Bağlantı yapıştırılınca site otomatik seçilir; bağlantı seçilen siteye ait
+   görünmüyorsa uyarı çıkar. İsteğe bağlı fotoğraf tarayıcıda 1600 px'e küçültülür.
+3. **Önizleme:** Özet kontrol edilip gönderilir.
+
+Sağdaki önizleme kartı yazdıkça güncellenir. Yarım kalan ilan tarayıcıda taslak olarak saklanır ve sonraki
+açılışta devam ettirilir. Kurallar `lib/listing-submission/` altındadır; aynı doğrulama hem sihirbazda hem
+sunucu eyleminde (`app/listing-ekle/actions.ts`) çalışır. Sunucu ayrıca aynı bağlantının daha önce
+gönderilip gönderilmediğine bakar, bağlantıdan izleme parametrelerini (`utm_*`, `fbclid` vb.) temizler ve
+bir kullanıcının 24 saatte en fazla 10 bekleyen ilanı olmasına izin verir.
+
+Fotoğraflar herkese açık `listing-images` deposuna `<kullanıcı id>/<dosya>` yoluyla yüklenir
+(`supabase/migrations/20260930003200_listing_images_bucket.sql`). Depo 2 MB ve JPEG/PNG/WebP ile sınırlıdır,
+kullanıcı yalnızca kendi klasörüne yazabilir; sunucu ayrıca dosya içeriğine (magic bytes) bakar.
+Sunucu eylemlerinin gövde sınırı fotoğraflar için `next.config.ts` içinde 4 MB'a çıkarıldı.
+
 ### İlan Onay Sistemi
 
 Admin panelinde ilanları beklemeye alma, yayınlama ve reddetme özelliklerini
@@ -184,6 +263,15 @@ etkinleştirmek için Supabase **SQL Editor** içinde şu dosyayı çalıştır�
 ```text
 supabase/listing-status.sql
 ```
+
+Kullanıcıların ilan eklemesi (`/listing-ekle`) için giriş gerekir. Eklenen ilan
+her zaman `pending` durumunda ve gönderen kullanıcıya (`user_id`) bağlı kaydedilir;
+Hesabım > İlanlarım bölümünde "Onay bekliyor" olarak görünür ve admin
+yayınlayana kadar herkese açık sayfalarda gösterilmez. Bu kurallar veritabanında
+satır güvenliği (RLS) ile de zorunludur (`supabase/migrations/20260930003000_user_data_access.sql`):
+anonim ilan eklenemez, kullanıcı kendi adına dışında ya da `published` ilan
+ekleyemez. Favori ya da alarm kurduğun bir ilan yayından kalkarsa favorilerinde
+"Bu ilan artık yayında değil" uyarısıyla görünmeye devam eder.
 
 Guncel not: Bu migration `listings.status`, `listings.updated_at` ve
 `listings.inactive_at` kolonlarini tamamlar. Desteklenen status degerleri
@@ -898,7 +986,18 @@ fonksiyonunu oluşturur.
 Kullanıcılar ürün detay sayfasından (`/product/[slug]`) hedef fiyat
 belirleyerek fiyat alarmı oluşturabilir. Alarmlar Hesabım sayfasında
 listelenir; hedef fiyat, mevcut fiyat, durum ve oluşturma tarihi gösterilir.
-Kullanıcı kendi alarmını iptal edebilir.
+Kullanıcı kendi alarmını duraklatabilir, sürdürebilir, tetiklenmiş alarmı
+yeniden kurabilir ve iptal edebilir. Bir kullanıcının en fazla 50 aktif alarmı
+olabilir (uygulamada ve `enforce_price_alert_limit` tetikleyicisiyle
+veritabanında zorunlu). Alarm mantığı `lib/price-alerts/` altındadır
+(`rules.ts` saf kurallar, `service.ts` veritabanı işlemleri); hem sayfadaki
+sunucu eylemleri hem `/api/price-alerts` aynı servisi kullanır.
+
+Alarmlar günlük cron ile (`/api/cron/check-price-alerts`) kontrol edilir:
+hedef fiyatın altına inen alarm tetiklenir, %5 ve üzeri düşüş "fiyat düştü"
+bildirimi üretir (aksesuar ve yedek parçalar için düşüş bildirimi kapalıdır).
+Bildirimler uygulama içidir (`/bildirimler`); e-posta ile bildirim için özel
+SMTP gerekir.
 
 Kurulum SQL'i:
 
@@ -1294,16 +1393,16 @@ gosterilir; kolon yoksa sayfa mevcut semayla calismaya devam eder.
 ## Urun Detay Sayfasi 2.0 - Sprint 2 Fiyat Grafigi
 
 `/product/[slug]` sayfasindaki fiyat gecmisi grafigi mevcut `listings`
-verisinden uretilir. Yeni tablo veya SQL migration gerekmez.
+`price_history` tablosundaki gercek fiyat kayitlarindan uretilir
+(`buildDailyPriceHistory`). Yeni tablo veya SQL migration gerekmez.
 
 Grafik davranisi:
 
-- `listings.created_at` tarihi kullanilir.
-- `listings.updated_at` kolonu varsa yedek tarih bilgisi olarak okunur.
+- `price_history.recorded_at` tarihi kullanilir (ilan olusturma tarihi degil).
 - Her gun icin ortalama fiyat, en dusuk fiyat ve ilan sayisi hesaplanir.
 - 7 gun, 30 gun, 90 gun ve tum zaman filtreleri vardir.
 - Mobil uyumlu SVG tabanli hafif grafik kullanilir; yeni paket eklenmemistir.
-- Yeterli tarih verisi yoksa bos durum mesaji gosterilir.
+- En az iki farkli gune ait kayit yoksa "fiyat gecmisi birikiyor" mesaji gosterilir.
 
 ## Urun Detay Sayfasi 2.0 - Sprint 3 Guven Skoru
 

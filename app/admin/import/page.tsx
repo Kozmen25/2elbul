@@ -12,7 +12,7 @@ export default async function AdminImportPage() {
         title="Toplu ilan içe aktar"
         description="JSON, CSV veya Excel verilerini doğrulayın, ilk 10 kaydı önizleyin ve ortak ilan formatıyla sisteme aktarın."
         action={
-          <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
             <DatabaseZap size={24} />
           </span>
         }

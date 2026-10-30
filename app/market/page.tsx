@@ -1,3 +1,4 @@
+import { DEFAULT_OG_IMAGES, DEFAULT_TWITTER_IMAGES } from "@/lib/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, Flame, PackageSearch, TrendingDown } from "lucide-react";
@@ -24,12 +25,14 @@ export const metadata: Metadata = {
     siteName: "2ElBul",
     locale: "tr_TR",
     type: "website",
+    images: DEFAULT_OG_IMAGES,
   },
   twitter: {
     card: "summary_large_image",
     title: "İkinci El Piyasa Merkezi | 2ElBul",
     description:
       "2ElBul, ikinci el piyasasındaki arama, ilan ve fiyat sinyallerini analiz eder.",
+    images: DEFAULT_TWITTER_IMAGES,
   },
 };
 
@@ -111,7 +114,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
     <main className="min-w-0 bg-[#fafaf8] py-10 sm:py-14">
       <div className="container-shell min-w-0">
         <section className="rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8 lg:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#3B66E0]">
             Piyasa zekası
           </p>
           <div className="mt-3 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
@@ -124,9 +127,9 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
                 sinyallerini analiz ederek öne çıkan ürünleri gösterir.
               </p>
             </div>
-            <div className="rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4 text-center">
-              <p className="text-3xl font-black text-[#ff6b00]">{totalSignals}</p>
-              <p className="text-xs font-black uppercase tracking-[0.08em] text-[#d95700]">
+            <div className="rounded-2xl border border-[#3B66E0]/20 bg-[#EEF3FF] p-4 text-center">
+              <p className="text-3xl font-black text-[#3B66E0]">{totalSignals}</p>
+              <p className="text-xs font-black uppercase tracking-[0.08em] text-[#2A4FBF]">
                 piyasa sinyali
               </p>
             </div>
@@ -146,8 +149,8 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
               href={view.value === "all" ? "/market" : `/market?view=${view.value}`}
               className={`shrink-0 rounded-full border px-4 py-2 text-sm font-black transition ${
                 activeView === view.value
-                  ? "border-[#ff6b00] bg-[#ff6b00] text-white"
-                  : "border-black/10 bg-white text-black/60 hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+                  ? "border-[#3B66E0] bg-[#3B66E0] text-white"
+                  : "border-black/10 bg-white text-black/60 hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
               }`}
             >
               {view.label}
@@ -189,7 +192,7 @@ function MarketSection({
     <section className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex min-w-0 gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
             <Icon size={21} />
           </span>
           <div className="min-w-0">
@@ -219,7 +222,7 @@ function MarketSection({
 
 function MarketProductCard({ item }: { item: MarketPulseItem }) {
   return (
-    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:bg-white hover:shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
+    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:bg-white hover:shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="break-words text-lg font-black leading-6">
@@ -233,7 +236,7 @@ function MarketProductCard({ item }: { item: MarketPulseItem }) {
           <span className="rounded-full border border-green-200 bg-white px-3 py-1.5 text-[11px] font-black text-green-700">
             {item.decisionLabel}
           </span>
-          <span className="rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
+          <span className="rounded-full border border-[#3B66E0]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#2A4FBF]">
             {item.opportunityLabel}
           </span>
         </div>
@@ -270,7 +273,7 @@ function Metric({
         {label}
       </p>
       <p
-        className={`mt-1 truncate text-sm font-black ${accent ? "text-[#ff6b00]" : ""}`}
+        className={`mt-1 truncate text-sm font-black ${accent ? "text-[#3B66E0]" : ""}`}
         title={value}
       >
         {value}

@@ -1,6 +1,8 @@
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { detectQueryIntent } from "@/lib/search/query-intent-detector";
+import { getExpandedSearchTerms } from "@/lib/search/query-expansion";
+import { buildIlikeOrFilter } from "@/lib/search/ilike-filter";
 import { attachPueScore } from "@/lib/search/pue-ranking";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
@@ -17,6 +19,7 @@ import type {
   MobilePagination,
 } from "@/lib/mobile/types";
 import type { NextRequest } from "next/server";
+import { toBigintIds } from "@/lib/supabase-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -60,21 +63,20 @@ export async function GET(request: NextRequest) {
   }
 
   const intent = detectQueryIntent(query);
+  const searchTerms = getExpandedSearchTerms(query);
+  const productOrFilter = buildIlikeOrFilter("name", searchTerms);
+  const titleOrFilter = buildIlikeOrFilter("title", searchTerms);
 
   const [matchingProductsResults, titleListingsResults] = await Promise.all([
-    Promise.all(
-      [query].map((term) =>
-        supabase
-          .from("products")
-          .select("id, name, category, attributes")
-          .ilike("name", `%${term}%`),
-      ),
-    ),
-    Promise.all(
-      [query].map((term) =>
-        searchPublishedListingsByTitle(supabase, `%${term}%`),
-      ),
-    ),
+    Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, category, attributes")
+        .or(productOrFilter),
+    ]),
+    Promise.all([
+      searchPublishedListingsByTitle(supabase, titleOrFilter),
+    ]),
   ]);
 
   const productSearchError = matchingProductsResults.find((r) => r.error)?.error;
@@ -123,13 +125,13 @@ export async function GET(request: NextRequest) {
     ? await supabase
         .from("products")
         .select("id, name, slug, category, attributes")
-        .in("id", productIds)
+        .in("id", toBigintIds(productIds))
         .then((result) => {
           if (!result.error || !isMissingAttributesColumn(result.error)) return result;
           return supabase
             .from("products")
             .select("id, name, slug, category")
-            .in("id", productIds);
+            .in("id", toBigintIds(productIds));
         })
     : { data: [], error: null };
 
@@ -324,19 +326,19 @@ function safeParseNumber(value: string | null): number | null {
 
 async function searchPublishedListingsByTitle(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
-  pattern: string,
+  orFilter: string,
 ) {
   const result = await supabase
     .from("listings")
     .select(LISTING_COLUMNS)
     .in("status", ["published", "active"])
-    .ilike("title", pattern);
+    .or(orFilter);
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
   return supabase
     .from("listings")
     .select(LISTING_COLUMNS)
-    .ilike("title", pattern);
+    .or(orFilter);
 }
 
 async function searchPublishedListingsByProduct(
@@ -347,11 +349,11 @@ async function searchPublishedListingsByProduct(
     .from("listings")
     .select(LISTING_COLUMNS)
     .in("status", ["published", "active"])
-    .in("product_id", productIds);
+    .in("product_id", toBigintIds(productIds));
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
   return supabase
     .from("listings")
     .select(LISTING_COLUMNS)
-    .in("product_id", productIds);
+    .in("product_id", toBigintIds(productIds));
 }

@@ -35,6 +35,14 @@ describe("category taxonomy engine", () => {
     );
   });
 
+  it("expands laptop and notebook as equivalent product-type terms", () => {
+    const laptopTerms = getExpandedSearchTerms("laptop");
+    const notebookTerms = getExpandedSearchTerms("notebook");
+
+    expect(laptopTerms).toEqual(expect.arrayContaining(["notebook", "dizustu"]));
+    expect(notebookTerms).toEqual(expect.arrayContaining(["laptop", "dizustu"]));
+  });
+
   it("expands white goods and tv intents", () => {
     expect(getExpandedSearchTerms("beyaz eşya")).toEqual(
       expect.arrayContaining([

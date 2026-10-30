@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
+import { CACHE_SECONDS } from "@/lib/cache-policy";
 import type {
   Listing,
   ListingCondition,
@@ -13,11 +15,13 @@ import {
   isMissingAttributesColumn,
   isMissingPriceHistoryTable,
   isMissingSearchDemandTable,
+  isMissingDuplicateGroupColumn,
   isMissingListingUpdatedAtColumn,
   isMissingProductCategoryColumn,
 } from "@/lib/listing-status";
 import {
   buildMarketIntelligence,
+  buildMarketOpportunityFromAnalysis,
   type MarketIntelligence,
   type MarketIntelligenceDecisionInsight,
   type MarketIntelligenceListing,
@@ -53,19 +57,41 @@ import {
 } from "@/lib/market-intelligence/helpers";
 import { getCompatibleProducts } from "@/lib/taxonomy/compatibility";
 import { ACCESSORY_PATTERNS } from "@/lib/product-understanding/accessory-patterns";
+import { collapseDuplicateListings, summarizeStoredDuplicateGroups } from "@/lib/duplicate-engine/collapse";
+import { toBigintId, toBigintIds } from "@/lib/supabase-ids";
+import { getCategoryById } from "@/lib/categories";
+
+export type ProductCategoryLink = { slug: string; label: string };
 
 export type ProductRecord = {
   id: string;
   name: string;
   slug: string;
+  /** Main category name (mirror of category_id, kept by the DB trigger). */
   category: string | null;
+  /** Main category → subcategory, resolved from products.category_id. */
+  categoryPath: ProductCategoryLink[];
   attributes?: unknown;
 };
+
+/** Product fields used for relatedness scoring (no category path needed). */
+export type ProductSummary = Omit<ProductRecord, "categoryPath">;
+
+async function resolveProductCategoryPath(categoryId: number | null | undefined): Promise<ProductCategoryLink[]> {
+  if (categoryId == null) return [];
+  const resolved = await getCategoryById(categoryId);
+  if (!resolved) return [];
+  const path = resolved.parent ? [resolved.parent, resolved.category] : [resolved.category];
+  return path.map((category) => ({ slug: category.slug, label: category.name }));
+}
 
 export type ProductDetailData = {
   product: ProductRecord;
   productUnderstanding: ProductUnderstandingResult | null;
+  /** One entry per item: copies of the same item on several platforms are collapsed. */
   listings: Listing[];
+  /** Every listing of the product, duplicates included: what each platform offers. */
+  sourceOffers: Listing[];
   duplicateSummary: DuplicateBatchSummary;
   priceHistory: PriceHistoryRecord[];
   intelligence: ProductIntelligence;
@@ -138,6 +164,7 @@ type ListingRow = {
   created_at: string | null;
   updated_at?: string | null;
   confidence_score?: string | number | null;
+  duplicate_group_id?: string | null;
 };
 
 type DuplicateSummaryListing = Pick<
@@ -146,14 +173,6 @@ type DuplicateSummaryListing = Pick<
 >;
 
 const DUPLICATE_SUMMARY_THRESHOLD = 70;
-
-type RelatedListingRow = {
-  product_id: string | number | null;
-  price: string | number | null;
-  title?: string | null;
-  source?: string | null;
-  url?: string | null;
-};
 
 type SearchDemandRow = {
   query?: string | null;
@@ -169,7 +188,7 @@ export const getProductBySlug = cache(
     const normalizedSlug = createProductSlug(slug);
     const slugResult = await supabase
       .from("products")
-      .select("id, name, slug, category, attributes")
+      .select("id, name, slug, category, category_id, attributes")
       .eq("slug", normalizedSlug)
       .maybeSingle();
 
@@ -184,38 +203,50 @@ export const getProductBySlug = cache(
           "category" in slugResult.data && slugResult.data.category
             ? String(slugResult.data.category)
             : null,
+        categoryPath: await resolveProductCategoryPath(slugResult.data.category_id),
         attributes: slugResult.data.attributes ?? null,
       };
     }
 
-    let fallbackResult = await supabase
+    // Older notifications link by numeric id (/product/7).
+    if (/^\d+$/.test(normalizedSlug)) {
+      const idResult = await supabase
+        .from("products")
+        .select("id, name, slug, category, category_id, attributes")
+        .eq("id", Number(normalizedSlug))
+        .maybeSingle();
+      if (!idResult.error && idResult.data) {
+        return {
+          id: String(idResult.data.id),
+          name: idResult.data.name,
+          slug: idResult.data.slug || createProductSlug(idResult.data.name),
+          category: idResult.data.category,
+          categoryPath: await resolveProductCategoryPath(idResult.data.category_id),
+          attributes: idResult.data.attributes ?? null,
+        };
+      }
+    }
+
+    const fallbackResult = await supabase
       .from("products")
-      .select("id, name, category, attributes");
-    if (fallbackResult.error && isMissingProductCategoryColumn(fallbackResult.error)) {
-      fallbackResult = await supabase.from("products").select("id, name, attributes");
-    }
-    if (fallbackResult.error && isMissingAttributesColumn(fallbackResult.error)) {
-      fallbackResult = await supabase.from("products").select("id, name, slug");
-    }
+      .select("id, name, category, category_id, attributes");
 
     if (fallbackResult.error) {
       console.error("Supabase product slug fallback failed:", fallbackResult.error);
       return null;
     }
 
-    const product = ((fallbackResult.data ?? []) as ProductRow[]).find(
-      (row) => createProductSlug(String(row.name)) === normalizedSlug,
+    const product = (fallbackResult.data ?? []).find(
+      (row) => createProductSlug(row.name) === normalizedSlug,
     );
 
     return product
       ? {
           id: String(product.id),
-          name: String(product.name),
-          slug: createProductSlug(String(product.name)),
-          category:
-            "category" in product && product.category
-              ? String(product.category)
-              : null,
+          name: product.name,
+          slug: createProductSlug(product.name),
+          category: product.category,
+          categoryPath: await resolveProductCategoryPath(product.category_id),
           attributes: product.attributes ?? null,
         }
       : null;
@@ -233,10 +264,16 @@ export async function getProductDetail(
   const emptyIntelligence = calculateProductIntelligence({ listings: [] });
   const emptyDecisionInsight = buildProductDecisionInsight(product.name, [], [], product.attributes);
 
+  // Everything below is independent of the listings query, so it all starts
+  // now and runs alongside it instead of after it (each is a network round trip).
+  const relatedProductsPromise = getCachedRelatedProducts(product);
+  const demandPromise = getCachedSearchDemandStats(product.name);
+  const historyPromise = fetchProductPriceHistory(supabase, product.id);
+
   const listingColumns = {
-    base: "id, title, price, city, source, url, condition, image_url, created_at, confidence_score",
+    base: "id, title, price, city, source, url, condition, image_url, created_at, confidence_score, duplicate_group_id",
     withUpdated:
-      "id, title, price, city, source, url, condition, image_url, created_at, updated_at, confidence_score",
+      "id, title, price, city, source, url, condition, image_url, created_at, updated_at, confidence_score, duplicate_group_id",
   };
   let useStatusFilter = true;
   let columns = listingColumns.withUpdated;
@@ -247,8 +284,20 @@ export async function getProductDetail(
     useStatusFilter,
   );
 
+  // Databases that have not run the duplicate-groups migration yet: read
+  // without the column, every listing then simply counts as its own item.
+  if (listingsResult.error && isMissingDuplicateGroupColumn(listingsResult.error)) {
+    columns = columns.replace(", duplicate_group_id", "");
+    listingsResult = await fetchProductListings(
+      supabase,
+      product.id,
+      columns,
+      useStatusFilter,
+    );
+  }
+
   if (listingsResult.error && isMissingListingUpdatedAtColumn(listingsResult.error)) {
-    columns = listingColumns.base;
+    columns = columns.replace(", updated_at", "");
     listingsResult = await fetchProductListings(
       supabase,
       product.id,
@@ -268,7 +317,7 @@ export async function getProductDetail(
   }
 
   if (listingsResult.error && isMissingListingUpdatedAtColumn(listingsResult.error)) {
-    columns = listingColumns.base;
+    columns = columns.replace(", updated_at", "");
     listingsResult = await fetchProductListings(
       supabase,
       product.id,
@@ -292,6 +341,7 @@ export async function getProductDetail(
         ? (product.attributes as ProductUnderstandingResult)
         : null,
       listings: [],
+      sourceOffers: [],
       duplicateSummary,
       priceHistory: [],
       intelligence: emptyIntelligence,
@@ -305,40 +355,21 @@ export async function getProductDetail(
         duplicateSummary,
       }),
       bestDeals: [],
-      relatedProducts: await getRelatedProducts(supabase, product),
+      relatedProducts: await relatedProductsPromise,
     };
   }
 
   const listingsData = (listingsResult.data ?? []) as unknown as ListingRow[];
-  const { listings, marketIntelligenceListings } = buildProductDetailListings(
+  const { listings, sourceOffers, marketIntelligenceListings } = buildProductDetailListings(
     product,
     listingsData,
   );
   const duplicateSummary = resolveProductDetailDuplicateSummary(
     listings,
-    options.duplicateSummary,
+    options.duplicateSummary ?? summarizeStoredDuplicateGroups(sourceOffers),
   );
 
-  const historyResult = await supabase
-    .from("price_history")
-    .select("price, recorded_at")
-    .eq("product_id", product.id)
-    .order("recorded_at", { ascending: true })
-    .limit(2000);
-
-  if (historyResult.error && !isMissingPriceHistoryTable(historyResult.error)) {
-    console.error("Supabase product price history query failed:", historyResult.error);
-  }
-
-  const priceHistory = historyResult.error
-    ? []
-    : (historyResult.data ?? [])
-        .map((record) => ({
-          price: Number(record.price),
-          recordedAt: String(record.recorded_at),
-        }))
-        .filter((record) => Number.isFinite(record.price));
-  const demand = await getProductSearchDemandStats(supabase, product.name);
+  const [priceHistory, demand] = await Promise.all([historyPromise, demandPromise]);
   const intelligence = calculateProductIntelligence({
     listings,
     priceHistory,
@@ -357,6 +388,7 @@ export async function getProductDetail(
       ? (product.attributes as ProductUnderstandingResult)
       : null,
     listings,
+    sourceOffers,
     duplicateSummary,
     priceHistory,
     intelligence,
@@ -370,8 +402,40 @@ export async function getProductDetail(
       duplicateSummary,
     }),
     bestDeals: buildProductBestDeals(listings, extractProductTypeFromAttributes(product.attributes)),
-    relatedProducts: await getRelatedProducts(supabase, product),
+    relatedProducts: await relatedProductsPromise,
   };
+}
+
+/** Price history rows read per product. */
+const PRICE_HISTORY_RECORD_LIMIT = 2000;
+
+async function fetchProductPriceHistory(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  productId: string,
+): Promise<PriceHistoryRecord[]> {
+  const historyResult = await supabase
+    .from("price_history")
+    .select("price, recorded_at")
+    .eq("product_id", toBigintId(productId))
+    // Newest first: past the cap it is the oldest records that must drop out,
+    // never the latest ones the charts and trends depend on.
+    .order("recorded_at", { ascending: false })
+    .limit(PRICE_HISTORY_RECORD_LIMIT);
+
+  if (historyResult.error) {
+    if (!isMissingPriceHistoryTable(historyResult.error)) {
+      console.error("Supabase product price history query failed:", historyResult.error);
+    }
+    return [];
+  }
+
+  return (historyResult.data ?? [])
+    .map((record) => ({
+      price: Number(record.price),
+      recordedAt: String(record.recorded_at),
+    }))
+    .filter((record) => Number.isFinite(record.price))
+    .reverse();
 }
 
 function buildProductDetailListings(
@@ -379,6 +443,7 @@ function buildProductDetailListings(
   listingRows: ListingRow[],
 ): {
   listings: Listing[];
+  sourceOffers: Listing[];
   marketIntelligenceListings: MarketIntelligenceListing[];
 } {
   const productType = extractProductTypeFromAttributes(product.attributes);
@@ -421,6 +486,7 @@ function buildProductDetailListings(
           "updated_at" in listing && listing.updated_at
             ? String(listing.updated_at)
             : null,
+        duplicateGroupId: listing.duplicate_group_id ?? null,
       };
 
       if (isPublicDemoListing(baseListing)) return null;
@@ -441,9 +507,19 @@ function buildProductDetailListings(
       } => pair !== null,
     );
 
+  // One entry per item: the cheapest copy represents a duplicate group and
+  // lists the other platforms as `alsoOn`. Prices, counts, trends and the
+  // market analysis all work on these; every platform's own offer stays in
+  // `sourceOffers` for the per-source comparison.
+  const collapsed = collapseDuplicateListings(pairs.map((pair) => pair.baseListing));
+  const keptIds = new Set(collapsed.map((listing) => listing.id));
+
   return {
-    listings: pairs.map((pair) => pair.baseListing),
-    marketIntelligenceListings: pairs.map((pair) => pair.marketIntelligenceListing),
+    listings: collapsed,
+    sourceOffers: pairs.map((pair) => pair.baseListing),
+    marketIntelligenceListings: pairs
+      .filter((pair) => keptIds.has(pair.baseListing.id))
+      .map((pair) => pair.marketIntelligenceListing),
   };
 }
 
@@ -454,6 +530,30 @@ export function resolveProductDetailDuplicateSummary(
   if (duplicateSummary) return duplicateSummary;
   return buildDuplicateSummaryFromListings(listings);
 }
+
+// Search demand and related products do not depend on the visitor and change
+// slowly, so they are shared across requests (the two heaviest extra queries
+// of a product page). Failures inside return empty values and are cached for
+// the same short period.
+const getCachedSearchDemandStats = unstable_cache(
+  async (productName: string) => {
+    const supabase = createSupabaseClient();
+    if (!supabase) return { searchCount: 0, recentSearchCount: 0 };
+    return getProductSearchDemandStats(supabase, productName);
+  },
+  ["product-detail:search-demand"],
+  { revalidate: CACHE_SECONDS.catalog },
+);
+
+const getCachedRelatedProducts = unstable_cache(
+  async (product: ProductRecord): Promise<RelatedProductSummary[]> => {
+    const supabase = createSupabaseClient();
+    if (!supabase) return [];
+    return getRelatedProducts(supabase, product);
+  },
+  ["product-detail:related"],
+  { revalidate: CACHE_SECONDS.catalog },
+);
 
 async function getProductSearchDemandStats(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
@@ -664,30 +764,22 @@ async function getRelatedProducts(
   const products = await fetchProductsForRelated(supabase);
   if (!products.length) return [];
 
-  let listingsResult = await supabase
-    .from("listings")
-    .select("product_id, price, title, source, url")
-    .in("status", ["published", "active"]);
+  // One pre-grouped row per product (product_price_stats view) instead of
+  // every published listing in the table.
+  const statsResult = await supabase
+    .from("product_price_stats")
+    .select("product_id, prices")
+    .in("product_id", toBigintIds(products.map((candidate) => candidate.id)));
 
-  if (listingsResult.error && isMissingStatusColumn(listingsResult.error)) {
-    listingsResult = await supabase
-      .from("listings")
-      .select("product_id, price, title, source, url");
-  }
-
-  if (listingsResult.error) {
-    console.error("Supabase related listings query failed:", listingsResult.error);
+  if (statsResult.error) {
+    console.error("Supabase related price stats query failed:", statsResult.error);
     return [];
   }
 
   const priceGroups = new Map<string, number[]>();
-  for (const listing of (listingsResult.data ?? []) as unknown as RelatedListingRow[]) {
-    if (listing.product_id == null) continue;
-    if (isPublicDemoListing(listing)) continue;
-    const price = Number(listing.price);
-    if (!Number.isFinite(price) || price <= 0) continue;
-    const productId = String(listing.product_id);
-    priceGroups.set(productId, [...(priceGroups.get(productId) ?? []), price]);
+  for (const row of statsResult.data ?? []) {
+    if (row.product_id == null || !row.prices) continue;
+    priceGroups.set(String(row.product_id), row.prices.map(Number));
   }
 
   const related = products
@@ -779,8 +871,8 @@ async function fetchProductsForRelated(
 }
 
 function getRelatedProductScore(
-  product: ProductRecord,
-  candidate: ProductRecord,
+  product: ProductSummary,
+  candidate: ProductSummary,
 ) {
   // 1. Product type match: same type = +30, type mismatch = unrelated (score 0)
   const sourceType = extractProductTypeFromAttributes(product.attributes);
@@ -876,7 +968,7 @@ function fetchProductListings(
   let query = supabase
     .from("listings")
     .select(columns)
-    .eq("product_id", productId);
+    .eq("product_id", toBigintId(productId));
 
   if (useStatusFilter) {
     query = query.in("status", ["published", "active"]);
@@ -995,13 +1087,8 @@ export function buildMarketIntelligenceForProductDetail({
 
   return {
     ...marketIntelligence,
-    opportunity: {
-      score: intelligence.opportunity?.score ?? 0,
-      label: intelligence.opportunity?.label ?? "Veri yetersiz",
-      explanation: intelligence.opportunity?.explanation ?? "Opportunity Engine üzerinden hesaplanıyor",
-      action: intelligence.recommendation?.action ?? "wait",
-      discountPercent: null,
-    },
+    // The same score the decision card shows: one opportunity number per page.
+    opportunity: buildMarketOpportunityFromAnalysis(opportunityAnalysis),
     opportunityAnalysis,
     structuredData: {
       ...marketIntelligence.structuredData,

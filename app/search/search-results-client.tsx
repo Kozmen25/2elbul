@@ -22,6 +22,7 @@ import { CompareButton } from "@/components/compare-button";
 import { SafeShoppingBanner } from "@/components/safe-shopping-banner";
 import {
   calculateProductIntelligence,
+  type IntelligencePriceHistoryInput,
   type ProductIntelligence,
 } from "@/lib/intelligence-engine";
 import {
@@ -43,7 +44,22 @@ import {
   calculatePriceAdvantagePercent,
   formatOpportunityLevel,
 } from "@/lib/opportunity-engine/helpers";
-import { LISTING_CONDITIONS, type Listing, type ListingSource } from "@/lib/listings";
+import { type Listing, type ListingSource } from "@/lib/listings";
+import {
+  EMPTY_SEARCH_FILTERS,
+  applySearchFilters,
+  buildFacet,
+  countActiveFilters,
+  describeActiveFilters,
+  filtersFromParams,
+  priceBounds,
+  sanitizeFilters,
+  writeFiltersToParams,
+  type ActiveFilterChip,
+  type FacetOption,
+  type SearchFilterKey,
+  type SearchFilters,
+} from "@/lib/search/search-filters";
 import {
   analyzeListingPrice,
   type ProductPriceStats,
@@ -55,6 +71,7 @@ import { formatCurrencyTRY, formatDateTR, formatNumberTR } from "@/lib/formatter
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { TrustBadge, confidenceToTrustLevel } from "@/lib/trust-badge";
 import { recordSearch, createSavedSearch } from "./actions";
+import { listingOutboundPath } from "@/lib/listing-links";
 
 type SortOption = "ai-recommended" | "best-opportunity" | "most-reliable" | "lowest-risk" | "newest" | "price-asc" | "most-listings" | "confidence";
 type ViewOption = "products" | "listings" | "both";
@@ -122,6 +139,8 @@ type SearchResultsClientProps = {
   productPriceStats: Record<string, ProductPriceStats>;
   productCategories: Record<string, string | null>;
   productAttributes?: Record<string, { attributes?: unknown }>;
+  /** Recorded price history per product id, the only source of trend signals. */
+  productPriceHistory?: Record<string, IntelligencePriceHistoryInput[]>;
   loadError?: string;
   favoriteListingIds: string[];
   isAuthenticated: boolean;
@@ -196,8 +215,8 @@ function AiSearchPanel({ query }: { query: string }) {
   const products = state.products.slice(0, 5);
 
   return (
-    <div className="mb-8 rounded-3xl border border-[#ff6b00]/16 bg-[#fff7f1] p-5 sm:p-6">
-      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]">
+    <div className="mb-8 rounded-3xl border border-[#3B66E0]/16 bg-[#EEF3FF] p-5 sm:p-6">
+      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]">
         2ELBUL AI — Akıllı Arama
       </p>
       <p className="mt-2 whitespace-pre-line text-sm font-semibold leading-6 text-black/60">
@@ -209,7 +228,7 @@ function AiSearchPanel({ query }: { query: string }) {
             <li key={p.id}>
               <Link
                 href={`/product/${p.slug}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-xs font-black text-[#d95700]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#3B66E0]/20 bg-white px-3 py-1.5 text-xs font-black text-[#2A4FBF]"
               >
                 {p.name}
                 <ArrowUpRight size={13} />
@@ -228,6 +247,7 @@ export function SearchResultsClient({
   productPriceStats,
   productCategories,
   productAttributes = {},
+  productPriceHistory = {},
   loadError = "",
   favoriteListingIds,
   isAuthenticated,
@@ -237,17 +257,7 @@ export function SearchResultsClient({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [city, setCity] = useState(() => searchParams.get("city") ?? "");
-  const [source, setSource] = useState(() => searchParams.get("source") ?? "");
-  const [condition, setCondition] = useState(
-    () => searchParams.get("condition") ?? "",
-  );
-  const [minimumPrice, setMinimumPrice] = useState(
-    () => searchParams.get("min") ?? "",
-  );
-  const [maximumPrice, setMaximumPrice] = useState(
-    () => searchParams.get("max") ?? "",
-  );
+  const [filters, setFilters] = useState<SearchFilters>(() => filtersFromParams(searchParams));
   const [sort, setSort] = useState<SortOption>(() =>
     parseSortOption(searchParams.get("sort")),
   );
@@ -280,11 +290,7 @@ export function SearchResultsClient({
   useEffect(() => {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
-    if (minimumPrice) params.set("min", minimumPrice);
-    if (maximumPrice) params.set("max", maximumPrice);
-    if (source) params.set("source", source);
-    if (city) params.set("city", city);
-    if (condition) params.set("condition", condition);
+    writeFiltersToParams(filters, params);
     if (sort !== "ai-recommended") params.set("sort", sort);
     if (view !== "products") params.set("view", view);
     if (signal !== "all") params.set("signal", signal);
@@ -296,17 +302,13 @@ export function SearchResultsClient({
       router.replace(nextUrl, { scroll: false });
     }
   }, [
-    city,
-    condition,
-    maximumPrice,
-    minimumPrice,
+    filters,
     pathname,
     query,
     router,
     searchParams,
     sort,
     signal,
-    source,
     view,
     page,
   ]);
@@ -437,43 +439,29 @@ export function SearchResultsClient({
   // Reset page to 1 when any filter/sort/signal/query changes
   useEffect(() => {
     setPage(1);
-  }, [city, source, condition, minimumPrice, maximumPrice, sort, signal, query]);
+  }, [filters, sort, signal, query]);
 
-  const cities = useMemo(
-    () => [...new Set(initialListings.map((listing) => listing.city))].sort(),
-    [initialListings],
+  const facets = useMemo(
+    () => ({
+      category: buildFacet(initialListings, filters, "category"),
+      brand: buildFacet(initialListings, filters, "brand"),
+      model: buildFacet(initialListings, filters, "model"),
+      city: buildFacet(initialListings, filters, "city"),
+      source: buildFacet(initialListings, filters, "source"),
+      condition: buildFacet(initialListings, filters, "condition"),
+    }),
+    [initialListings, filters],
   );
-  const sources = useMemo(
-    () => [...new Set(initialListings.map((listing) => listing.source))].sort(),
-    [initialListings],
+  const priceRange = useMemo(() => priceBounds(initialListings, filters), [initialListings, filters]);
+
+  const filteredListings = useMemo(
+    () => applySearchFilters(initialListings, filters),
+    [filters, initialListings],
   );
-
-  const filteredListings = useMemo(() => {
-    const min = minimumPrice === "" ? null : Number(minimumPrice);
-    const max = maximumPrice === "" ? null : Number(maximumPrice);
-
-    return initialListings
-      .filter(
-        (listing) =>
-          (!city || listing.city === city) &&
-          (!source || normalizeFilterValue(listing.source) === source) &&
-          (!condition || listing.condition === condition) &&
-          (min === null || listing.price >= min) &&
-          (max === null || listing.price <= max),
-      )
-      .slice();
-  }, [
-    city,
-    condition,
-    initialListings,
-    maximumPrice,
-    minimumPrice,
-    source,
-  ]);
 
   const productSummaries = useMemo(
-    () => buildProductSummaries(filteredListings, productAttributes),
-    [filteredListings, productAttributes],
+    () => buildProductSummaries(filteredListings, productAttributes, productPriceHistory),
+    [filteredListings, productAttributes, productPriceHistory],
   );
   const filteredProductSummaries = useMemo(
     () => filterProductSummariesBySignal(productSummaries, signal),
@@ -539,28 +527,34 @@ export function SearchResultsClient({
   const averagePrice = prices.length
     ? Math.round(prices.reduce((total, price) => total + price, 0) / prices.length)
     : 0;
-  const activeFilterCount = [
-    city,
-    source,
-    condition,
-    minimumPrice,
-    maximumPrice,
-    signal !== "all" ? signal : "",
-    sort !== "ai-recommended" ? sort : "",
-    view !== "products" ? view : "",
-  ].filter(Boolean).length;
+  const activeFilterCount =
+    countActiveFilters(filters) +
+    [signal !== "all", sort !== "ai-recommended", view !== "products"].filter(Boolean).length;
+  const activeChips = describeActiveFilters(
+    filters,
+    (key, value) => facetLabelFor(facets[key], value),
+    formatFilterPrice,
+  );
   const favoriteIds = useMemo(
     () => new Set(favoriteListingIds),
     [favoriteListingIds],
   );
   const loginNext = query ? `/search?q=${encodeURIComponent(query)}` : "/search";
 
+  function changeFilter(key: SearchFilterKey | "min" | "max", value: string) {
+    setFilters((current) => sanitizeFilters(initialListings, { ...current, [key]: value }));
+  }
+
+  function removeChip(chip: ActiveFilterChip) {
+    setFilters((current) =>
+      chip.key === "price"
+        ? { ...current, min: "", max: "" }
+        : sanitizeFilters(initialListings, { ...current, [chip.key]: "" }),
+    );
+  }
+
   function resetFilters() {
-    setCity("");
-    setSource("");
-    setCondition("");
-    setMinimumPrice("");
-    setMaximumPrice("");
+    setFilters(EMPTY_SEARCH_FILTERS);
     setSignal("all");
     setSort("ai-recommended");
     setView("products");
@@ -574,7 +568,7 @@ export function SearchResultsClient({
   return (
     <section className="container-shell min-w-0 py-10 sm:py-14">
       <div className="mb-8">
-        <p className="text-sm font-bold text-[#ff6b00]">Aranan ürün</p>
+        <p className="text-sm font-bold text-[#3B66E0]">Aranan ürün</p>
         <h1 className="mt-2 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
           {query || "Bir ürün ara"}
         </h1>
@@ -584,7 +578,7 @@ export function SearchResultsClient({
             : "Fiyatları karşılaştırmak için yukarıdaki kutudan arama yap."}
         </p>
         {searchIntentLabel ? (
-          <p className="mt-3 inline-flex rounded-full border border-[#ff6b00]/20 bg-[#fff7f1] px-4 py-2 text-sm font-black text-[#d95700]">
+          <p className="mt-3 inline-flex rounded-full border border-[#3B66E0]/20 bg-[#EEF3FF] px-4 py-2 text-sm font-black text-[#2A4FBF]">
             {searchIntentLabel}
           </p>
         ) : null}
@@ -601,7 +595,7 @@ export function SearchResultsClient({
       ) : initialListings.length > 0 ? (
         <>
           {demandMessage && (
-            <div className="mb-6 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] px-5 py-4 text-sm font-bold text-[#d95700]">
+            <div className="mb-6 rounded-2xl border border-[#3B66E0]/20 bg-[#EEF3FF] px-5 py-4 text-sm font-bold text-[#2A4FBF]">
               {demandMessage}
             </div>
           )}
@@ -648,7 +642,7 @@ export function SearchResultsClient({
                 <SlidersHorizontal size={18} />
                 Filtreler
                 {activeFilterCount > 0 && (
-                  <span className="grid size-5 place-items-center rounded-full bg-[#ff6b00] text-[11px] text-white">
+                  <span className="grid size-5 place-items-center rounded-full bg-[#3B66E0] text-[11px] text-white">
                     {activeFilterCount}
                   </span>
                 )}
@@ -664,14 +658,14 @@ export function SearchResultsClient({
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="flex items-center gap-2 font-black">
-                <SlidersHorizontal size={18} className="text-[#ff6b00]" />
+                <SlidersHorizontal size={18} className="text-[#3B66E0]" />
                 Filtrele ve sırala
               </h2>
               {activeFilterCount > 0 && (
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="flex items-center gap-1.5 text-xs font-bold text-black/50 hover:text-[#ff6b00]"
+                  className="flex items-center gap-1.5 text-xs font-bold text-black/50 hover:text-[#3B66E0]"
                 >
                   <RotateCcw size={14} />
                   Temizle
@@ -679,52 +673,68 @@ export function SearchResultsClient({
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
-              <FilterSelect label="Şehir" value={city} onChange={setCity}>
-                <option value="">Tüm şehirler</option>
-                {cities.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </FilterSelect>
-
-              <FilterSelect label="Kaynak" value={source} onChange={setSource}>
-                <option value="">Tüm kaynaklar</option>
-                {sources.map((item) => (
-                  <option key={item} value={normalizeFilterValue(item)}>
-                    {item}
-                  </option>
-                ))}
-              </FilterSelect>
-
-              <FilterSelect
-                label="Durum"
-                value={condition}
-                onChange={setCondition}
-              >
-                <option value="">Tüm durumlar</option>
-                {LISTING_CONDITIONS.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </FilterSelect>
-
-              <FilterInput
-                label="Minimum fiyat"
-                value={minimumPrice}
-                onChange={setMinimumPrice}
-                placeholder="0 TL"
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <FacetSelect
+                label="Kategori"
+                allLabel="Tüm kategoriler"
+                value={filters.category}
+                options={facets.category}
+                onChange={(value) => changeFilter("category", value)}
+              />
+              <FacetSelect
+                label="Marka"
+                allLabel="Tüm markalar"
+                value={filters.brand}
+                options={facets.brand}
+                onChange={(value) => changeFilter("brand", value)}
+              />
+              <FacetSelect
+                label="Model"
+                allLabel="Tüm modeller"
+                value={filters.model}
+                options={facets.model}
+                onChange={(value) => changeFilter("model", value)}
+              />
+              <FacetSelect
+                label="Konum"
+                allLabel="Tüm şehirler"
+                value={filters.city}
+                options={facets.city}
+                onChange={(value) => changeFilter("city", value)}
+              />
+              <FacetSelect
+                label="Ürün durumu"
+                allLabel="Tüm durumlar"
+                value={filters.condition}
+                options={facets.condition}
+                onChange={(value) => changeFilter("condition", value)}
+              />
+              <FacetSelect
+                label="Kaynak"
+                allLabel="Tüm kaynaklar"
+                value={filters.source}
+                options={facets.source}
+                onChange={(value) => changeFilter("source", value)}
               />
               <FilterInput
-                label="Maksimum fiyat"
-                value={maximumPrice}
-                onChange={setMaximumPrice}
-                placeholder="50.000 TL"
+                label="Minimum fiyat (TL)"
+                value={filters.min}
+                onChange={(value) => changeFilter("min", value)}
+                placeholder={priceRange ? formatFilterPrice(priceRange.min) : "0 TL"}
               />
+              <FilterInput
+                label="Maksimum fiyat (TL)"
+                value={filters.max}
+                onChange={(value) => changeFilter("max", value)}
+                placeholder={priceRange ? formatFilterPrice(priceRange.max) : "50.000 TL"}
+              />
+            </div>
 
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FilterSelect
                 label="Sıralama"
                 value={sort}
                 onChange={(value) => setSort(value as SortOption)}
-                wide
               >
                 <option value="ai-recommended">AI önerilen</option>
                 <option value="best-opportunity">En iyi fırsat</option>
@@ -740,7 +750,6 @@ export function SearchResultsClient({
                 label="Görünüm"
                 value={view}
                 onChange={(value) => setView(value as ViewOption)}
-                wide
               >
                 <option value="products">Karar kartları</option>
                 <option value="listings">İlan listesi</option>
@@ -748,16 +757,29 @@ export function SearchResultsClient({
               </FilterSelect>
             </div>
 
-            <FilterSummary
-              minimumPrice={minimumPrice}
-              maximumPrice={maximumPrice}
-              source={source}
-              sources={sources}
-              signal={signal}
-              sort={sort}
-              view={view}
+            <ActiveFilterChips
+              chips={activeChips}
+              signalLabel={signal !== "all" ? getSignalLabel(signal) : null}
+              onRemove={removeChip}
+              onClearSignal={() => setSignal("all")}
             />
           </div>
+
+          {filteredListings.length === 0 ? (
+            <div className="mb-8 rounded-2xl border border-black/9 bg-white px-6 py-10 text-center">
+              <h2 className="text-lg font-black">Bu filtrelerle ilan bulunamadı</h2>
+              <p className="mt-2 text-sm text-black/50">
+                Filtreleri gevşetin ya da hepsini temizleyip tekrar deneyin.
+              </p>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="orange-button mt-5 px-5 py-2.5 text-sm"
+              >
+                <RotateCcw size={15} /> Filtreleri temizle
+              </button>
+            </div>
+          ) : null}
 
           {view !== "listings" ? (
             <ProductComparisonSection products={paginatedProductSummaries} />
@@ -805,7 +827,7 @@ export function SearchResultsClient({
               {paginatedVisibleListings.map((listing) => (
                 <article
                   key={listing.id}
-                  className="flex min-w-0 flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
+                  className="flex min-w-0 flex-col rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
                 >
                   <ListingImage
                     imageUrl={listing.imageUrl}
@@ -815,7 +837,7 @@ export function SearchResultsClient({
                   <div className="mb-4 mt-4 flex items-start justify-between gap-4">
                     <Link
                       href={`/product/${createProductSlug(listing.productName)}`}
-                      className="min-w-0 truncate rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700] hover:bg-[#ffe5d2]"
+                      className="min-w-0 truncate rounded-full bg-[#E4ECFF] px-3 py-1.5 text-xs font-bold text-[#2A4FBF] hover:bg-[#DCE6FF]"
                       title={`${listing.productName} ürün detayına git`}
                     >
                       {listing.productName}
@@ -839,7 +861,7 @@ export function SearchResultsClient({
                   <h3 className="min-h-12 break-words text-base font-black leading-6">
                     {listing.title}
                   </h3>
-                  <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#ff6b00]">
+                  <p className="mt-3 text-2xl font-black tracking-[-0.04em] text-[#3B66E0]">
                     {formatPrice(listing.price)}
                   </p>
                   <SmartPriceRatingBadge
@@ -850,6 +872,13 @@ export function SearchResultsClient({
                         : undefined
                     }
                   />
+
+                  {listing.alsoOn && listing.alsoOn.length > 0 ? (
+                    <p className="mt-3 text-xs font-semibold text-black/50">
+                      Aynı ilan:{" "}
+                      {listing.alsoOn.map((other) => `${other.source} ${formatPrice(other.price)}`).join(" · ")}
+                    </p>
+                  ) : null}
 
                   <div className="mt-5 grid gap-2.5 border-t border-black/7 pt-4 text-sm text-black/55">
                     <p className="flex items-center gap-2">
@@ -871,7 +900,7 @@ export function SearchResultsClient({
                   </div>
 
                   <a
-                    href={listing.url}
+                    href={listingOutboundPath(listing.id)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="orange-button mt-5 w-full py-3"
@@ -901,7 +930,7 @@ export function SearchResultsClient({
               <button
                 type="button"
                 onClick={resetFilters}
-                className="mt-4 text-sm font-bold text-[#ff6b00] hover:underline"
+                className="mt-4 text-sm font-bold text-[#3B66E0] hover:underline"
               >
                 Filtreleri temizle
               </button>
@@ -996,12 +1025,12 @@ function SuggestedSearchesSection({
           <Link
             key={suggestion.id}
             href={suggestion.href}
-            className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-black/8 bg-[#fafaf8] px-4 py-3 transition hover:border-[#ff6b00]/35 hover:bg-[#fff4eb]"
+            className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-black/8 bg-[#fafaf8] px-4 py-3 transition hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF]"
           >
             <span className="min-w-0 truncate text-sm font-black">
               {suggestion.name}
             </span>
-            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-black/45 group-hover:text-[#d95700]">
+            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-black/45 group-hover:text-[#2A4FBF]">
               {suggestion.listingCount} ilan
             </span>
           </Link>
@@ -1011,45 +1040,71 @@ function SuggestedSearchesSection({
   );
 }
 
-function FilterSummary({
-  minimumPrice,
-  maximumPrice,
-  source,
-  sources,
-  signal,
-  sort,
-  view,
+function facetLabelFor(options: FacetOption[], value: string): string {
+  return options.find((option) => option.value === value)?.label ?? value;
+}
+
+function FacetSelect({
+  label,
+  allLabel,
+  value,
+  options,
+  onChange,
 }: {
-  minimumPrice: string;
-  maximumPrice: string;
-  source: string;
-  sources: string[];
-  signal: QuickFilterOption;
-  sort: SortOption;
-  view: ViewOption;
+  label: string;
+  allLabel: string;
+  value: string;
+  options: FacetOption[];
+  onChange: (value: string) => void;
 }) {
-  const visibleChips = [
-    minimumPrice || maximumPrice
-      ? `${minimumPrice ? formatFilterPrice(Number(minimumPrice)) : "0 TL"} - ${
-          maximumPrice ? formatFilterPrice(Number(maximumPrice)) : "üst sınır yok"
-        } arası`
-      : "",
-    source ? `Kaynak: ${getSourceLabel(source, sources)}` : "",
-    signal !== "all" ? `Odak: ${getSignalLabel(signal)}` : "",
-    `Sıralama: ${getSortLabel(sort)}`,
-    `Görünüm: ${getViewLabel(view)}`,
-  ].filter(Boolean);
+  return (
+    <FilterSelect label={label} value={value} onChange={onChange}>
+      <option value="">{allLabel}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label} ({option.count})
+        </option>
+      ))}
+    </FilterSelect>
+  );
+}
+
+function ActiveFilterChips({
+  chips,
+  signalLabel,
+  onRemove,
+  onClearSignal,
+}: {
+  chips: ActiveFilterChip[];
+  signalLabel: string | null;
+  onRemove: (chip: ActiveFilterChip) => void;
+  onClearSignal: () => void;
+}) {
+  if (chips.length === 0 && !signalLabel) return null;
+
+  const chipClass =
+    "inline-flex items-center gap-1.5 rounded-full border border-[#3B66E0]/20 bg-[#EEF3FF] py-1.5 pl-3 pr-2 text-xs font-black text-[#2A4FBF] transition hover:bg-[#DDE7FF]";
 
   return (
-    <div className="mt-4 flex flex-wrap gap-2">
-      {visibleChips.map((chip) => (
-        <span
-          key={chip}
-          className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-black text-black/55"
+    <div className="mt-4 flex flex-wrap gap-2" aria-label="Aktif filtreler">
+      {chips.map((chip) => (
+        <button
+          key={chip.key}
+          type="button"
+          onClick={() => onRemove(chip)}
+          className={chipClass}
+          aria-label={`${chip.label} filtresini kaldır`}
         >
-          {chip}
-        </span>
+          {chip.label}
+          <X size={13} />
+        </button>
       ))}
+      {signalLabel && (
+        <button type="button" onClick={onClearSignal} className={chipClass}>
+          Odak: {signalLabel}
+          <X size={13} />
+        </button>
+      )}
     </div>
   );
 }
@@ -1080,7 +1135,7 @@ function SearchSummary({
     <div className="mb-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
             Karar ekranı
           </p>
           <h2 className="mt-2 break-words text-2xl font-black tracking-[-0.04em] sm:text-3xl">
@@ -1090,7 +1145,7 @@ function SearchSummary({
             Ürünleri fırsat, risk, güven ve fiyat avantajına göre hızlıca kıyasla.
           </p>
           {searchIntentLabel ? (
-            <p className="mt-3 inline-flex rounded-full border border-[#ff6b00]/20 bg-[#fff7f1] px-4 py-2 text-sm font-black text-[#d95700]">
+            <p className="mt-3 inline-flex rounded-full border border-[#3B66E0]/20 bg-[#EEF3FF] px-4 py-2 text-sm font-black text-[#2A4FBF]">
               {searchIntentLabel}
             </p>
           ) : null}
@@ -1107,8 +1162,8 @@ function SearchSummary({
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <div className="rounded-2xl border border-[#ff6b00]/12 bg-[#fff7f1] p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]">
+        <div className="rounded-2xl border border-[#3B66E0]/12 bg-[#EEF3FF] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]">
             AI karar özeti
           </p>
           <p className="mt-2 text-sm font-semibold leading-6 text-black/60">
@@ -1191,7 +1246,7 @@ function SearchSummary({
               </div>
             </>
           ) : (
-            <div className="mt-4 rounded-2xl border border-dashed border-[#ff6b00]/20 bg-white px-4 py-5 text-sm font-semibold leading-6 text-black/50">
+            <div className="mt-4 rounded-2xl border border-dashed border-[#3B66E0]/20 bg-white px-4 py-5 text-sm font-semibold leading-6 text-black/50">
               Bu ürün için henüz yeterli piyasa verisi oluşmadı.
             </div>
           )}
@@ -1232,7 +1287,7 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
     <section className="mb-10">
       <div className="mb-5 flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
             AI önerileri
           </p>
           <h2 className="mt-1 text-xl font-black tracking-[-0.03em] sm:text-2xl">
@@ -1254,7 +1309,7 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
             return (
               <article
                 key={product.productId}
-                className="min-w-0 rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
+                className="min-w-0 rounded-2xl border border-black/9 bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:shadow-[0_14px_40px_rgba(0,0,0,0.07)]"
               >
                 <div className="mb-4">
                   <ListingImage
@@ -1345,8 +1400,8 @@ function ProductComparisonSection({ products }: { products: ProductSummary[] }) 
                   />
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-[#ff6b00]/12 bg-[#fff7f1] p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]">
+                <div className="mt-4 rounded-2xl border border-[#3B66E0]/12 bg-[#EEF3FF] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]">
                     AI karar kutusu
                   </p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-black/60">
@@ -1407,7 +1462,7 @@ function DecisionPill({
     tone === "success"
       ? "border-green-200 bg-green-50 text-green-800"
       : tone === "accent"
-        ? "border-[#ff6b00]/20 bg-[#fff7f1] text-[#d95700]"
+        ? "border-[#3B66E0]/20 bg-[#EEF3FF] text-[#2A4FBF]"
         : tone === "warning"
           ? "border-amber-200 bg-amber-50 text-amber-800"
           : tone === "danger"
@@ -1711,8 +1766,8 @@ function QuickFilterBar({
           onClick={() => onChange(filter.value)}
           className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-black transition ${
             signal === filter.value
-              ? "border-[#ff6b00] bg-[#ff6b00] text-white"
-              : "border-black/10 bg-white text-black/60 hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+              ? "border-[#3B66E0] bg-[#3B66E0] text-white"
+              : "border-black/10 bg-white text-black/60 hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF] hover:text-[#2A4FBF]"
           }`}
         >
           {getSignalLabel(filter.value)}
@@ -1750,7 +1805,7 @@ function RefinePromptBar({
   return (
     <div className="mb-4 flex flex-col gap-2">
       <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-black/35">
-        <Sparkles size={14} className="text-[#ff6b00]" />
+        <Sparkles size={14} className="text-[#3B66E0]" />
         AI ile daha da iyileştir
       </div>
       <div className="flex gap-2 overflow-x-auto pb-2">
@@ -1787,8 +1842,8 @@ function RefinePromptBar({
 function refineChipClass(active: boolean) {
   return `inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-black transition ${
     active
-      ? "border-[#ff6b00] bg-[#ff6b00] text-white"
-      : "border-black/10 bg-white text-black/60 hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+      ? "border-[#3B66E0] bg-[#3B66E0] text-white"
+      : "border-black/10 bg-white text-black/60 hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF] hover:text-[#2A4FBF]"
   }`;
 }
 function MiniMetric({
@@ -1801,11 +1856,11 @@ function MiniMetric({
   accent?: boolean;
 }) {
   return (
-    <div className={`min-w-0 rounded-xl border p-3 ${accent ? "border-[#ff6b00]/20 bg-[#fff7f1]" : "border-black/8 bg-[#fafaf8]"}`}>
+    <div className={`min-w-0 rounded-xl border p-3 ${accent ? "border-[#3B66E0]/20 bg-[#EEF3FF]" : "border-black/8 bg-[#fafaf8]"}`}>
       <p className="text-[10px] font-black uppercase tracking-[0.06em] text-black/35">
         {label}
       </p>
-      <p className={`mt-1 truncate text-sm font-black ${accent ? "text-[#ff6b00]" : ""}`} title={value}>
+      <p className={`mt-1 truncate text-sm font-black ${accent ? "text-[#3B66E0]" : ""}`} title={value}>
         {value}
       </p>
     </div>
@@ -1942,7 +1997,7 @@ function StatCard({
     <div
       className={`rounded-2xl border p-4 sm:p-5 ${
         accent
-          ? "border-[#ff6b00]/20 bg-[#fff7f1]"
+          ? "border-[#3B66E0]/20 bg-[#EEF3FF]"
           : "border-black/8 bg-white"
       }`}
     >
@@ -1951,7 +2006,7 @@ function StatCard({
       </p>
       <p
         className={`mt-2 text-xl font-black tracking-[-0.035em] sm:text-2xl ${
-          accent ? "text-[#ff6b00]" : "text-black"
+          accent ? "text-[#3B66E0]" : "text-black"
         }`}
       >
         {value}
@@ -1963,6 +2018,7 @@ function StatCard({
 export function buildProductSummaries(
   listings: Listing[],
   productAttributes?: Record<string, { attributes?: unknown }>,
+  productPriceHistory: Record<string, IntelligencePriceHistoryInput[]> = {},
 ): ProductSummary[] {
   const analyzedAt = new Date();
   const groups = new Map<string, Listing[]>();
@@ -2013,11 +2069,13 @@ export function buildProductSummaries(
     );
 
     const duplicateSummary = buildDuplicateSummary(productListings);
+    // Trend and "price falling" come from the recorded price history only.
     const intelligence = calculateProductIntelligence({
       listings: productListings.map((listing) => ({
         price: listing.price,
         createdAt: listing.createdAt,
       })),
+      priceHistory: productPriceHistory[productId] ?? [],
     });
     const decisionInsight = buildSearchDecisionInsight(intelligence, productAttrs, productListings.length);
     const marketIntelligence = buildMarketIntelligence({
@@ -2180,25 +2238,6 @@ export function parseViewOption(value: string | null): ViewOption {
     ? value
     : "products";
 }
-function normalizeFilterValue(value: string) {
-  return value
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function getSourceLabel(source: string, sources: string[]) {
-  return sources.find((item) => normalizeFilterValue(item) === source) ?? source;
-}
-
-function getViewLabel(view: ViewOption) {
-  if (view === "products") return "Ürün karşılaştırması";
-  if (view === "listings") return "İlan listesi";
-  return "İkisi birlikte";
-}
 
 type PaginationBarProps = {
   page: number;
@@ -2249,7 +2288,7 @@ function PaginationBar({
               onClick={() => onPageChange(p)}
               className={`flex size-9 items-center justify-center rounded-lg text-sm font-bold transition ${
                 p === page
-                  ? "bg-[#ff6b00] text-white"
+                  ? "bg-[#3B66E0] text-white"
                   : "hover:bg-black/5"
               }`}
               aria-current={p === page ? "page" : undefined}
@@ -2309,10 +2348,10 @@ function SaveSearchButton({ query }: { query: string }) {
           setMessage(result.message);
           setSaving(false);
         }}
-        className="inline-flex items-center gap-1.5 rounded-full border border-[#ff6b00]/20 bg-[#fff7f1] px-4 py-2 text-sm font-bold text-[#d95700] transition hover:bg-[#ff6b00]/10 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-full border border-[#3B66E0]/20 bg-[#EEF3FF] px-4 py-2 text-sm font-bold text-[#2A4FBF] transition hover:bg-[#3B66E0]/10 disabled:opacity-50"
       >
         <Bell size={16} />
-        {saving ? "Kaydediliyor..." : "Bu Aramayı Kaydet"}
+        {saving ? "Kaydediliyor..." : "Bu Aramayı Takip Et"}
       </button>
       {message && (
         <p className="mt-2 text-sm font-medium text-green-700">{message}</p>

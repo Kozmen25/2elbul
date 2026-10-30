@@ -194,7 +194,7 @@ export function SourceManager({
                   </p>
                 </td>
                 <td className="px-2.5 py-4">
-                  <span className="rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
+                  <span className="rounded-full bg-[#E4ECFF] px-2.5 py-1 text-xs font-black text-[#2A4FBF]">
                     {typeLabel(source.type)}
                   </span>
                 </td>
@@ -275,7 +275,7 @@ export function SourceManager({
                       href={source.baseUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-grid size-9 place-items-center rounded-lg border border-[#ff6b00]/20 bg-[#fff7f1] text-[#ff6b00]"
+                      className="inline-grid size-9 place-items-center rounded-lg border border-[#3B66E0]/20 bg-[#EEF3FF] text-[#3B66E0]"
                       aria-label={`${source.name} sitesini aç`}
                     >
                       <ExternalLink size={16} />
@@ -298,7 +298,7 @@ export function SourceManager({
                           runAction(() => runDemoBot(source.id));
                         }
                       }}
-                      className="grid size-9 place-items-center rounded-lg border border-[#ff6b00]/25 bg-[#fff7f1] text-[#d95700] disabled:opacity-50"
+                      className="grid size-9 place-items-center rounded-lg border border-[#3B66E0]/25 bg-[#EEF3FF] text-[#2A4FBF] disabled:opacity-50"
                       title="Demo test çekimi"
                       aria-label={`${source.name} için demo test çekimi yap`}
                     >
@@ -391,7 +391,7 @@ export function SourceManager({
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.15em] text-[#ff6b00]">
+                <p className="text-xs font-black uppercase tracking-[0.15em] text-[#3B66E0]">
                   Kaynak yönetimi
                 </p>
                 <h2 className="mt-1 text-2xl font-black">
@@ -589,7 +589,7 @@ export function SourceManager({
                         cronEnabled: event.target.checked,
                       })
                     }
-                    className="size-5 accent-[#ff6b00]"
+                    className="size-5 accent-[#3B66E0]"
                   />
                 </label>
               </SourceField>
@@ -721,7 +721,7 @@ function SourceCard({
         <ActionIconButton
           disabled={pending || !publishModeAvailable}
           title="Demo test çekimi"
-          className="border-[#ff6b00]/25 bg-[#fff7f1] text-[#d95700]"
+          className="border-[#3B66E0]/25 bg-[#EEF3FF] text-[#2A4FBF]"
           onClick={() => {
             if (
               window.confirm(`${source.name} için 10 adet demo ilan üretilsin mi?`)
@@ -791,7 +791,7 @@ function SourceCard({
             target="_blank"
             rel="noopener noreferrer"
             title="Kaynak sitesini aç"
-            className="grid h-10 place-items-center rounded-xl border border-[#ff6b00]/20 bg-[#fff7f1] text-[#ff6b00]"
+            className="grid h-10 place-items-center rounded-xl border border-[#3B66E0]/20 bg-[#EEF3FF] text-[#3B66E0]"
           >
             <ExternalLink size={16} />
           </a>

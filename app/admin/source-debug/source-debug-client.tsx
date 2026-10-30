@@ -129,7 +129,7 @@ export function SourceDebugClient({ sources }: { sources: SourceDebugRow[] }) {
                     type="button"
                     disabled={isPending || pendingSourceId === source.id || !source.isActive}
                     onClick={() => runDebug(source.id)}
-                    className="rounded-xl bg-[#ff6b00] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                    className="rounded-xl bg-[#3B66E0] px-3 py-2 text-xs font-black text-white disabled:opacity-50"
                   >
                     {pendingSourceId === source.id ? "Çalışıyor" : "Test çek"}
                   </button>

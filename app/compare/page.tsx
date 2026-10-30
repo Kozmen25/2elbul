@@ -1,5 +1,7 @@
+import { DEFAULT_OG_IMAGES, DEFAULT_TWITTER_IMAGES } from "@/lib/seo/metadata";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { listingOutboundPath } from "@/lib/listing-links";
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -26,6 +28,7 @@ import {
 } from "@/lib/compare-engine";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { ListingImage } from "@/components/listing-image";
+import { toBigintId } from "@/lib/supabase-ids";
 
 type ComparePageProps = {
   searchParams: Promise<{ ids?: string; a?: string; b?: string }>;
@@ -80,14 +83,14 @@ async function detectCrossTypeConflict(
     const { data: listing } = await supabase
       .from("listings")
       .select("product_id")
-      .eq("id", id)
+      .eq("id", toBigintId(id))
       .maybeSingle();
     if (!listing?.product_id) return false;
 
     const { data: product } = await supabase
       .from("products")
       .select("attributes")
-      .eq("id", String(listing.product_id))
+      .eq("id", toBigintId(listing.product_id))
       .maybeSingle();
     if (!product?.attributes) continue;
 
@@ -145,11 +148,13 @@ export async function generateMetadata({
       siteName: "2ElBul",
       locale: "tr_TR",
       type: "website",
+      images: DEFAULT_OG_IMAGES,
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: DEFAULT_TWITTER_IMAGES,
     },
   };
 }
@@ -191,7 +196,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           aria-label="breadcrumb"
           className="flex flex-wrap items-center gap-2 text-xs font-bold text-black/45"
         >
-          <Link href="/" className="transition hover:text-[#d95700]">
+          <Link href="/" className="transition hover:text-[#2A4FBF]">
             Ana Sayfa
           </Link>
           <ChevronRight size={12} />
@@ -239,13 +244,13 @@ function DecisionCard({
   const isInsufficient = decision.insufficientData;
 
   return (
-    <section className="mt-4 rounded-3xl border border-[#ff6b00]/18 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8 lg:p-10">
+    <section className="mt-4 rounded-3xl border border-[#3B66E0]/18 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8 lg:p-10">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="grid size-11 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+        <span className="grid size-11 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
           <Sparkles size={22} />
         </span>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#ff6b00]">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#3B66E0]">
             AI Kararı
           </p>
           <h1 className="mt-1 break-words text-3xl font-black tracking-[-0.035em] sm:text-4xl">
@@ -260,7 +265,7 @@ function DecisionCard({
             ? "border-amber-200 bg-amber-50"
             : isTied
               ? "border-slate-200 bg-slate-50"
-              : "border-[#ff6b00]/20 bg-[#fff7f1]"
+              : "border-[#3B66E0]/20 bg-[#EEF3FF]"
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -268,7 +273,7 @@ function DecisionCard({
             <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/45">
               {isInsufficient ? "Durum" : isTied ? "Sonuç" : "Önerilen ilan"}
             </p>
-            <p className="mt-2 break-words text-2xl font-black tracking-[-0.04em] text-[#d95700] sm:text-3xl">
+            <p className="mt-2 break-words text-2xl font-black tracking-[-0.04em] text-[#2A4FBF] sm:text-3xl">
               {decision.recommendedLabel}
             </p>
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-black/60">
@@ -276,15 +281,15 @@ function DecisionCard({
             </p>
           </div>
           {!isInsufficient && !isTied && recommended ? (
-            <Link
-              href={recommended.url}
+            <a
+              href={listingOutboundPath(recommended.listingId)}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noopener noreferrer nofollow"
               className="orange-button shrink-0 justify-center px-5 py-3"
             >
               Önerilen ilanı incele
               <ArrowUpRight size={17} />
-            </Link>
+            </a>
           ) : null}
         </div>
 
@@ -344,7 +349,7 @@ function CandidateCard({
     <article
       className={`flex flex-col rounded-3xl border bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-6 ${
         highlight
-          ? "border-[#ff6b00]/40 ring-1 ring-[#ff6b00]/30"
+          ? "border-[#3B66E0]/40 ring-1 ring-[#3B66E0]/30"
           : "border-black/8"
       }`}
     >
@@ -353,7 +358,7 @@ function CandidateCard({
           İlan {candidate.key + 1}
         </span>
         {highlight ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#ff6b00]/30 bg-[#fff7f1] px-3 py-1 text-xs font-black text-[#d95700]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#3B66E0]/30 bg-[#EEF3FF] px-3 py-1 text-xs font-black text-[#2A4FBF]">
             <BadgeCheck size={14} /> Önerilen
           </span>
         ) : null}
@@ -367,14 +372,14 @@ function CandidateCard({
         />
       </Link>
 
-      <p className="mt-4 text-xs font-bold text-[#ff6b00]">
+      <p className="mt-4 text-xs font-bold text-[#3B66E0]">
         {candidate.productName}
       </p>
       <h2 className="mt-2 break-words text-lg font-black leading-6">
         {candidate.title}
       </h2>
 
-      <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-[#ff6b00]">
+      <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-[#3B66E0]">
         {formatPrice(candidate.price)}
       </p>
       <p className="mt-1 text-xs font-semibold text-black/45">
@@ -386,15 +391,15 @@ function CandidateCard({
         <span className="text-right">{candidate.city}</span>
       </div>
 
-      <Link
-        href={candidate.url}
+      <a
+        href={listingOutboundPath(candidate.listingId)}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener noreferrer nofollow"
         className="orange-button mt-5 w-full justify-center py-3"
       >
         Bu ilanı incele
         <ArrowUpRight size={17} />
-      </Link>
+      </a>
     </article>
   );
 }
@@ -478,11 +483,11 @@ function ComparisonTable({
   return (
     <section className="mt-6 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
       <div className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
           <BadgeCheck size={21} />
         </span>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#ff6b00]">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#3B66E0]">
             Karşılaştırma tablosu
           </p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
@@ -571,10 +576,10 @@ function BestDealSection({
   const best = candidates[decision.recommendedKey];
 
   return (
-    <section className="mt-6 rounded-3xl border border-[#ff6b00]/25 bg-[#fff7f1] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-8 lg:p-10">
+    <section className="mt-6 rounded-3xl border border-[#3B66E0]/25 bg-[#EEF3FF] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-8 lg:p-10">
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#d95700]/75">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#2A4FBF]/75">
             En iyi ilan
           </p>
           <h2 className="mt-2 break-words text-3xl font-black tracking-[-0.035em] sm:text-4xl">
@@ -591,18 +596,18 @@ function BestDealSection({
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-3">
-          <Link
-            href={best.url}
+          <a
+            href={listingOutboundPath(best.listingId)}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noopener noreferrer nofollow"
             className="orange-button justify-center px-6 py-4 text-base"
           >
             Bu ilanı incele
             <ArrowUpRight size={18} />
-          </Link>
+          </a>
           <Link
             href={best.productUrl}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-6 py-3 text-sm font-black text-black/70 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-6 py-3 text-sm font-black text-black/70 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
           >
             Ürün analizine git
             <ArrowUpRight size={16} />
@@ -621,7 +626,7 @@ function CompareEmptyState({ sameSelection }: { sameSelection: boolean }) {
           aria-label="breadcrumb"
           className="flex flex-wrap items-center gap-2 text-xs font-bold text-black/45"
         >
-          <Link href="/" className="transition hover:text-[#d95700]">
+          <Link href="/" className="transition hover:text-[#2A4FBF]">
             Ana Sayfa
           </Link>
           <ChevronRight size={12} />
@@ -629,7 +634,7 @@ function CompareEmptyState({ sameSelection }: { sameSelection: boolean }) {
         </nav>
 
         <section className="mt-4 rounded-3xl border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-10">
-          <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
             <Sparkles size={24} />
           </span>
           <h1 className="mt-5 text-3xl font-black tracking-[-0.045em] sm:text-4xl">
@@ -660,7 +665,7 @@ function CompareEmptyState({ sameSelection }: { sameSelection: boolean }) {
             </Link>
             <Link
               href="/market"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
             >
               Piyasa merkezi
             </Link>
@@ -679,7 +684,7 @@ function CompareNotFound({ listingIds }: { listingIds: string[] }) {
           aria-label="breadcrumb"
           className="flex flex-wrap items-center gap-2 text-xs font-bold text-black/45"
         >
-          <Link href="/" className="transition hover:text-[#d95700]">
+          <Link href="/" className="transition hover:text-[#2A4FBF]">
             Ana Sayfa
           </Link>
           <ChevronRight size={12} />
@@ -710,7 +715,7 @@ function CompareNotFound({ listingIds }: { listingIds: string[] }) {
             </Link>
             <Link
               href="/market"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
             >
               Piyasa merkezi
             </Link>
@@ -729,7 +734,7 @@ function CrossTypeError() {
           aria-label="breadcrumb"
           className="flex flex-wrap items-center gap-2 text-xs font-bold text-black/45"
         >
-          <Link href="/" className="transition hover:text-[#d95700]">
+          <Link href="/" className="transition hover:text-[#2A4FBF]">
             Ana Sayfa
           </Link>
           <ChevronRight size={12} />
@@ -758,7 +763,7 @@ function CrossTypeError() {
             </Link>
             <Link
               href="/market"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#ff6b00]/35 hover:text-[#d95700]"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-black text-black/70 transition hover:border-[#3B66E0]/35 hover:text-[#2A4FBF]"
             >
               Piyasa merkezi
             </Link>

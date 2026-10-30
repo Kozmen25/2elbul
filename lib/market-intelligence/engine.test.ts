@@ -40,6 +40,7 @@ function buildIntelligence(listings: MarketIntelligenceListing[]) {
       { price: 47000, recordedAt: "2026-06-15T00:00:00.000Z" },
       { price: 44000, recordedAt: "2026-06-30T00:00:00.000Z" },
     ],
+    now: new Date("2026-06-30T12:00:00.000Z"),
     demand: { searchCount: 30, recentSearchCount: 9 },
   });
 }

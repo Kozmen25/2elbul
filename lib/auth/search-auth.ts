@@ -1,4 +1,5 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+import { hasValidSecret } from "@/lib/auth/cron-auth";
 
 const SKIP_SEARCH_AUTH =
   process.env.SKIP_SEARCH_AUTH === "true" ||
@@ -17,15 +18,7 @@ export function verifySearchRequest(request: NextRequest): {
     return { ok: false, error: "CRON_SECRET tanımlı değil." };
   }
 
-  const headerSecret =
-    request.headers.get("x-cron-secret") ||
-    request.headers.get("x-vercel-cron-secret");
-  const authHeader = request.headers.get("authorization");
-  const bearerSecret = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : "";
-
-  const valid = [headerSecret, bearerSecret].some((value) => value === secret);
+  const valid = hasValidSecret(request, secret);
   if (!valid) {
     return { ok: false, error: "Yetkisiz arama isteği." };
   }

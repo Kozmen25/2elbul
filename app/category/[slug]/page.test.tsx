@@ -69,6 +69,10 @@ const baseCategoryData = {
     "iPhone, Samsung Galaxy ve diğer telefonlar için ikinci el fiyat rehberi.",
   productCount: 8,
   listingCount: 12,
+  parent: null,
+  subcategories: [
+    { slug: "telefon-iphone", label: "iPhone", productCount: 5 },
+  ],
   marketIntelligence: {
     analysisGeneratedAt: "2026-07-05T10:00:00.000Z",
     sampleSize: 12,
@@ -218,6 +222,40 @@ const baseCategoryData = {
       confidenceLevel: "high",
     },
   ],
+  gridListings: [
+    {
+      id: "listing-1",
+      productId: "product-1",
+      productName: "iPhone 13",
+      title: "iPhone 13 128 GB",
+      price: 23000,
+      source: "EasyCep",
+      city: "İstanbul",
+      url: "https://example.com/listing-1",
+      condition: "İkinci El",
+      imageUrl: null,
+      createdAt: "2026-07-05T09:30:00.000Z",
+      updatedAt: "2026-07-05T10:00:00.000Z",
+      confidenceScore: 95,
+      confidenceLevel: "high",
+    },
+    {
+      id: "listing-2",
+      productId: "product-2",
+      productName: "Samsung Galaxy S22",
+      title: "Galaxy S22 256 GB",
+      price: 21000,
+      source: "Getmobil",
+      city: "Ankara",
+      url: "https://example.com/listing-2",
+      condition: "Yenilenmiş",
+      imageUrl: null,
+      createdAt: "2026-07-04T11:00:00.000Z",
+      updatedAt: "2026-07-04T11:00:00.000Z",
+      confidenceScore: 88,
+      confidenceLevel: "high",
+    },
+  ],
   brandDistribution: [
     {
       brandSlug: "apple",
@@ -325,6 +363,7 @@ const insufficientCategoryData = {
   topOpportunities: [],
   popularProducts: [],
   latestListings: [],
+  gridListings: [],
   brandDistribution: [],
   faqItems: baseCategoryData.faqItems,
   jsonLd: buildCategoryJsonLd({
@@ -348,7 +387,7 @@ describe("category page metadata", () => {
       params: Promise.resolve({ slug: "telefon" }),
     });
 
-    expect(metadata.title).toBe("Telefon ikinci el kategori analizi | 2ElBul");
+    expect(metadata.title).toMatch(/^İkinci El Telefon Fiyatları ve İlanları \(\S+ \d{4}\) \| 2ElBul$/);
     expect(metadata.alternates?.canonical).toBe(
       "https://2elbul.com/category/telefon",
     );
@@ -375,6 +414,28 @@ describe("category page render", () => {
     getCategoryPageDataMock.mockReset();
   });
 
+  it("links to subcategories and shows a subcategory's parent in the breadcrumb", async () => {
+    getCategoryPageDataMock.mockResolvedValueOnce(baseCategoryData);
+    const mainHtml = renderToStaticMarkup(
+      await CategoryPage({ params: Promise.resolve({ slug: "telefon" }) }),
+    );
+    expect(mainHtml).toContain('href="/category/telefon-iphone"');
+    expect(mainHtml).toContain("Alt kategoriler");
+
+    getCategoryPageDataMock.mockResolvedValueOnce({
+      ...baseCategoryData,
+      categorySlug: "telefon-iphone",
+      categoryName: "iPhone",
+      parent: { slug: "telefon", label: "Telefon" },
+      subcategories: [],
+    });
+    const subHtml = renderToStaticMarkup(
+      await CategoryPage({ params: Promise.resolve({ slug: "telefon-iphone" }) }),
+    );
+    expect(subHtml).toContain('href="/category/telefon"');
+    expect(subHtml).not.toContain("Alt kategoriler");
+  });
+
   it("renders the decision focused category dashboard", async () => {
     getCategoryPageDataMock.mockResolvedValueOnce(baseCategoryData);
 
@@ -391,7 +452,9 @@ describe("category page render", () => {
     expect(html).toContain("Son Eklenen İlanlar");
     expect(html).toContain("Kategorideki Markalar");
     expect(html).toContain("İlana Git");
-    expect(html).toContain("Bu kategori sayfası yeterli veriyle oluşturuldu.");
+    // The filler "sufficient data" banner was removed; only a shortage is flagged.
+    expect(html).not.toContain("Yetersiz veri");
+    expect(html).toContain('aria-label="Kategoriler"');
   });
 
   it("emits breadcrumb, FAQ and ItemList JSON-LD scripts", async () => {
@@ -449,7 +512,9 @@ describe("category page render", () => {
     );
 
     expect(html).toContain("Galaxy S22 256 GB");
-    expect(html).toContain("https://example.com/listing-2");
+    // Outbound links go through /git so a dead listing is never opened.
+    expect(html).toContain('href="/git/listing-2"');
+    expect(html).not.toContain('href="https://example.com/listing-2"');
     expect(html).toContain("İstanbul");
   });
 

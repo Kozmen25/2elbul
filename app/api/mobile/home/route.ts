@@ -1,5 +1,6 @@
 import { createSupabaseClient } from "@/lib/supabase";
 import { getHomeData, type HomeListing } from "@/lib/home-data";
+import { getCategoryCatalog, type CategoryCatalogEntry } from "@/lib/category-intelligence";
 import { createProductSlug } from "@/lib/product-slug";
 import { mobileSuccess, mobileError } from "@/lib/mobile/response";
 import type {
@@ -12,7 +13,7 @@ import type {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const homeData = await getHomeData();
+  const [homeData, categoryCatalog] = await Promise.all([getHomeData(), getCategoryCatalog()]);
   if (homeData.error) {
     return mobileError(homeData.error, 500);
   }
@@ -43,7 +44,7 @@ export async function GET() {
       totalProducts,
       newToday: homeData.last24HourListings.length,
     },
-    categories: toMobileCategories(homeData.popularCategories),
+    categories: toMobileCategories(categoryCatalog),
     aiRecommendations: homeData.priceOpportunities.slice(0, 6).map((l) =>
       toMobileHomeListing(l, resolveProduct(l.productName)),
     ),
@@ -82,15 +83,16 @@ async function fetchProductMap(): Promise<Map<string, { id: string; slug: string
   return map;
 }
 
-function toMobileCategories(
-  categories: { name: string; listingCount: number }[],
-): MobileHomeCategory[] {
-  return categories.map((cat) => ({
-    id: cat.name,
-    name: cat.name,
-    slug: cat.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
-    listingCount: cat.listingCount,
-  }));
+// Main categories from the shared catalog (same slugs/counts as the web).
+function toMobileCategories(catalog: CategoryCatalogEntry[]): MobileHomeCategory[] {
+  return catalog
+    .filter((entry) => entry.parentSlug === null)
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.label,
+      slug: entry.slug,
+      listingCount: entry.listingCount,
+    }));
 }
 
 function toMobileHomeListing(

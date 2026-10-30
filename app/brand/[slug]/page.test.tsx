@@ -47,7 +47,7 @@ describe("brand page", () => {
       params: Promise.resolve({ slug: "msi" }),
     });
 
-    expect(metadata.title).toBe("MSI ikinci el marka analizi | 2ElBul");
+    expect(metadata.title).toMatch(/^İkinci El MSI Fiyatları \(\S+ \d{4}\) \| 2ElBul$/);
     expect(metadata.alternates?.canonical).toBe("https://2elbul.com/brand/msi");
     expect(metadata.openGraph?.url).toBe("https://2elbul.com/brand/msi");
   });

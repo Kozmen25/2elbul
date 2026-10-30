@@ -1,5 +1,6 @@
 import type { DuplicateScore, ComparisonInput } from './types';
 import { CATEGORY_LABELS } from "@/lib/taxonomy/product-type-mapping";
+import { normalizeConditionText, conditionsAreEquivalent } from "@/lib/listing-condition";
 
 export function calculateNormalizationScore(
   norm1: string,
@@ -154,10 +155,14 @@ export function calculateConditionScore(
   if (!condition1 && !condition2) return 100;
   if (!condition1 || !condition2) return 60;
 
-  const norm1 = condition1.toLowerCase().trim();
-  const norm2 = condition2.toLowerCase().trim();
+  // Normalize through the canonical condition mapper first so label
+  // variance ("İkinci El" vs "Kullanılmış" both mean "used") doesn't get
+  // scored the same as a genuine condition conflict ("Sıfır" vs "İkinci El").
+  const norm1 = normalizeConditionText(condition1);
+  const norm2 = normalizeConditionText(condition2);
 
   if (norm1 === norm2) return 100;
+  if (conditionsAreEquivalent(norm1, norm2)) return 90;
 
   return 20;
 }

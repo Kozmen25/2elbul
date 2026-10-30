@@ -1,3 +1,5 @@
+import { buildDailyPriceHistory, calculatePriceTrend } from "@/lib/price-insights";
+
 export type IntelligenceListingInput = {
   price: number | string | null | undefined;
   createdAt?: string | null;
@@ -156,7 +158,7 @@ export function calculateProductIntelligence(
     };
   }
 
-  const trend = buildTrend(input.priceHistory ?? [], input.listings);
+  const trend = buildTrend(input.priceHistory ?? [], input.now ?? new Date());
   const opportunity = buildOpportunity({
     prices,
     averagePrice: marketValue.averagePrice,
@@ -211,47 +213,29 @@ function buildMarketValue(prices: number[]): ProductIntelligence["marketValue"] 
   };
 }
 
+/** The trend looks at this many recent days of price history. */
+export const TREND_WINDOW_DAYS = 30;
+
+/**
+ * Price trend from the recorded price history only. It compares daily
+ * averages (see calculatePriceTrend): the history holds one snapshot per
+ * listing, and listing creation dates say nothing about price movement, so
+ * there is deliberately no fallback to them. Without two days of history the
+ * trend is "unknown" instead of a guess.
+ */
 function buildTrend(
   priceHistory: IntelligencePriceHistoryInput[],
-  listings: IntelligenceListingInput[],
+  now: Date,
 ): ProductIntelligence["trend"] {
-  const historyPoints = priceHistory
-    .map((record) => ({
-      price: Number(record.price),
-      date: record.recordedAt,
-    }))
-    .filter((point) => Number.isFinite(point.price) && point.price > 0 && point.date)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  const points =
-    historyPoints.length >= 2
-      ? historyPoints
-      : listings
-          .map((listing) => ({
-            price: Number(listing.price),
-            date: listing.createdAt ?? "",
-          }))
-          .filter((point) => Number.isFinite(point.price) && point.price > 0 && point.date)
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  if (points.length < 2) {
-    return insufficientIntelligence.trend;
-  }
-
-  const first = points[0];
-  const last = points[points.length - 1];
-  const changePercent = roundPercent(((last.price - first.price) / first.price) * 100);
-  const direction: IntelligenceTrendDirection =
-    changePercent <= -4 ? "falling" : changePercent >= 4 ? "rising" : "stable";
-  const strengthLabel = buildTrendStrength(changePercent);
-  const days = Math.max(
-    1,
-    Math.round(
-      (new Date(last.date).getTime() - new Date(first.date).getTime()) /
-        86_400_000,
-    ),
+  const daily = buildDailyPriceHistory(
+    priceHistory.map((record) => ({ price: Number(record.price), recordedAt: record.recordedAt })),
   );
-  const periodLabel = `${days} günlük sinyal`;
+  const trend = calculatePriceTrend(daily, TREND_WINDOW_DAYS, now);
+  if (!trend) return insufficientIntelligence.trend;
+
+  const { direction, changePercent, spanDays } = trend;
+  const strengthLabel = buildTrendStrength(changePercent);
+  const periodLabel = `${spanDays} günlük sinyal`;
 
   return {
     direction,
@@ -304,7 +288,7 @@ function buildDecisionSupport({
   const volatilityScore = clampScore(Math.round(volatilityRatio * 160));
   const volatilityLevel = scoreLevel(volatilityScore, 25, 55);
   const recentListingCount = countRecentListings(listings, now, 14);
-  const recentDropRate = calculateRecentDropRate(priceHistory, listings);
+  const recentDropRate = calculateRecentDropRate(priceHistory);
   const liquidityScore = buildLiquidityScore({
     listingCount: prices.length,
     recentListingCount,
@@ -562,30 +546,19 @@ function countRecentListings(
   }).length;
 }
 
-function calculateRecentDropRate(
-  priceHistory: IntelligencePriceHistoryInput[],
-  listings: IntelligenceListingInput[],
-) {
-  const points = (
-    priceHistory.length >= 2
-      ? priceHistory.map((record) => ({
-          price: Number(record.price),
-          date: record.recordedAt,
-        }))
-      : listings.map((listing) => ({
-          price: Number(listing.price),
-          date: listing.createdAt ?? "",
-        }))
-  )
-    .filter((point) => Number.isFinite(point.price) && point.price > 0 && point.date)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+/** Drop (percent) between the first and last of the latest three days of price history. */
+const RECENT_DROP_DAYS = 3;
 
-  if (points.length < 2) return 0;
-  const recent = points.slice(-3);
-  const first = recent[0];
-  const last = recent[recent.length - 1];
-  if (!first || !last || first.price <= 0) return 0;
-  return roundPercent(((first.price - last.price) / first.price) * 100);
+function calculateRecentDropRate(priceHistory: IntelligencePriceHistoryInput[]) {
+  const daily = buildDailyPriceHistory(
+    priceHistory.map((record) => ({ price: Number(record.price), recordedAt: record.recordedAt })),
+  ).slice(-RECENT_DROP_DAYS);
+
+  if (daily.length < 2) return 0;
+  const first = daily[0];
+  const last = daily[daily.length - 1];
+  if (first.average <= 0) return 0;
+  return roundPercent(((first.average - last.average) / first.average) * 100);
 }
 
 function buildLiquidityScore({

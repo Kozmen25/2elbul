@@ -1,4 +1,5 @@
 import type { ComparisonInput } from './types';
+import { normalizeConditionText } from "@/lib/listing-condition";
 
 export function createComparisonInput(
   title: string,
@@ -40,17 +41,7 @@ export function createComparisonInput(
 
 export function normalizeCondition(condition: string | null | undefined): string | null {
   if (!condition) return null;
-
-  const normalized = condition.toLowerCase().trim();
-
-  if (normalized.includes('yeni')) return 'Yeni';
-  if (normalized.includes('sıfır')) return 'Yeni';
-  if (normalized.includes('açılmamış')) return 'Yeni';
-  if (normalized.includes('ikinci') || normalized.includes('2.el')) return 'İkinci El';
-  if (normalized.includes('kullanılmış')) return 'İkinci El';
-  if (normalized.includes('hasar')) return 'Hasarlı';
-
-  return condition;
+  return normalizeConditionText(condition);
 }
 
 export function formatScore(score: number): string {

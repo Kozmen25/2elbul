@@ -7,10 +7,12 @@ import {
   Boxes,
   Clock3,
   DatabaseZap,
+  Flame,
   PackageSearch,
   Search,
   ShieldCheck,
   Sparkles,
+  TriangleAlert,
   UserPlus,
   UserRound,
   Users,
@@ -18,6 +20,7 @@ import {
 } from "lucide-react";
 import { AdminPageHeader, AdminStatCard } from "@/components/admin-ui";
 import { formatDateTR } from "@/lib/formatters";
+import { loadSourceStats } from "@/lib/source-stats";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 type CountResult = {
@@ -39,6 +42,13 @@ type BotRunRow = {
 
 export default async function AdminOverviewPage() {
   const summary = await loadOperationsSummary();
+  const adminClient = createSupabaseAdminClient();
+  const sourceStats = adminClient
+    ? await loadSourceStats(adminClient).catch((error) => {
+        console.error("Admin dashboard source stats failed:", error);
+        return null;
+      })
+    : null;
 
   return (
     <>
@@ -123,11 +133,38 @@ export default async function AdminOverviewPage() {
         />
       </section>
 
+      {sourceStats && sourceStats.rows.length > 0 ? (
+        <section className="mt-6 rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">Kaynaklar</p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">Kaynaklara göre ilanlar</h2>
+            </div>
+            <Link href="/admin/sources" className="text-sm font-bold text-[#2A4FBF] hover:underline">
+              Ayrıntılı kaynak performansı →
+            </Link>
+          </div>
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {sourceStats.rows.slice(0, 6).map((row) => (
+              <li key={row.source} className="rounded-xl border border-black/7 bg-[#fafaf8] p-4">
+                <p className="truncate font-black">{row.source}</p>
+                <p className="mt-1 text-2xl font-black tracking-[-0.04em] text-[#3B66E0]">
+                  {row.liveListings.toLocaleString("tr-TR")} <span className="text-xs font-bold text-black/40">yayında</span>
+                </p>
+                <p className="mt-1 text-xs font-semibold text-black/45">
+                  Son 24 saatte +{row.addedLast24h} · son 7 günde +{row.addedLast7d}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
         <div className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
                 Hızlı aksiyonlar
               </p>
               <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
@@ -137,7 +174,7 @@ export default async function AdminOverviewPage() {
                 En sık kullanılan admin araçlarına tek ekrandan geçin.
               </p>
             </div>
-            <span className="grid size-11 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+            <span className="grid size-11 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
               <Activity size={22} />
             </span>
           </div>
@@ -147,12 +184,14 @@ export default async function AdminOverviewPage() {
             <QuickAction href="/admin/bot-center#source-health" title="Kaynak Sağlığına git" description="Adapter sağlığını ve son hataları izle." icon={ShieldCheck} />
             <QuickAction href="/admin/product-matcher" title="Ürün Eşleştiriciye git" description="Başlıkların ürün eşleşmesini test et." icon={Sparkles} />
             <QuickAction href="/admin/data-cleanup" title="Veri Temizliğine git" description="Demo/test kayıt adaylarını kontrol et." icon={DatabaseZap} />
+            <QuickAction href="/admin/problem-listings" title="Hatalı ilanları yönet" description="Eksik, şüpheli ve eski ilanları temizle." icon={TriangleAlert} />
+            <QuickAction href="/admin/market-signals" title="Piyasa sinyallerini incele" description="Fırsatlar, düşen fiyatlar ve veri boşlukları." icon={Flame} />
             <QuickAction href="/market" title="Piyasa Merkezini görüntüle" description="Public piyasa sinyallerini incele." icon={BarChart3} />
           </div>
         </div>
 
         <div className="rounded-2xl border border-black/8 bg-[#111] p-5 text-white shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff8a33]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#6690EE]">
             Operasyon durumu
           </p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
@@ -193,8 +232,7 @@ async function loadOperationsSummary() {
     searchDemands,
     sources,
     botRuns,
-    authUsers,
-    newUsers,
+    [authUsers, newUsers],
     activeUsers15m,
     searchesToday,
   ] = await Promise.all([
@@ -218,13 +256,7 @@ async function loadOperationsSummary() {
       .select("status, run_type, started_at, finished_at, error_message, found_count, imported_count, error_count, created_at")
       .order("created_at", { ascending: false })
       .limit(100),
-    countSafe(supabase.from("auth.users").select("id", { count: "exact", head: true })),
-    countSafe(
-      supabase
-        .from("auth.users")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", sevenDaysAgo.toISOString()),
-    ),
+    countAuthUsers(supabase, sevenDaysAgo),
     countSafe(
       supabase
         .from("analytics_events")
@@ -306,6 +338,24 @@ async function countActiveListings(
   return result;
 }
 
+// auth.users is not exposed through PostgREST (`from("auth.users")` always
+// fails), so user counts go through the Auth admin API — same as /admin/users.
+const AUTH_USERS_PAGE_SIZE = 1000;
+
+async function countAuthUsers(
+  supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  since: Date,
+): Promise<[total: CountResult, recent: CountResult]> {
+  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: AUTH_USERS_PAGE_SIZE });
+  if (error) return [{ count: 0, error }, { count: 0, error }];
+
+  const recent = data.users.filter((user) => new Date(user.created_at) >= since).length;
+  return [
+    { count: data.total ?? data.users.length, error: null },
+    { count: recent, error: null },
+  ];
+}
+
 async function countSafe(query: PromiseLike<{ count: number | null; error: unknown }>): Promise<CountResult> {
   const result = await query;
   return { count: result.count ?? 0, error: result.error };
@@ -348,9 +398,9 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="group rounded-2xl border border-black/8 bg-[#fafaf8] p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:bg-white"
+      className="group rounded-2xl border border-black/8 bg-[#fafaf8] p-4 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:bg-white"
     >
-      <span className="grid size-10 place-items-center rounded-xl bg-white text-[#ff6b00] group-hover:bg-[#fff1e7]">
+      <span className="grid size-10 place-items-center rounded-xl bg-white text-[#3B66E0] group-hover:bg-[#E4ECFF]">
         <Icon size={20} />
       </span>
       <h3 className="mt-3 text-sm font-black">{title}</h3>

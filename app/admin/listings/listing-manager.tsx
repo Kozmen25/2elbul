@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { AdminActionForm } from "@/components/admin-action-form";
 import { ListingImage } from "@/components/listing-image";
 import { formatCurrencyTRY, formatDateTR } from "@/lib/formatters";
 import type { ListingPriceAnalysis } from "@/lib/price-analysis";
@@ -35,6 +36,8 @@ export type AdminListing = {
   url: string;
   imageUrl: string | null;
   status: string;
+  /** Why the listing was deactivated automatically, if it was. */
+  inactiveReason: string | null;
   createdAt: string;
   priceAnalysis: ListingPriceAnalysis;
 };
@@ -235,14 +238,19 @@ export function ListingManager({
                 </td>
                 <td className="px-4 py-4">
                   <StatusBadge status={listing.status} />
+                  {listing.status === "inactive" && listing.inactiveReason ? (
+                    <p className="mt-1 text-xs font-semibold text-black/60">
+                      {inactiveReasonLabel(listing.inactiveReason)}
+                    </p>
+                  ) : null}
                   {statusAvailable && (
                     <div className="mt-2 flex gap-1">
                       {["published", "active", "inactive", "pending", "rejected"].map((status) => (
-                        <form key={status} action={setListingStatus}>
+                        <AdminActionForm key={status} action={setListingStatus}>
                           <input type="hidden" name="id" value={listing.id} />
                           <input type="hidden" name="status" value={status} />
                           <button
-                            className="rounded-lg border border-black/10 px-2 py-1 text-[10px] font-bold hover:border-[#ff6b00]"
+                            className="rounded-lg border border-black/10 px-2 py-1 text-[10px] font-bold hover:border-[#3B66E0]"
                             title={statusLabel(status)}
                           >
                             {status === "published"
@@ -255,7 +263,7 @@ export function ListingManager({
                                     ? "Beklet"
                                     : "Reddet"}
                           </button>
-                        </form>
+                        </AdminActionForm>
                       ))}
                     </div>
                   )}
@@ -279,8 +287,9 @@ export function ListingManager({
                         <Pencil size={16} />
                       </summary>
                       <div className="fixed inset-0 z-40 grid place-items-center bg-black/45 p-4">
-                        <form
+                        <AdminActionForm
                           action={updateListing}
+                          closeDetailsOnSuccess
                           className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
                         >
                           <div className="flex items-center justify-between">
@@ -390,17 +399,10 @@ export function ListingManager({
                               Kaydet
                             </button>
                           </div>
-                        </form>
+                        </AdminActionForm>
                       </div>
                     </details>
-                    <form
-                      action={deleteListing}
-                      onSubmit={(event) => {
-                        if (!window.confirm("Bu ilan kalıcı olarak silinsin mi?")) {
-                          event.preventDefault();
-                        }
-                      }}
-                    >
+                    <AdminActionForm action={deleteListing} confirm="Bu ilan kalıcı olarak silinsin mi?">
                       <input type="hidden" name="id" value={listing.id} />
                       <button
                         className="grid size-9 place-items-center rounded-lg border border-red-200 text-red-600"
@@ -408,7 +410,7 @@ export function ListingManager({
                       >
                         <Trash2 size={16} />
                       </button>
-                    </form>
+                    </AdminActionForm>
                   </div>
                 </td>
               </tr>
@@ -479,6 +481,16 @@ function StatusBadge({ status }: { status: string }) {
       {statusLabel(status)}
     </span>
   );
+}
+
+const INACTIVE_REASON_LABELS: Record<string, string> = {
+  source_removed: "Otomatik: kaynakta kaldırılmış",
+  sold_out: "Otomatik: satılmış / stokta yok",
+  not_seen_in_scan: "Otomatik: taramada bulunamadı",
+};
+
+function inactiveReasonLabel(reason: string) {
+  return INACTIVE_REASON_LABELS[reason] ?? "Otomatik pasif";
 }
 
 function statusLabel(status: string) {

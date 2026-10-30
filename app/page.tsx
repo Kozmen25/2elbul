@@ -1,23 +1,17 @@
+import { DEFAULT_OG_IMAGES, DEFAULT_TWITTER_IMAGES } from "@/lib/seo/metadata";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
   ArrowUpRight,
   BadgePercent,
   BarChart3,
-  Car,
   Clock3,
   FolderSearch2,
-  Gamepad2,
-  HomeIcon,
-  Laptop,
   MapPin,
-  PackageSearch,
   Search,
-  Smartphone,
+  Sparkles,
   Store,
   TrendingDown,
-  TriangleAlert,
-  Tv,
 } from "lucide-react";
 import { ListingImage } from "@/components/listing-image";
 import { SearchBar } from "@/components/search-bar";
@@ -30,9 +24,13 @@ import {
   type MarketPulseItem,
   type PriceOpportunity,
 } from "@/lib/home-data";
-import { CATEGORY_ROUTES } from "@/lib/category-intelligence";
+import { getCategoryCatalog } from "@/lib/category-intelligence";
+import { resolveCategoryIcon } from "@/lib/categories";
+import { listingOutboundPath } from "@/lib/listing-links";
 
-export const dynamic = "force-dynamic";
+// ISR: public data, no per-visitor content. Must stay a literal (static analysis);
+// keep equal to CACHE_SECONDS.publicPage in lib/cache-policy.ts.
+export const revalidate = 300;
 
 const homeUrl = getAbsoluteUrl("/");
 
@@ -51,44 +49,49 @@ export const metadata: Metadata = {
     siteName: "2ElBul",
     locale: "tr_TR",
     type: "website",
+    images: DEFAULT_OG_IMAGES,
   },
   twitter: {
     card: "summary_large_image",
     title: "İkinci el ürünlerin gerçek piyasa fiyatını karşılaştır | 2ElBul",
     description:
       "İkinci el piyasasını tek yerde karşılaştır; fiyat analizini, en ucuz ilanları ve fiyat geçmişini gör.",
+    images: DEFAULT_TWITTER_IMAGES,
   },
 };
 
-const ROUTE_ICON_MAP: Record<string, React.ComponentType<{ size?: number }>> = {
-  telefon: Smartphone,
-  bilgisayar: Laptop,
-  konsol: Gamepad2,
-  "tv-ses": Tv,
-  arac: Car,
-  emlak: HomeIcon,
-  "yedek-parca": Store,
-  "ev-yasam": FolderSearch2,
-  aksesuar: PackageSearch,
-};
-
-const quickCategories: {
+type QuickCategory = {
   label: string;
   query: string;
   slug?: string;
   icon: React.ComponentType<{ size?: number }>;
-}[] = [
-  ...CATEGORY_ROUTES.map((route) => ({
-    label: route.label,
-    query: route.matchKeywords[0],
-    slug: route.slug,
-    icon: ROUTE_ICON_MAP[route.slug] || Search,
-  })),
+  count?: number;
+};
+
+const EXTRA_QUICK_ENTRIES: QuickCategory[] = [
   { label: "Fiyatı düşenler", query: "fiyatı düşen", icon: TrendingDown },
   { label: "Fırsatlar", query: "fırsat", icon: BadgePercent },
   { label: "Yakınımdaki", query: "yakınımdaki", icon: MapPin },
   { label: "Tüm ilanlar", query: "", icon: Search },
 ];
+
+async function buildQuickCategories(): Promise<QuickCategory[]> {
+  // Same catalog (tree + counts) as the header menu and /category pages.
+  const catalog = await getCategoryCatalog();
+
+  return [
+    ...catalog
+      .filter((entry) => entry.parentSlug === null)
+      .map((entry) => ({
+        label: entry.label,
+        query: entry.label,
+        slug: entry.slug,
+        icon: resolveCategoryIcon(entry.icon),
+        count: entry.productCount,
+      })),
+    ...EXTRA_QUICK_ENTRIES,
+  ];
+}
 
 const quickAnchors = [
   { label: "Kategoriler", href: "#kategoriler" },
@@ -128,6 +131,7 @@ export default async function Home() {
     marketPulse,
     error,
   } = await getHomeData();
+  const quickCategories = await buildQuickCategories();
 
   const totalListings = sourceSummary.reduce(
     (total, source) => total + source.listingCount,
@@ -138,65 +142,104 @@ export default async function Home() {
   const heroSearches = popularProducts.length > 0
     ? popularProducts.map((item) => item.productName).slice(0, 6)
     : fallbackPopularSearches.slice(0, 6);
+  const finalTotalListings = totalListings || last24HourListings.length;
+  const finalTotalSources = totalSources || sourceSummary.length;
 
   return (
     <>
-      <section className="relative overflow-hidden border-b border-black/7 bg-white pb-8 pt-8 sm:pb-12 sm:pt-12">
-        <div className="absolute -right-24 top-6 size-72 rounded-full bg-[#ff6b00]/8 blur-3xl" />
-        <div className="absolute -left-24 bottom-0 size-72 rounded-full bg-black/4 blur-3xl" />
+      <section className="relative overflow-hidden border-b border-black/7 bg-white pb-14 pt-14 sm:pb-20 sm:pt-16 lg:pb-24 lg:pt-20">
+        {/* ambient background */}
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute inset-0 opacity-[0.05]"
+            style={{
+              backgroundImage:
+                "radial-gradient(rgba(0,0,0,0.7) 1px, transparent 1px)",
+              backgroundSize: "28px 28px",
+            }}
+          />
+          <div className="absolute -right-6 -top-24 size-[220px] rounded-full bg-[#3B66E0]/15 blur-[90px]" />
+          <div className="absolute -left-32 bottom-[-30%] size-[380px] rounded-full bg-[#3B66E0]/8 blur-[110px]" />
+          <HeroDecor />
+        </div>
 
-        <div className="container-shell relative">
-          <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#ff6b00]/15 bg-[#fff7f1] px-3 py-2 text-xs font-black text-[#d95700]">
-                <span className="size-2 rounded-full bg-[#ff6b00] shadow-[0_0_0_4px_rgba(255,107,0,0.12)]" />
-                Güncel ikinci el piyasa verisi
-              </div>
-              <h1 className="mt-4 max-w-4xl text-[34px] font-black leading-[1.02] tracking-[-0.055em] sm:text-6xl lg:text-7xl">
-                İkinci el ürünlerin{" "}
-                <span className="text-[#ff6b00]">gerçek piyasa fiyatını</span>{" "}
-                karşılaştır.
-              </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-black/55 sm:text-lg">
-                Aradığın ürünü yaz; 2ElBul ilanları, fiyat aralığını, fırsatları
-                ve piyasa sinyallerini tek ekranda toplasın.
-              </p>
-
-              <div id="home-search" className="mt-7 w-full max-w-3xl scroll-mt-28">
-                <SearchBar actionPath="/search" showLocation={false} />
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {heroSearches.map((query) => (
-                  <Link
-                    key={query}
-                    href={`/search?q=${encodeURIComponent(query)}`}
-                    className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-bold transition hover:border-[#ff6b00]/40 hover:bg-[#fff7f1] hover:text-[#d95700]"
-                  >
-                    {query}
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            <HomepageDecisionCard
-              opportunity={decisionOpportunity}
-              totalListings={totalListings || last24HourListings.length}
-              totalSources={totalSources || sourceSummary.length}
-            />
+        <div className="container-shell relative flex flex-col items-center text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-[#EEF3FF] px-4 py-2 text-xs font-black text-[#2A4FBF]">
+            <span className="size-2 rounded-full bg-[#3B66E0] shadow-[0_0_0_4px_rgba(59,102,224,0.16)]" />
+            Güncel ikinci el piyasa verisi
           </div>
 
-          <nav className="mt-5 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0">
+          <h1 className="mt-6 max-w-4xl text-[36px] font-black leading-[1.04] tracking-[-0.045em] text-black sm:text-6xl lg:text-[68px]">
+            İkinci el ürünlerin{" "}
+            <span className="text-[#3B66E0]">gerçek piyasa fiyatını</span>{" "}
+            karşılaştır
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-black/55 sm:text-lg">
+            Aradığın ürünü yaz; 2ElBul ilanları, fiyat aralığını, fırsatları ve
+            piyasa sinyallerini tek ekranda toplasın.
+          </p>
+
+          <div
+            id="home-search"
+            className="mt-9 w-full max-w-3xl scroll-mt-28 sm:max-w-4xl"
+          >
+            <div className="rounded-[28px] border border-black/8 bg-white p-2 shadow-[0_30px_90px_rgba(0,0,0,0.12)] sm:p-3">
+              <SearchBar actionPath="/search" showLocation={false} />
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {quickCategories.slice(0, 6).map(({ label, query, slug, icon: Icon }) => (
+              <Link
+                key={label}
+                href={slug ? `/category/${slug}` : `/search?q=${encodeURIComponent(query)}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-[#fafaf8] px-4 py-2 text-sm font-bold text-black/70 transition hover:border-[#3B66E0]/40 hover:bg-[#EEF3FF] hover:text-[#2A4FBF]"
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2">
+            {heroSearches.map((query) => (
+              <Link
+                key={query}
+                href={`/search?q=${encodeURIComponent(query)}`}
+                className="text-sm font-semibold text-black/40 underline decoration-black/15 underline-offset-4 transition hover:text-[#2A4FBF] hover:decoration-[#3B66E0]/60"
+              >
+                {query}
+              </Link>
+            ))}
+          </div>
+
+          <div className="mt-11 grid w-full max-w-2xl grid-cols-3 gap-4 border-t border-black/8 pt-8">
+            <HeroStat value={finalTotalListings} label="Yayındaki ilan" />
+            <HeroStat value={finalTotalSources} label="Aktif kaynak" />
+            <HeroStat value={priceOpportunities.length} label="Güncel fırsat" />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-black/7 bg-white py-5">
+        <div className="container-shell flex flex-col gap-4">
+          <nav className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {quickAnchors.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+                className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF] hover:text-[#2A4FBF]"
               >
                 {item.label}
               </a>
             ))}
           </nav>
+
+          <HomepageDecisionCard
+            opportunity={decisionOpportunity}
+            totalListings={finalTotalListings}
+            totalSources={finalTotalSources}
+          />
         </div>
       </section>
 
@@ -283,21 +326,27 @@ export default async function Home() {
             title="Kategoriler"
             description="Piyasa verisini kategoriye göre keşfet."
             icon={FolderSearch2}
+            href="/categories"
             compact
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-            {quickCategories.slice(0, 8).map(({ label, query, slug, icon: Icon }) => (
+            {quickCategories.slice(0, 9).map(({ label, query, slug, icon: Icon, count }) => (
               <Link
                 key={label}
                 href={slug ? `/category/${slug}` : `/search?q=${encodeURIComponent(query)}`}
-                className="group rounded-3xl border border-black/8 bg-[#fafaf8] p-4 text-center transition hover:-translate-y-0.5 hover:border-[#ff6b00]/25 hover:bg-white hover:shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
+                className="group rounded-3xl border border-black/8 bg-[#fafaf8] p-4 text-center transition hover:-translate-y-0.5 hover:border-[#3B66E0]/25 hover:bg-white hover:shadow-[0_16px_40px_rgba(0,0,0,0.05)]"
               >
-                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-[#ff6b00] shadow-sm transition group-hover:bg-[#ff6b00] group-hover:text-white">
+                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-[#3B66E0] shadow-sm transition group-hover:bg-[#3B66E0] group-hover:text-white">
                   <Icon size={22} />
                 </span>
                 <span className="mt-3 block text-sm font-black leading-tight">
                   {label}
                 </span>
+                {typeof count === "number" && count > 0 && (
+                  <span className="mt-1 block text-xs font-bold text-black/35">
+                    {count} ilan
+                  </span>
+                )}
               </Link>
             ))}
           </div>
@@ -333,13 +382,13 @@ export default async function Home() {
                 key={item.source}
                 className="min-w-0 rounded-2xl border border-black/8 bg-white p-4 sm:p-5"
               >
-                <span className="grid size-10 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+                <span className="grid size-10 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
                   <Store size={19} />
                 </span>
                 <h3 className="mt-4 break-words text-sm font-black">
                   {item.source}
                 </h3>
-                <p className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#ff6b00]">
+                <p className="mt-2 text-2xl font-black tracking-[-0.035em] text-[#3B66E0]">
                   {item.listingCount}
                 </p>
                 <p className="text-xs text-black/40">yayındaki ilan</p>
@@ -349,35 +398,80 @@ export default async function Home() {
         </div>
       </section>
 
-      <MobileBottomNav />
     </>
   );
 }
 
-function MobileBottomNav() {
-  const items = [
-    { label: "Ana", href: "/", icon: HomeIcon },
-    { label: "Ara", href: "#home-search", icon: Search },
-    { label: "Piyasa", href: "/market", icon: BarChart3 },
-    { label: "Kategori", href: "#kategoriler", icon: FolderSearch2 },
-    { label: "Giriş", href: "/giris", icon: Store },
-  ];
-
+function HeroDecor() {
   return (
-    <nav className="fixed inset-x-3 bottom-3 z-50 rounded-3xl border border-black/10 bg-white/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur md:hidden">
-      <div className="grid grid-cols-5 gap-1">
-        {items.map(({ label, href, icon: Icon }) => (
-          <Link
-            key={label}
-            href={href}
-            className="flex flex-col items-center justify-center rounded-2xl px-2 py-2 text-[10px] font-black text-black/55 transition hover:bg-[#fff1e7] hover:text-[#d95700]"
-          >
-            <Icon size={18} />
-            <span className="mt-1">{label}</span>
-          </Link>
-        ))}
-      </div>
-    </nav>
+    <div aria-hidden className="absolute inset-0 overflow-hidden">
+      {/* thin rings */}
+      <svg
+        className="absolute -left-10 top-10 size-40 text-black/[0.06] sm:size-52"
+        viewBox="0 0 100 100"
+        fill="none"
+      >
+        <circle cx="50" cy="50" r="49" stroke="currentColor" strokeWidth="0.6" />
+      </svg>
+      <svg
+        className="absolute right-6 top-1/3 size-24 text-[#3B66E0]/20 sm:right-16 sm:size-32"
+        viewBox="0 0 100 100"
+        fill="none"
+      >
+        <circle cx="50" cy="50" r="49" stroke="currentColor" strokeWidth="0.8" />
+      </svg>
+      <svg
+        className="absolute bottom-8 left-1/4 hidden size-16 text-black/[0.06] lg:block"
+        viewBox="0 0 100 100"
+        fill="none"
+      >
+        <circle cx="50" cy="50" r="49" stroke="currentColor" strokeWidth="0.6" />
+      </svg>
+
+      {/* sparkle stars */}
+      <HeroSpark className="left-[12%] top-[22%] size-3 text-black/15" />
+      <HeroSpark className="left-[8%] top-[62%] size-2.5 text-[#3B66E0]/35" />
+      <HeroSpark className="right-[10%] top-[18%] size-4 text-black/10" />
+      <HeroSpark className="right-[22%] top-[68%] size-2.5 text-black/10" />
+      <HeroSpark className="left-[42%] top-[10%] size-2 text-black/10 hidden sm:block" />
+      <HeroSpark className="right-[38%] bottom-[14%] size-3 text-[#3B66E0]/20 hidden sm:block" />
+
+      {/* faint diagonal lines */}
+      <svg
+        className="absolute -right-20 bottom-0 h-64 w-64 text-black/[0.05]"
+        viewBox="0 0 200 200"
+        fill="none"
+      >
+        <line x1="0" y1="200" x2="200" y2="0" stroke="currentColor" strokeWidth="1" />
+        <line x1="30" y1="200" x2="200" y2="30" stroke="currentColor" strokeWidth="1" />
+        <line x1="60" y1="200" x2="200" y2="60" stroke="currentColor" strokeWidth="1" />
+      </svg>
+    </div>
+  );
+}
+
+function HeroSpark({ className }: { className: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={`absolute ${className}`}
+    >
+      <path d="M12 0l2.59 9.41L24 12l-9.41 2.59L12 24l-2.59-9.41L0 12l9.41-2.59L12 0Z" />
+    </svg>
+  );
+}
+
+function HeroStat({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-2xl font-black tracking-[-0.04em] text-black sm:text-3xl">
+        {value.toLocaleString("tr-TR")}
+      </p>
+      <p className="mt-1 truncate text-xs font-bold uppercase tracking-[0.08em] text-black/40">
+        {label}
+      </p>
+    </div>
   );
 }
 
@@ -392,20 +486,23 @@ function HomepageDecisionCard({
 }) {
   if (!opportunity) {
     return (
-      <section className="rounded-3xl border border-dashed border-black/12 bg-[#fafaf8] p-5 shadow-[0_14px_45px_rgba(0,0,0,0.05)] sm:p-6">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
-          AI Kararı
-        </p>
-        <h2 className="mt-3 text-2xl font-black tracking-[-0.04em]">
-          Yeterli veri oluşunca karar sinyali burada görünecek.
-        </h2>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-black/55">
-          Kaynaklar ve ilanlar çoğaldıkça 2ElBul, piyasa ortalaması ve fırsat
-          sinyallerini bu kartta özetleyecek.
-        </p>
+      <section className="flex flex-col gap-3 rounded-2xl border border-dashed border-black/12 bg-[#fafaf8] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex items-center gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-[#3B66E0] shadow-sm">
+            <Sparkles size={19} />
+          </span>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#3B66E0]">
+              AI Piyasa Kararı
+            </p>
+            <p className="text-sm font-bold text-black/60">
+              Yeterli veri oluşunca karar sinyali burada görünecek.
+            </p>
+          </div>
+        </div>
         <Link
           href="/market"
-          className="orange-button mt-5 inline-flex w-full justify-center py-3 text-sm"
+          className="orange-button shrink-0 justify-center px-5 py-2.5 text-sm"
         >
           Piyasa Merkezine Git
           <ArrowUpRight size={16} />
@@ -417,93 +514,63 @@ function HomepageDecisionCard({
   const riskLabel = getHomepageDecisionRiskLabel(opportunity);
 
   return (
-    <section className="rounded-3xl border border-[#ff6b00]/18 bg-[#fff7f1] p-5 shadow-[0_14px_45px_rgba(0,0,0,0.05)] sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#d95700]">
-            AI Kararı
+    <section className="flex flex-col gap-4 rounded-2xl border border-[#3B66E0]/18 bg-[#EEF3FF] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-[#3B66E0] shadow-sm">
+          <Sparkles size={19} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#2A4FBF]">
+            AI Piyasa Kararı
           </p>
-          <h2 className="mt-3 text-2xl font-black tracking-[-0.04em]">
-            {opportunity.productName}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-black/55">
-            Bu öneri {opportunity.listingCount} ilan, {totalSources} kaynak ve{" "}
-            {opportunity.searchCount} arama sinyali üzerinden hesaplandı.
+          <p className="truncate text-sm font-black">
+            {opportunity.productName}{" "}
+            <span
+              className={`ml-1 rounded-full border px-2 py-0.5 text-[11px] font-black ${getHomepageDecisionToneClassName(
+                opportunity.decisionLabel,
+              )}`}
+            >
+              {opportunity.decisionLabel}
+            </span>
           </p>
         </div>
-        <span className="rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-xs font-black text-[#d95700]">
-          Piyasa Kararı
-        </span>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <DecisionMetric
-          label="Piyasa ortalaması"
+      <div className="flex flex-wrap items-center gap-2">
+        <DecisionChip
+          label="Ortalama"
           value={formatOptionalPrice(opportunity.averagePrice)}
         />
-        <DecisionMetric
-          label="En düşük fiyat"
+        <DecisionChip
+          label="En düşük"
           value={formatOptionalPrice(opportunity.lowestPrice)}
         />
-        <DecisionMetric
-          label="Fırsat skoru"
-          value={`${opportunity.opportunityScore}/100`}
-          toneClassName="border-[#ff6b00]/20 bg-white text-[#d95700]"
-        />
-        <DecisionMetric
-          label="Karar"
-          value={opportunity.decisionLabel}
-          toneClassName={getHomepageDecisionToneClassName(
-            opportunity.decisionLabel,
-          )}
-        />
+        <DecisionChip label="Fırsat skoru" value={`${opportunity.opportunityScore}/100`} />
+        <DecisionChip label="Risk" value={riskLabel} />
+        <span className="hidden text-xs font-semibold text-black/40 lg:inline">
+          {totalListings} ilan · {totalSources} kaynak
+        </span>
+        <Link
+          href="/market"
+          className="orange-button shrink-0 justify-center px-5 py-2.5 text-sm"
+        >
+          Piyasa Merkezine Git
+          <ArrowUpRight size={16} />
+        </Link>
       </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <span className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-black text-black/55">
-          Risk: {riskLabel}
-        </span>
-        <span className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-black text-black/55">
-          {totalListings} ilan
-        </span>
-        <span className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-black text-black/55">
-          {totalSources} kaynak
-        </span>
-      </div>
-
-      <p className="mt-4 text-sm leading-6 text-black/55">
-        {opportunity.opportunityLabel}
-      </p>
-
-      <Link
-        href="/market"
-        className="orange-button mt-5 inline-flex w-full justify-center py-3 text-sm"
-      >
-        Piyasa Merkezine Git
-        <ArrowUpRight size={16} />
-      </Link>
     </section>
   );
 }
 
-function DecisionMetric({
-  label,
-  value,
-  toneClassName = "border-black/8 bg-white text-black/65",
-}: {
-  label: string;
-  value: string;
-  toneClassName?: string;
-}) {
+function DecisionChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`min-w-0 rounded-2xl border p-4 ${toneClassName}`}>
-      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
-        {label}
-      </p>
-      <p className="mt-2 break-words text-sm font-black leading-6" title={value}>
-        {value}
-      </p>
-    </div>
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-black text-black/65"
+      title={label}
+    >
+      <span className="text-black/35">{label}</span>
+      {value}
+    </span>
   );
 }
 
@@ -547,11 +614,11 @@ function SectionHeader({
   return (
     <div className={`${compact ? "mb-5" : "mb-7"} flex items-end justify-between gap-4`}>
       <div className="flex min-w-0 items-end gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
           <Icon size={21} />
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#3B66E0]">
             {eyebrow}
           </p>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] sm:text-3xl">
@@ -567,7 +634,7 @@ function SectionHeader({
       {href && (
         <Link
           href={href}
-          className="hidden shrink-0 items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700] sm:inline-flex"
+          className="hidden shrink-0 items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF] hover:text-[#2A4FBF] sm:inline-flex"
         >
           Tümünü gör
           <ArrowUpRight size={15} />
@@ -592,7 +659,7 @@ function MarketPulseGroup({
     <section className="rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="font-black">{title}</h3>
-        <span className="rounded-full bg-[#fff1e7] px-2.5 py-1 text-[11px] font-black text-[#d95700]">
+        <span className="rounded-full bg-[#E4ECFF] px-2.5 py-1 text-[11px] font-black text-[#2A4FBF]">
           {visibleItems.length} sinyal
         </span>
       </div>
@@ -602,18 +669,18 @@ function MarketPulseGroup({
             <Link
               key={`${title}-${item.productName}`}
               href={item.href}
-              className="group rounded-2xl border border-black/7 bg-[#fafaf8] p-4 transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1]"
+              className="group rounded-2xl border border-black/7 bg-[#fafaf8] p-4 transition hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF]"
             >
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h4 className="break-words text-sm font-black group-hover:text-[#d95700]">
+                  <h4 className="break-words text-sm font-black group-hover:text-[#2A4FBF]">
                     {item.productName}
                   </h4>
                   <p className="mt-1 text-xs font-semibold text-black/45">
                     {item.listingCount} ilan · {item.searchCount} arama
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full border border-[#ff6b00]/20 bg-white px-2.5 py-1 text-[11px] font-black text-[#d95700]">
+                <span className="shrink-0 rounded-full border border-[#3B66E0]/20 bg-white px-2.5 py-1 text-[11px] font-black text-[#2A4FBF]">
                   {item.opportunityLabel}
                 </span>
               </div>
@@ -658,7 +725,7 @@ function PulseMetric({
       </p>
       <p
         className={`mt-1 truncate text-xs font-black ${
-          accent ? "text-[#ff6b00]" : ""
+          accent ? "text-[#3B66E0]" : ""
         }`}
         title={value}
       >
@@ -691,7 +758,7 @@ function CompactListingCard({
   const productHref = `/product/${createProductSlug(listing.productName)}`;
 
   return (
-    <article className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.06)]">
+    <article className="flex min-w-0 flex-col rounded-2xl border border-black/8 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:shadow-[0_12px_35px_rgba(0,0,0,0.06)]">
       <Link href={productHref} className="block min-w-0">
         <ListingImage
           imageUrl={listing.imageUrl}
@@ -700,7 +767,7 @@ function CompactListingCard({
           source={listing.source}
         />
         <div className="mt-4 flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-xs font-black text-[#d95700]">
+          <span className="min-w-0 truncate text-xs font-black text-[#2A4FBF]">
             {listing.productName}
           </span>
           {badge && (
@@ -713,7 +780,7 @@ function CompactListingCard({
           {listing.title}
         </h3>
       </Link>
-      <p className="mt-3 text-xl font-black tracking-[-0.035em] text-[#ff6b00]">
+      <p className="mt-3 text-xl font-black tracking-[-0.035em] text-[#3B66E0]">
         {formatPrice(listing.price)}
       </p>
       <div className="mt-3 grid gap-1.5 text-xs text-black/45">
@@ -728,10 +795,10 @@ function CompactListingCard({
         </span>
       </div>
       <a
-        href={listing.url}
+        href={listingOutboundPath(listing.id)}
         target="_blank"
-        rel="noopener noreferrer"
-        className="mt-4 inline-flex items-center gap-1.5 text-sm font-black text-[#d95700] hover:underline"
+        rel="noopener noreferrer nofollow"
+        className="mt-4 inline-flex items-center gap-1.5 text-sm font-black text-[#2A4FBF] hover:underline"
       >
         İlana git <ArrowUpRight size={15} />
       </a>
@@ -780,9 +847,9 @@ function OpportunityCard({ listing }: { listing: PriceOpportunity }) {
         <Store size={13} /> {listing.source}
       </div>
       <a
-        href={listing.url}
+        href={listingOutboundPath(listing.id)}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener noreferrer nofollow"
         className="mt-4 inline-flex items-center gap-1.5 text-sm font-black text-green-700 hover:underline"
       >
         İlana git <ArrowUpRight size={15} />

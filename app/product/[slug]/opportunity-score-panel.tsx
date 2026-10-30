@@ -33,7 +33,7 @@ export function OpportunityScorePanel({
   );
 
   return (
-    <section className="mt-8 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8">
+    <section className="mt-8 rounded-sm border border-black/20 bg-white p-5  sm:p-8">
       <PanelHeader
         icon={Zap}
         eyebrow="Karar desteği"
@@ -45,7 +45,7 @@ export function OpportunityScorePanel({
       </p>
 
       {hasInsufficientData ? (
-        <div className="mt-4 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
+        <div className="mt-4 flex gap-3 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-800">
           <TriangleAlert className="mt-0.5 shrink-0" size={17} />
           <span>
             Yetersiz veri: güvenilir bir alım kararı için daha fazla ilan ve kaynak gerekiyor.
@@ -54,12 +54,12 @@ export function OpportunityScorePanel({
       ) : null}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-        <section className="rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]/70">
+        <section className="rounded-sm border border-[#3B66E0]/20 bg-[#EEF3FF] p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]/70">
             Fırsat skoru
           </p>
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-            <p className="text-5xl font-black tracking-[-0.07em] text-[#d95700]">
+            <p className="text-5xl font-black tracking-[-0.07em] text-[#2A4FBF]">
               {opportunityAnalysis.opportunityScore}
               <span className="text-xl text-black/35">/100</span>
             </p>
@@ -97,7 +97,7 @@ export function OpportunityScorePanel({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-black/8 bg-[#fafaf8] p-5">
+        <section className="rounded-sm border border-black/20 bg-[#fafaf8] p-5">
           <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
             Analiz özeti
           </p>
@@ -130,14 +130,14 @@ export function OpportunityScorePanel({
             </div>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-black/8 bg-white p-4">
+          <div className="mt-5 rounded-sm border border-black/20 bg-white p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
               Skor gerekçeleri
             </p>
             {opportunityAnalysis.reasons.length > 0 ? (
               <ul className="mt-3 space-y-2 text-sm font-semibold leading-6 text-black/60">
                 {opportunityAnalysis.reasons.map((reason) => (
-                  <li key={reason} className="rounded-2xl border border-black/8 bg-[#fafaf8] px-3 py-2">
+                  <li key={reason} className="rounded-sm border border-black/20 bg-[#fafaf8] px-3 py-2">
                     {reason}
                   </li>
                 ))}
@@ -182,7 +182,7 @@ function SignalList({
     : "border-amber-200 bg-amber-50 text-amber-800";
 
   return (
-    <section className={`rounded-2xl border p-4 ${toneClasses}`}>
+    <section className={`rounded-sm border p-4 ${toneClasses}`}>
       <p className="text-[10px] font-black uppercase tracking-[0.08em]">
         {title}
       </p>
@@ -191,7 +191,7 @@ function SignalList({
           {items.map((item) => (
             <li
               key={item}
-              className="rounded-full border border-black/8 bg-white px-3 py-1.5 text-xs font-semibold leading-5 text-black/60"
+              className="rounded-full border border-black/20 bg-white px-3 py-1.5 text-xs font-semibold leading-5 text-black/60"
             >
               {item}
             </li>
@@ -211,14 +211,14 @@ function SignalList({
 function MetricCard({
   label,
   value,
-  toneClassName = "border-black/8 bg-white text-black/65",
+  toneClassName = "border-black/20 bg-white text-black/65",
 }: {
   label: string;
   value: string;
   toneClassName?: string;
 }) {
   return (
-    <div className={`min-w-0 rounded-2xl border p-4 ${toneClassName}`}>
+    <div className={`min-w-0 rounded-sm border p-4 ${toneClassName}`}>
       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
         {label}
       </p>
@@ -240,11 +240,11 @@ function PanelHeader({
 }) {
   return (
     <div className="flex items-end gap-3">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+      <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-[#E4ECFF] text-[#3B66E0]">
         <Icon size={21} />
       </span>
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ff6b00]">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#3B66E0]">
           {eyebrow}
         </p>
         <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">

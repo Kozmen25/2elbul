@@ -1,3 +1,4 @@
+import { isMissingColumnStrict } from "@/lib/listing-status";
 import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { LISTING_CONDITIONS } from "@/lib/listings";
@@ -21,13 +22,22 @@ export default async function AdminListingsPage({ searchParams }: Props) {
     .order("name");
 
   let statusAvailable = true;
-  const statusResult = await supabase
+  const listingColumns =
+    "id, product_id, title, price, city, source, url, condition, image_url, status, created_at";
+  const withReasonResult = await supabase
     ?.from("listings")
-    .select(
-      "id, product_id, title, price, city, source, url, condition, image_url, status, created_at",
-    )
+    .select(`${listingColumns}, inactive_reason`)
     .order("created_at", { ascending: false })
     .limit(2000);
+  // Databases without the listing-availability migration have no reason column.
+  const statusResult =
+    withReasonResult?.error && isMissingColumnStrict(withReasonResult.error, "inactive_reason")
+      ? await supabase
+          ?.from("listings")
+          .select(listingColumns)
+          .order("created_at", { ascending: false })
+          .limit(2000)
+      : withReasonResult;
   let listingsData = (statusResult?.data ?? []) as Record<string, unknown>[];
   let listingsError = statusResult?.error ?? null;
 
@@ -89,6 +99,7 @@ export default async function AdminListingsPage({ searchParams }: Props) {
       "status" in listing && listing.status
         ? String(listing.status)
         : "published",
+    inactiveReason: listing.inactive_reason ? String(listing.inactive_reason) : null,
     createdAt: String(listing.created_at),
     priceAnalysis: analyzeListingPrice(
       listing.price as string | number | null | undefined,

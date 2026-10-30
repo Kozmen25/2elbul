@@ -146,7 +146,7 @@ export function RecoveryClient() {
             onClick={() => setTab(key)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
               tab === key
-                ? "bg-[#ff6b00] text-white shadow-sm"
+                ? "bg-[#3B66E0] text-white shadow-sm"
                 : "text-black/45 hover:bg-black/5 hover:text-black/70"
             }`}
           >
@@ -213,13 +213,13 @@ function CircuitBreakersTab() {
     <div className="rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] sm:p-6">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-black tracking-[-0.03em]">
-          <ShieldAlert size={20} className="text-[#ff6b00]" />
+          <ShieldAlert size={20} className="text-[#3B66E0]" />
           Devre Kesici Durumları
         </h2>
         <button
           type="button"
           onClick={fetchBreakers}
-          className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-[#ff6b00] hover:bg-[#fff1e7]"
+          className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-[#3B66E0] hover:bg-[#E4ECFF]"
         >
           <RefreshCw size={14} />
           Yenile
@@ -250,7 +250,7 @@ function CircuitBreakersTab() {
               type="button"
               onClick={() => handleReset(b.slug)}
               disabled={resetting === b.slug}
-              className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-[#ff6b00] transition hover:bg-[#fff1e7] disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-[#3B66E0] transition hover:bg-[#E4ECFF] disabled:opacity-40"
             >
               <RefreshCw size={14} className={resetting === b.slug ? "animate-spin" : ""} />
               Sıfırla
@@ -344,7 +344,7 @@ function DeadLetterTab() {
           type="button"
           onClick={() => handleAction("retry-all")}
           disabled={actioning === "retry-all"}
-          className="flex items-center gap-1.5 rounded-xl bg-[#ff6b00] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#e86000] disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-xl bg-[#3B66E0] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#2C4FB8] disabled:opacity-40"
         >
           <RefreshCw size={14} className={actioning === "retry-all" ? "animate-spin" : ""} />
           Tümünü Tekrar Dene
@@ -363,7 +363,7 @@ function DeadLetterTab() {
       {/* Entries */}
       <div className="rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-black tracking-[-0.03em]">
-          <Database size={20} className="text-[#ff6b00]" />
+          <Database size={20} className="text-[#3B66E0]" />
           Ölü Kuyruk Girdileri
         </h2>
 
@@ -492,7 +492,7 @@ function MetricsTab() {
 
       <div className="rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-black tracking-[-0.03em]">
-          <Activity size={20} className="text-[#ff6b00]" />
+          <Activity size={20} className="text-[#3B66E0]" />
           İyileşme Metrikleri Özeti
         </h2>
         <div className="mt-4 overflow-x-auto">
@@ -517,7 +517,7 @@ function MetricsTab() {
                 <td className="flex items-center gap-2 py-2.5 pr-4 font-bold">
                   Toplam
                 </td>
-                <td className="py-2.5 text-right font-bold text-[#ff6b00]">
+                <td className="py-2.5 text-right font-bold text-[#3B66E0]">
                   {summary.total}
                 </td>
               </tr>

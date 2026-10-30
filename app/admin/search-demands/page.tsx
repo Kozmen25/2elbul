@@ -120,7 +120,7 @@ export default async function AdminSearchDemandsPage() {
         title="Arama Talepleri"
         description="Az sonuç dönen kullanıcı aramalarını, queue durumunu ve adapter işlem sonucunu takip edin."
         action={
-          <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
             <Search size={24} />
           </span>
         }

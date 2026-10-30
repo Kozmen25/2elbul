@@ -11,6 +11,7 @@ import type {
   MobileProductListing,
 } from "@/lib/mobile/types";
 import type { NextRequest } from "next/server";
+import { toBigintIds } from "@/lib/supabase-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -111,7 +112,7 @@ async function fetchListingsMap(
 
   const columns =
     "id, product_id, title, price, city, source, url, condition, image_url, created_at";
-  const result = await supabase.from("listings").select(columns).in("id", listingIds);
+  const result = await supabase.from("listings").select(columns).in("id", toBigintIds(listingIds));
 
   if (result.error) {
     console.error("Mobile favorites listings fetch failed:", result.error);
@@ -147,7 +148,7 @@ async function fetchProductMapForListings(
   const listingsResult = await supabase
     .from("listings")
     .select("product_id")
-    .in("id", listingIds);
+    .in("id", toBigintIds(listingIds));
 
   if (listingsResult.error || !listingsResult.data?.length) return new Map();
 
@@ -158,7 +159,7 @@ async function fetchProductMapForListings(
   const { data } = await supabase
     .from("products")
     .select("id, name, slug")
-    .in("id", productIds);
+    .in("id", toBigintIds(productIds));
 
   if (!data) return new Map();
 

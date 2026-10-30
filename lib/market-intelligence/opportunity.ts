@@ -1,6 +1,7 @@
 import type { ProductIntelligence } from "@/lib/intelligence-engine";
 import type { MarketIntelligenceDecisionInsight, MarketOpportunity } from "./types";
 import type { MarketPriceAnalysis } from "./types";
+import type { OpportunityAnalysis, OpportunityRecommendationAction } from "@/lib/opportunity-engine/types";
 import { clampScore } from "@/lib/confidence-engine/scoring";
 import { formatCurrency, roundDecimal } from "./helpers";
 
@@ -46,5 +47,29 @@ export function buildMarketOpportunity({
         : "Bu ürün için yeterli analiz verisi bulunmuyor."),
     action: recommendation?.action ?? "insufficient_data",
     discountPercent,
+  };
+}
+
+const OPPORTUNITY_LABELS: Record<OpportunityRecommendationAction, MarketOpportunity["label"]> = {
+  buy_now: "Güçlü fırsat",
+  watch: "Takip etmeye değer",
+  avoid: "Dikkatli incele",
+  insufficient_data: "Veri yetersiz",
+  wait: "Normal piyasa",
+};
+
+/**
+ * The market-intelligence view of an opportunity-engine result, so the score
+ * and label shown by the decision card and by the market panel are the same
+ * number from the same calculation.
+ */
+export function buildMarketOpportunityFromAnalysis(analysis: OpportunityAnalysis): MarketOpportunity {
+  const { action, description } = analysis.recommendation;
+  return {
+    score: analysis.opportunityScore,
+    label: OPPORTUNITY_LABELS[action],
+    explanation: description,
+    action: action === "avoid" ? "wait" : action,
+    discountPercent: null,
   };
 }

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { AdminEmpty, AdminPageHeader, AdminStatCard } from "@/components/admin-ui";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { DuplicateRegroupButton } from "./duplicate-regroup-button";
 import { PriceHistoryBackfillButton } from "./price-history-backfill-button";
 
 type ListingRow = {
@@ -23,6 +24,7 @@ type ListingRow = {
   status?: unknown;
   created_at?: unknown;
   updated_at?: unknown;
+  duplicate_group_id?: unknown;
 };
 
 type ProductRow = {
@@ -77,6 +79,7 @@ export default async function AdminDataQualityPage() {
         </AdminEmpty>
       ) : (
         <div className="grid gap-6">
+          <DuplicateRegroupButton groupCount={data.duplicateGroups.groups} groupedListings={data.duplicateGroups.listings} />
           <PriceHistoryBackfillButton />
 
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -213,7 +216,7 @@ export default async function AdminDataQualityPage() {
                         <td className="px-4 py-4 font-semibold">{problem.product}</td>
                         <td className="px-4 py-4 text-black/45">{problem.listingId}</td>
                         <td className="px-4 py-4 text-right">
-                          <Link href={problem.href} className="font-black text-[#ff6b00]">
+                          <Link href={problem.href} className="font-black text-[#3B66E0]">
                             Detaya git
                           </Link>
                         </td>
@@ -243,7 +246,7 @@ async function loadDataQuality() {
     await Promise.all([
       supabase
         .from("listings")
-        .select("id, product_id, title, price, source, url, image_url, status, created_at, updated_at")
+        .select("id, product_id, title, price, source, url, image_url, status, created_at, updated_at, duplicate_group_id")
         .order("created_at", { ascending: false })
         .limit(5000),
       supabase.from("products").select("id, name").limit(5000),
@@ -314,6 +317,7 @@ async function loadDataQuality() {
 
   return {
     available: true as const,
+    duplicateGroups: summarizeDuplicateGroups(listings),
     sourceMetrics,
     problems: problems.slice(0, 20),
     scores: {
@@ -481,4 +485,16 @@ function formatDuration(value: number | null) {
   if (value < 1000) return `${Math.round(value)} ms`;
   if (value < 60_000) return `${(value / 1000).toFixed(1)} sn`;
   return `${Math.round(value / 60_000)} dk`;
+}
+
+/** Duplicate groups among the listings loaded above (published or not). */
+function summarizeDuplicateGroups(listings: ListingRow[]) {
+  const groups = new Set<string>();
+  let grouped = 0;
+  for (const listing of listings) {
+    if (!listing.duplicate_group_id) continue;
+    groups.add(String(listing.duplicate_group_id));
+    grouped += 1;
+  }
+  return { groups: groups.size, listings: grouped };
 }

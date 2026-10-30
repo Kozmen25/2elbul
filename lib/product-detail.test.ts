@@ -17,6 +17,7 @@ const product: ProductRecord = {
   name: "iPhone 13",
   slug: "iphone-13",
   category: "Telefon",
+  categoryPath: [{ slug: "telefon", label: "Telefon" }],
 };
 
 const intelligence: ProductIntelligence = {
@@ -366,7 +367,7 @@ describe("buildMarketIntelligenceForProductDetail", () => {
     );
   });
 
-  it("preserves product intelligence in the opportunity block", () => {
+  it("shows the same opportunity score as the decision card", () => {
     const result = buildMarketIntelligenceForProductDetail({
       product,
       productBrand: "Apple",
@@ -377,8 +378,12 @@ describe("buildMarketIntelligenceForProductDetail", () => {
       analyzedAt,
     });
 
-    expect(result.opportunity.score).toBe(88);
-    expect(result.opportunity.label).toBe("Guculu firsat");
+    expect(result.opportunity.score).toBe(result.opportunityAnalysis.opportunityScore);
+    expect(result.opportunity.action).toBe(
+      result.opportunityAnalysis.recommendation.action === "avoid"
+        ? "wait"
+        : result.opportunityAnalysis.recommendation.action,
+    );
   });
 
   it("keeps the market summary highlight list populated", () => {

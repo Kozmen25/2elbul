@@ -120,7 +120,7 @@ function StatPanel({
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-black/6">
                 <div
-                  className="h-full rounded-full bg-[#ff6b00]"
+                  className="h-full rounded-full bg-[#3B66E0]"
                   style={{ width: `${Math.max((item.value / max) * 100, 3)}%` }}
                 />
               </div>

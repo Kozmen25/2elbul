@@ -25,7 +25,7 @@ export function SavedSearchesList({
   if (!searches.length) {
     return (
       <p className="mt-4 text-sm text-black/45">
-        Henüz kaydedilmiş aramanız yok. Arama yaparken "Bu Aramayı Kaydet" butonunu kullanabilirsiniz.
+        Henüz takip ettiğiniz arama yok. Arama yaparken "Bu Aramayı Takip Et" butonunu kullanabilirsiniz.
       </p>
     );
   }
@@ -39,15 +39,15 @@ export function SavedSearchesList({
         >
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <Bell size={16} className="shrink-0 text-[#ff6b00]" />
+              <Bell size={16} className="shrink-0 text-[#3B66E0]" />
               <Link
                 href={`/search?q=${encodeURIComponent(search.query)}`}
-                className="truncate font-black transition hover:text-[#ff6b00] hover:underline"
+                className="truncate font-black transition hover:text-[#3B66E0] hover:underline"
                 title={search.query}
               >
                 {search.query}
               </Link>
-              <span className="rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
+              <span className="rounded-full bg-[#E4ECFF] px-2.5 py-1 text-xs font-black text-[#2A4FBF]">
                 {frequencyLabel(search.frequency)}
               </span>
             </div>

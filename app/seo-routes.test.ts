@@ -4,7 +4,27 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.doUnmock("@/lib/supabase");
   vi.doUnmock("@/lib/brand-intelligence");
+  vi.doUnmock("@/lib/category-intelligence");
 });
+
+type TableRows = Record<string, unknown[]>;
+
+/** Minimal chainable stand-in for the Supabase query builder used by the sitemap. */
+function fakeSupabase(tables: TableRows) {
+  return {
+    from(table: string) {
+      const result = { data: tables[table] ?? [], error: null };
+      const builder = {
+        select: () => builder,
+        in: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (resolve: (value: typeof result) => unknown) => resolve(result),
+      };
+      return builder;
+    },
+  };
+}
 
 type BrandCatalogStub = {
   slug: string;
@@ -13,11 +33,22 @@ type BrandCatalogStub = {
   latestProductAt: string | null;
 };
 
-async function loadSeoRoutes(brandCatalog: BrandCatalogStub[] = []) {
+type CategoryCatalogStub = { slug: string; listingCount: number; latestListingAt: string | null };
+
+async function loadSeoRoutes(
+  brandCatalog: BrandCatalogStub[] = [],
+  options: { tables?: TableRows; categories?: CategoryCatalogStub[] } = {},
+) {
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
   vi.doMock("@/lib/supabase", () => ({
-    createSupabaseClient: () => null,
+    createSupabaseClient: () => (options.tables ? fakeSupabase(options.tables) : null),
   }));
+  if (options.categories) {
+    const categories = options.categories;
+    vi.doMock("@/lib/category-intelligence", () => ({
+      getCategoryCatalog: async () => categories,
+    }));
+  }
   vi.doMock("@/lib/brand-intelligence", () => ({
     getBrandCatalog: async () => brandCatalog,
   }));
@@ -43,7 +74,14 @@ describe("SEO routes", () => {
     });
     expect(output.rules).toEqual(
       expect.objectContaining({
-        disallow: expect.arrayContaining(["/admin", "/api", "/hesabim", "/favoriler"]),
+        disallow: expect.arrayContaining([
+          "/admin",
+          "/api",
+          "/hesabim",
+          "/favoriler",
+          "/listing-ekle",
+          "/giris",
+        ]),
       }),
     );
   });
@@ -56,9 +94,13 @@ describe("SEO routes", () => {
       expect.arrayContaining([
         "https://2elbul.com",
         "https://2elbul.com/search",
-        "https://2elbul.com/ilan-ekle",
+        "https://2elbul.com/market",
+        "https://2elbul.com/categories",
+        "https://2elbul.com/ikinci-el-fiyatlari",
+        "https://2elbul.com/iletisim",
       ]),
     );
+    expect(output.map((entry) => entry.url)).not.toContain("https://2elbul.com/ilan-ekle");
   });
 
   it("includes brand routes in the sitemap when brand catalog is available", async () => {
@@ -84,5 +126,39 @@ describe("SEO routes", () => {
         "https://2elbul.com/brand/msi",
       ]),
     );
+  });
+
+  it("leaves categories without listings out of the sitemap", async () => {
+    const { sitemap } = await loadSeoRoutes([], {
+      categories: [
+        { slug: "telefon", listingCount: 12, latestListingAt: null },
+        { slug: "emlak", listingCount: 0, latestListingAt: null },
+      ],
+    });
+    const urls = (await sitemap()).map((entry) => entry.url);
+
+    expect(urls).toContain("https://2elbul.com/category/telefon");
+    expect(urls).not.toContain("https://2elbul.com/category/emlak");
+  });
+
+  it("lists only brands that have a model with live listings", async () => {
+    const { sitemap } = await loadSeoRoutes(
+      [
+        { slug: "apple", name: "Apple", productCount: 2, latestProductAt: null },
+        { slug: "msi", name: "MSI", productCount: 1, latestProductAt: null },
+      ],
+      {
+        categories: [],
+        tables: {
+          listings: [{ product_id: 1, title: "iPhone 15 128GB", source: "EasyCep", url: "https://example.com/1" }],
+          products: [{ id: 1, name: "iPhone 15", slug: "iphone-15", created_at: null }],
+        },
+      },
+    );
+    const urls = (await sitemap()).map((entry) => entry.url);
+
+    expect(urls).toContain("https://2elbul.com/product/iphone-15");
+    expect(urls).toContain("https://2elbul.com/brand/apple");
+    expect(urls).not.toContain("https://2elbul.com/brand/msi");
   });
 });

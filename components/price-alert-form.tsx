@@ -27,8 +27,8 @@ export function PriceAlertForm({
 
   if (!isAuthenticated) {
     return (
-      <div className="rounded-2xl border border-[#ff6b00]/15 bg-[#fff7f1] p-5">
-        <div className="flex items-center gap-2 text-[#d95700]">
+      <div className="rounded-2xl border border-[#3B66E0]/15 bg-[#EEF3FF] p-5">
+        <div className="flex items-center gap-2 text-[#2A4FBF]">
           <BellRing size={18} />
           <p className="font-black">Fiyat alarmı</p>
         </div>
@@ -66,7 +66,7 @@ export function PriceAlertForm({
       onSubmit={handleSubmit}
       className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.03)]"
     >
-      <div className="flex items-center gap-2 text-[#ff6b00]">
+      <div className="flex items-center gap-2 text-[#3B66E0]">
         <BellRing size={18} />
         <p className="font-black">Fiyat alarmı kur</p>
       </div>

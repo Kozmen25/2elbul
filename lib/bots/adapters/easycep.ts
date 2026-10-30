@@ -1,3 +1,4 @@
+import "server-only";
 import { load, type CheerioAPI } from "cheerio";
 import { deduplicateByUrl } from "@/lib/bots/deduplicate";
 import {

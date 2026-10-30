@@ -1,9 +1,45 @@
 "use client";
 
-import { AudioLines, MapPin, Mic, MicOff, Search } from "lucide-react";
+import { AudioLines, Clock, FolderTree, MapPin, Mic, MicOff, Search, Tag, TrendingUp, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { buildIntentSummary } from "@/lib/search/ai/intent-summary";
+import {
+  addRecentSearch,
+  buildSuggestionGroups,
+  highlightParts,
+  moveActiveIndex,
+  type BrandSuggestion,
+  type CategorySuggestion,
+  type SuggestionItem,
+  type SuggestionKind,
+} from "@/lib/search/suggestion-items";
+
+const RECENT_SEARCHES_KEY = "2elbul-recent-searches";
+
+function readRecentSearches(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(RECENT_SEARCHES_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentSearches(recents: string[]) {
+  try {
+    window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recents));
+  } catch {
+    // Storage can be unavailable (private mode); history is a convenience only.
+  }
+}
+
+const KIND_ICONS: Record<SuggestionKind, typeof Search> = {
+  recent: Clock,
+  product: TrendingUp,
+  brand: Tag,
+  category: FolderTree,
+};
 
 type SearchBarProps = {
   compact?: boolean;
@@ -53,6 +89,10 @@ export function SearchBar({
   const [query, setQuery] = useState(initialQuery);
   const [city, setCity] = useState("");
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
+  const [brandSuggestions, setBrandSuggestions] = useState<BrandSuggestion[]>([]);
+  const [categorySuggestions, setCategorySuggestions] = useState<CategorySuggestion[]>([]);
+  const [recents, setRecents] = useState<string[]>([]);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [speechStatus, setSpeechStatus] = useState<SpeechStatus>("idle");
@@ -109,11 +149,37 @@ export function SearchBar({
   }, []);
 
   useEffect(() => {
+    setRecents(readRecentSearches());
+  }, []);
+
+  const groups = useMemo(
+    () =>
+      buildSuggestionGroups({
+        query,
+        products: suggestions,
+        brands: brandSuggestions,
+        categories: categorySuggestions,
+        recents,
+      }),
+    [query, suggestions, brandSuggestions, categorySuggestions, recents],
+  );
+  const flatItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const listboxId = "search-suggestions-listbox";
+  const activeItem = activeIndex >= 0 ? flatItems[activeIndex] : undefined;
+
+  // A new list invalidates the highlighted row.
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [flatItems.length, query]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       const trimmedQuery = query.trim();
       if (trimmedQuery.length > 0 && trimmedQuery.length < 2) {
         setSuggestions([]);
+        setBrandSuggestions([]);
+        setCategorySuggestions([]);
         return;
       }
 
@@ -125,18 +191,26 @@ export function SearchBar({
         );
         if (!response.ok) {
           setSuggestions([]);
+          setBrandSuggestions([]);
+          setCategorySuggestions([]);
           return;
         }
 
         const data = (await response.json()) as {
           suggestions?: SearchSuggestion[];
+          brands?: BrandSuggestion[];
+          categories?: CategorySuggestion[];
         };
         setSuggestions((data.suggestions ?? []).slice(0, 8));
+        setBrandSuggestions(data.brands ?? []);
+        setCategorySuggestions(data.categories ?? []);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           console.error("Search suggestions request failed:", error);
         }
         setSuggestions([]);
+        setBrandSuggestions([]);
+        setCategorySuggestions([]);
       } finally {
         setIsLoadingSuggestions(false);
       }
@@ -148,18 +222,54 @@ export function SearchBar({
     };
   }, [query]);
 
+  function rememberSearch(text: string) {
+    const next = addRecentSearch(recents, text);
+    setRecents(next);
+    writeRecentSearches(next);
+  }
+
+  function clearRecentSearches() {
+    setRecents([]);
+    writeRecentSearches([]);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Enter on a highlighted row opens that row instead of the typed text.
+    if (activeItem) {
+      openSuggestion(activeItem);
+      return;
+    }
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
     if (city) params.set("city", city);
+    if (query.trim()) rememberSearch(query);
     setSuggestionsOpen(false);
     router.push(`${actionPath}?${params.toString()}`);
   }
 
-  function openSuggestion(name: string) {
+  function openSuggestion(item: SuggestionItem) {
     setSuggestionsOpen(false);
-    router.push(`/search?q=${encodeURIComponent(name)}`);
+    // Brand and category rows are pages, not searches: keep them out of the history.
+    if (item.kind === "product" || item.kind === "recent") rememberSearch(item.label);
+    router.push(item.href);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      setSuggestionsOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (!suggestionsOpen) {
+      setSuggestionsOpen(true);
+      return;
+    }
+    setActiveIndex((current) =>
+      moveActiveIndex(current, event.key === "ArrowDown" ? "down" : "up", flatItems.length),
+    );
   }
 
   function stopListening() {
@@ -238,7 +348,7 @@ export function SearchBar({
     >
       <div className="relative min-w-0 w-full flex-1">
         <label className="flex min-w-0 w-full items-center gap-3 px-3">
-          <Search size={20} className="shrink-0 text-[#ff6b00]" />
+          <Search size={20} className="shrink-0 text-[#3B66E0]" />
           <span className="sr-only">Ne arıyorsun?</span>
           <input
             value={query}
@@ -246,7 +356,13 @@ export function SearchBar({
               setQuery(event.target.value);
               setSuggestionsOpen(true);
             }}
+            onKeyDown={handleKeyDown}
             onFocus={() => setSuggestionsOpen(true)}
+            role="combobox"
+            aria-expanded={suggestionsOpen && flatItems.length > 0}
+            aria-controls={listboxId}
+            aria-autocomplete="list"
+            aria-activedescendant={activeItem ? `suggestion-${activeItem.key}` : undefined}
             onBlur={() => {
               window.setTimeout(() => setSuggestionsOpen(false), 120);
             }}
@@ -277,10 +393,10 @@ export function SearchBar({
             aria-pressed={micIsActive}
             className={`relative shrink-0 rounded-full transition ${
               micIsActive
-                ? "bg-[#ff6b00] text-white"
+                ? "bg-[#3B66E0] text-white"
                 : micIsInactive
                   ? "cursor-not-allowed text-black/25"
-                  : "text-black/45 hover:bg-black/5 hover:text-black/80 focus-visible:ring-2 focus-visible:ring-[#ff6b00]/60"
+                  : "text-black/45 hover:bg-black/5 hover:text-black/80 focus-visible:ring-2 focus-visible:ring-[#3B66E0]/60"
             }`}
           >
             {micIsActive && <span aria-hidden className="mic-ring" />}
@@ -296,11 +412,11 @@ export function SearchBar({
 
         {intentSlots.length > 0 && (
           <div
-            className="mt-2 flex flex-col gap-2 rounded-xl border border-[#ffe1c9] bg-[#fff7f0] px-3 py-2"
+            className="mt-2 flex flex-col gap-2 rounded-xl border border-[#C9D9FF] bg-[#EEF3FF] px-3 py-2"
             data-intent-summary
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.16em] text-[#b34e00]">
+              <span className="text-[11px] font-black uppercase tracking-[0.16em] text-[#2A4FBF]">
                 Anlaşılan niyet
               </span>
               <button
@@ -308,7 +424,7 @@ export function SearchBar({
                 aria-expanded={intentExpanded}
                 aria-label={intentExpanded ? "Detayları gizle" : "Detayları göster"}
                 onClick={() => setIntentExpanded((open) => !open)}
-                className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-[#b34e00] transition hover:bg-[#ffe1c9]"
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-[#2A4FBF] transition hover:bg-[#C9D9FF]"
               >
                 {intentExpanded ? "Gizle" : "Açıklama"}
               </button>
@@ -322,7 +438,7 @@ export function SearchBar({
               <span
                 role="status"
                 aria-live="polite"
-                className="shrink-0 text-[11px] font-black uppercase tracking-[0.16em] text-[#b34e00]"
+                className="shrink-0 text-[11px] font-black uppercase tracking-[0.16em] text-[#2A4FBF]"
               >
                 {query.trim() ? "Düzenlenebilir" : "Konuşarak ekleyin"}
               </span>
@@ -330,32 +446,75 @@ export function SearchBar({
           </div>
         )}
 
-        {suggestionsOpen && (suggestions.length > 0 || isLoadingSuggestions) && (
-          <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 max-h-80 overflow-y-auto rounded-2xl border border-black/10 bg-white p-2 shadow-[0_18px_60px_rgba(0,0,0,0.14)]">
-            <div className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-[0.16em] text-black/35">
-              {query.trim() ? "Arama önerileri" : "Popüler aramalar"}
-            </div>
-            {isLoadingSuggestions && suggestions.length === 0 ? (
+        {suggestionsOpen && (flatItems.length > 0 || isLoadingSuggestions) && (
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label="Arama önerileri"
+            className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 max-h-96 overflow-y-auto rounded-2xl border border-black/10 bg-white p-2 shadow-[0_18px_60px_rgba(0,0,0,0.14)]"
+          >
+            {isLoadingSuggestions && flatItems.length === 0 ? (
               <div className="px-3 py-3 text-sm font-semibold text-black/45">
                 Öneriler yükleniyor...
               </div>
             ) : (
-              <div className="grid gap-1">
-                {suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion.id}
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => openSuggestion(suggestion.name)}
-                    className="flex min-w-0 items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-[#fff4eb]"
-                  >
-                    <span className="min-w-0 truncate">{suggestion.name}</span>
-                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-1 text-[11px] font-black text-black/45">
-                      {suggestion.listingCount} ilan
+              groups.map((group) => (
+                <div key={group.title} className="mb-1 last:mb-0">
+                  <div className="flex items-center justify-between px-3 pb-1 pt-2">
+                    <span className="text-[11px] font-black uppercase tracking-[0.16em] text-black/35">
+                      {group.title}
                     </span>
-                  </button>
-                ))}
-              </div>
+                    {group.title === "Son aramalarınız" && (
+                      <button
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={clearRecentSearches}
+                        className="flex items-center gap-1 text-[11px] font-bold text-black/40 hover:text-[#3B66E0]"
+                      >
+                        <X size={12} /> Temizle
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-0.5">
+                    {group.items.map((item) => {
+                      const Icon = KIND_ICONS[item.kind];
+                      const isActive = activeItem?.key === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          id={`suggestion-${item.key}`}
+                          type="button"
+                          role="option"
+                          aria-selected={isActive}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => openSuggestion(item)}
+                          className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition hover:bg-[#EEF3FF] ${
+                            isActive ? "bg-[#EEF3FF]" : ""
+                          }`}
+                        >
+                          <Icon size={16} className="shrink-0 text-black/35" />
+                          <span className="min-w-0 flex-1 truncate font-semibold">
+                            {highlightParts(item.label, query).map((part, index) =>
+                              part.match ? (
+                                <strong key={index} className="font-black text-[#2A4FBF]">
+                                  {part.text}
+                                </strong>
+                              ) : (
+                                <span key={index}>{part.text}</span>
+                              ),
+                            )}
+                          </span>
+                          {item.meta && (
+                            <span className="shrink-0 rounded-full bg-black/5 px-2 py-1 text-[11px] font-black text-black/45">
+                              {item.meta}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         )}

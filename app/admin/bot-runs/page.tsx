@@ -217,7 +217,7 @@ function BotMetricCard({
 }) {
   const tones = {
     green: "bg-green-100 text-green-700",
-    orange: "bg-[#fff1e7] text-[#ff6b00]",
+    orange: "bg-[#E4ECFF] text-[#3B66E0]",
     red: "bg-red-100 text-red-700",
   };
   return (

@@ -1,3 +1,4 @@
+import { DEFAULT_OG_IMAGES, DEFAULT_TWITTER_IMAGES } from "@/lib/seo/metadata";
 import { SearchBar } from "@/components/search-bar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import type {
@@ -5,19 +6,27 @@ import type {
   ListingCondition,
   ListingSource,
 } from "@/lib/listings";
-import { isMissingAttributesColumn, isMissingStatusColumn } from "@/lib/listing-status";
+import {
+  isMissingAttributesColumn,
+  isMissingDuplicateGroupColumn,
+  isMissingStatusColumn,
+} from "@/lib/listing-status";
+import { collapseDuplicateListings } from "@/lib/duplicate-engine/collapse";
 import { buildProductPriceStats } from "@/lib/price-analysis";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { detectQueryIntent } from "@/lib/search/query-intent-detector";
 import { rankListingsByPue } from "@/lib/search/pue-ranking";
-import { getExpandedSearchTerms } from "@/lib/category-taxonomy";
+import { getExpandedSearchTerms } from "@/lib/search/query-expansion";
+import { buildIlikeOrFilter } from "@/lib/search/ilike-filter";
 import { createSupabaseClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getMetadataBase, getAbsoluteUrl } from "@/lib/site-url";
 import { SearchResultsClient } from "./search-results-client";
 import type { Metadata } from "next";
 import { cacheGet, cacheSet, cacheKeyFrom } from "@/lib/cache";
+import { toBigintIds } from "@/lib/supabase-ids";
+import { TREND_WINDOW_DAYS, type IntelligencePriceHistoryInput } from "@/lib/intelligence-engine";
 
 type SearchPageProps = {
   searchParams: Promise<{
@@ -52,17 +61,20 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
       description: `${query} ikinci el fiyatlarını tek yerde karşılaştırın.`,
       locale: "tr_TR",
       type: "website",
+      images: DEFAULT_OG_IMAGES,
     },
     twitter: {
       card: "summary_large_image",
       title: searchTitle,
       description: `${query} ikinci el fiyatlarını tek yerde karşılaştırın.`,
+      images: DEFAULT_TWITTER_IMAGES,
     },
   };
 }
 
-const listingColumns =
+const baseListingColumns =
   "id, product_id, title, price, city, source, url, condition, image_url, created_at";
+const listingColumns = `${baseListingColumns}, duplicate_group_id`;
 
 type ListingRow = {
   id: string | number;
@@ -75,6 +87,7 @@ type ListingRow = {
   condition: ListingCondition;
   image_url: string | null;
   created_at: string;
+  duplicate_group_id?: string | null;
 };
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
@@ -89,6 +102,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   let favoriteListingIds: string[] = [];
   let productCategory: Map<string, string | null> = new Map();
   let productAttributes = new Map<string, { attributes?: unknown }>();
+  let productPriceHistory: Record<string, IntelligencePriceHistoryInput[]> = {};
 
   const serverSupabase = await createSupabaseServerClient();
   const { data: authData } = (await serverSupabase?.auth.getUser()) ?? {
@@ -107,8 +121,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     )];
     const searchTerms = expandedTerms.length > 0 ? expandedTerms : [query.toLowerCase().trim()];
 
-    const productOrFilter = searchTerms.map(t => "name.ilike.%" + t + "%").join(",");
-    const titleOrFilter = searchTerms.map(t => "title.ilike.%" + t + "%").join(",");
+    const productOrFilter = buildIlikeOrFilter("name", searchTerms);
+    const titleOrFilter = buildIlikeOrFilter("title", searchTerms);
 
     const [matchingProductsResults, titleListingsResults] = await Promise.all([
       (async () => {
@@ -207,7 +221,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               const result = await supabase
                 .from("products")
                 .select("id, name, category, attributes")
-                .in("id", productIds);
+                .in("id", toBigintIds(productIds));
               if (!result.error || !isMissingAttributesColumn(result.error)) {
                 if (!result.error) cacheSet(cacheKey, result.data ?? [], 60_000);
                 return result;
@@ -215,7 +229,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               const fallback = await supabase
                 .from("products")
                 .select("id, name, category")
-                .in("id", productIds);
+                .in("id", toBigintIds(productIds));
               if (!fallback.error) cacheSet(cacheKey, fallback.data ?? [], 60_000);
               return fallback;
             })()
@@ -257,6 +271,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               ]),
           );
 
+          productPriceHistory = await fetchRecentPriceHistory(supabase, productIds);
+
           const intent = detectQueryIntent(query);
           const pueListings = rows.map((row) => ({
             id: String(row.id),
@@ -273,6 +289,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             condition: row.condition,
             imageUrl: row.image_url ? String(row.image_url) : null,
             createdAt: String(row.created_at),
+            duplicateGroupId: row.duplicate_group_id ?? null,
           }));
           const scored = rankListingsByPue(
             intent,
@@ -280,8 +297,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             productAttributes,
           );
           const scoredIndex = new Map(scored.map((s, i) => [`${s.productId}:${s.price}:${s.title}`, i]));
-          listings = [...pueListings].sort(
-            (a, b) => (scoredIndex.get(`${a.productId}:${a.price}:${a.title}`) ?? 0) - (scoredIndex.get(`${b.productId}:${b.price}:${b.title}`) ?? 0)
+          // One entry per item: copies of the same item on several platforms are
+          // collapsed (the others stay visible as "also on"), so the counts and
+          // the price statistics below count each item once.
+          listings = collapseDuplicateListings(
+            [...pueListings].sort(
+              (a, b) => (scoredIndex.get(`${a.productId}:${a.price}:${a.title}`) ?? 0) - (scoredIndex.get(`${b.productId}:${b.price}:${b.title}`) ?? 0)
+            ),
           );
         }
       }
@@ -341,6 +363,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         productPriceStats={productPriceStats}
         productCategories={Object.fromEntries(productCategory)}
         productAttributes={Object.fromEntries(productAttributes)}
+        productPriceHistory={productPriceHistory}
         loadError={loadError}
         favoriteListingIds={favoriteListingIds}
         isAuthenticated={isAuthenticated}
@@ -350,36 +373,78 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   );
 }
 
+/**
+ * Runs a listings query with the duplicate-group column and, on a database
+ * that has not run that migration yet, again without it (listings then simply
+ * have no groups).
+ */
+async function withDuplicateColumnFallback<T extends { error: unknown }>(
+  run: (columns: string) => PromiseLike<T>,
+): Promise<T> {
+  const result = await run(listingColumns);
+  if (!result.error || !isMissingDuplicateGroupColumn(result.error)) return result;
+  return run(baseListingColumns);
+}
+
 async function searchPublishedListingsByTitle(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
   orFilter: string,
 ) {
-  const result = await supabase
-    .from("listings")
-    .select(listingColumns)
-    .in("status", ["published", "active"])
-    .or(orFilter);
+  const result = await withDuplicateColumnFallback((columns) =>
+    supabase.from("listings").select(columns).in("status", ["published", "active"]).or(orFilter),
+  );
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
-  return supabase
-    .from("listings")
-    .select(listingColumns)
-    .or(orFilter);
+  return withDuplicateColumnFallback((columns) => supabase.from("listings").select(columns).or(orFilter));
 }
 
 async function searchPublishedListingsByProduct(
   supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
   productIds: (string | number)[],
 ) {
-  const result = await supabase
-    .from("listings")
-    .select(listingColumns)
-    .in("status", ["published", "active"])
-    .in("product_id", productIds);
+  const ids = toBigintIds(productIds);
+  const result = await withDuplicateColumnFallback((columns) =>
+    supabase.from("listings").select(columns).in("status", ["published", "active"]).in("product_id", ids),
+  );
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
-  return supabase
-    .from("listings")
-    .select(listingColumns)
-    .in("product_id", productIds);
+  return withDuplicateColumnFallback((columns) => supabase.from("listings").select(columns).in("product_id", ids));
+}
+
+/** Upper bound on history rows read for one results page. */
+const SEARCH_PRICE_HISTORY_LIMIT = 5000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Recorded prices of the last TREND_WINDOW_DAYS days for the products on the
+ * page, grouped by product id. The search page's trend and "price falling"
+ * signals are derived from this and nothing else; on a read error the signals
+ * are simply absent.
+ */
+async function fetchRecentPriceHistory(
+  supabase: NonNullable<ReturnType<typeof createSupabaseClient>>,
+  productIds: string[],
+): Promise<Record<string, IntelligencePriceHistoryInput[]>> {
+  if (productIds.length === 0) return {};
+
+  const since = new Date(Date.now() - TREND_WINDOW_DAYS * MS_PER_DAY).toISOString();
+  const { data, error } = await supabase
+    .from("price_history")
+    .select("product_id, price, recorded_at")
+    .in("product_id", toBigintIds(productIds))
+    .gte("recorded_at", since)
+    .order("recorded_at", { ascending: false })
+    .limit(SEARCH_PRICE_HISTORY_LIMIT);
+
+  if (error) {
+    console.error("Supabase search price history query failed:", error);
+    return {};
+  }
+
+  const grouped: Record<string, IntelligencePriceHistoryInput[]> = {};
+  for (const row of data ?? []) {
+    const key = String(row.product_id);
+    (grouped[key] ??= []).push({ price: Number(row.price), recordedAt: row.recorded_at });
+  }
+  return grouped;
 }

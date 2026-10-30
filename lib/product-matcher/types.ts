@@ -85,6 +85,7 @@ export type BatchMatcherInput = {
   category?: string | null;
   source?: string | null;
   attributes?: unknown;
+  price?: number | null;
 };
 
 export type BatchMatchCandidate = {
@@ -100,4 +101,5 @@ export type FindOrCreateMatchedProductInput = {
   source?: string | null;
   resolver?: ICategoryResolver;
   attributes?: unknown;
+  price?: number | null;
 };

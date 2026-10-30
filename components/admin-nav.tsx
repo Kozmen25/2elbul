@@ -6,6 +6,9 @@ import {
   BellRing,
   Bot,
   Boxes,
+  Flame,
+  TriangleAlert,
+  FolderTree,
   ChevronLeft,
   ClipboardCheck,
   DatabaseZap,
@@ -16,8 +19,10 @@ import {
   PackageSearch,
   RefreshCw,
   Search,
+  Mail,
   Settings,
   ShieldCheck,
+  Sparkles,
   Users,
   WandSparkles,
   X,
@@ -60,6 +65,7 @@ const groups = [
     title: "Intelligence",
     links: [
       { href: "/market", label: "Piyasa Merkezi", icon: BarChart3 },
+      { href: "/admin/market-signals", label: "Piyasa Sinyalleri", icon: Flame },
       { href: "/admin/stats", label: "İstatistikler", icon: BarChart3 },
     ],
   },
@@ -67,9 +73,11 @@ const groups = [
     title: "Veri",
     links: [
       { href: "/admin/listings", label: "İlanlar", icon: PackageSearch },
+      { href: "/admin/categories", label: "Kategoriler", icon: FolderTree },
       { href: "/admin/products", label: "Ürünler", icon: Boxes },
       { href: "/admin/product-matcher", label: "Ürün Eşleştirici", icon: WandSparkles },
       { href: "/admin/data-quality", label: "Veri Kalitesi", icon: ShieldCheck },
+      { href: "/admin/problem-listings", label: "Hatalı İlanlar", icon: TriangleAlert },
       { href: "/admin/data-cleanup", label: "Veri Temizliği", icon: ClipboardCheck },
       { href: "/admin/import", label: "İçe Aktar", icon: DatabaseZap },
     ],
@@ -83,7 +91,11 @@ const groups = [
   },
   {
     title: "Sistem",
-    links: [{ href: "/admin/settings", label: "Ayarlar", icon: Settings }],
+    links: [
+      { href: "/admin/ai", label: "Yapay Zeka", icon: Sparkles },
+      { href: "/admin/email", label: "E-posta", icon: Mail },
+      { href: "/admin/settings", label: "Ayarlar", icon: Settings },
+    ],
   },
 ];
 
@@ -136,7 +148,7 @@ export function AdminNav({ email }: { email: string }) {
                         onClick={() => setOpen(false)}
                         className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
                           active
-                            ? "bg-[#ff6b00] text-white"
+                            ? "bg-[#3B66E0] text-white"
                             : "text-white/65 hover:bg-white/8 hover:text-white"
                         }`}
                       >

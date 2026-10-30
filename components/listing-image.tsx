@@ -11,6 +11,7 @@ export function ListingImage({
   source,
   listingCount,
   listingUrl,
+  priority = false,
 }: {
   imageUrl?: string | null;
   productName: string;
@@ -18,6 +19,8 @@ export function ListingImage({
   source?: ListingSource | null;
   listingCount?: number;
   listingUrl?: string;
+  /** Above-the-fold image (the page's LCP): load it right away. */
+  priority?: boolean;
 }) {
   const fallback = getProductFallback(productName);
   const [imgSrc, setImgSrc] = useState(imageUrl?.trim() || fallback);
@@ -27,7 +30,9 @@ export function ListingImage({
       <img
         src={imgSrc}
         alt={alt}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
+        decoding="async"
         className="h-full w-full object-cover"
         onError={() => {
           if (imgSrc !== fallback) setImgSrc(fallback);
@@ -38,6 +43,8 @@ export function ListingImage({
           <img
             src={getSourceLogoPath(source)}
             alt={source}
+            loading="lazy"
+            decoding="async"
             className="size-full"
           />
         </div>

@@ -1,4 +1,5 @@
 import type { ListingCondition } from "@/lib/listings";
+import { normalizeConditionText } from "@/lib/listing-condition";
 import type { CheerioAPI } from "cheerio";
 import { withRetry, HttpError, RetryMetrics } from "./retry";
 import { classifyError } from "@/lib/recovery";
@@ -229,16 +230,7 @@ export function normalizePrice(text: unknown) {
 export function normalizeCondition(
   text: string | null | undefined,
 ): ListingCondition {
-  const value = String(text ?? "").toLocaleLowerCase("tr-TR");
-  if (value.includes("yenilen") || value.includes("refurb")) {
-    return "Yenilenmiş";
-  }
-  if (value.includes("sıfır") || value === "yeni") return "Sıfır";
-  if (value.includes("yeni gibi")) return "Yeni gibi";
-  if (value.includes("çok iyi")) return "Çok iyi";
-  if (value.includes("iyi")) return "İyi";
-  if (value.includes("kullanılmış")) return "Kullanılmış";
-  return "İkinci El";
+  return normalizeConditionText(text);
 }
 
 export function elementText(root: HtmlRootLike, selectors: string[]) {

@@ -1,3 +1,4 @@
+import type { AlsoListedOn } from "@/lib/duplicate-engine/collapse";
 export type ListingSource =
   | "Sahibinden"
   | "Letgo"
@@ -84,9 +85,8 @@ export type Listing = {
   warranty?: string | null;
   warrantyType?: WarrantyType | null;
   priceQuality?: PriceQualityType | null;
-};
-
-export type ProductOption = {
-  id: string;
-  name: string;
+  /** Shared by copies of the same item on different platforms (see lib/duplicate-engine). */
+  duplicateGroupId?: string | null;
+  /** Set on the kept listing of a group: the same item on other platforms. */
+  alsoOn?: AlsoListedOn[];
 };

@@ -1,3 +1,10 @@
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import {
+  buildLandingDescription,
+  buildLandingTitle,
+  isIndexableSnapshot,
+  snapshotFromMarketIntelligence,
+} from "@/lib/seo/landing-content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -30,12 +37,21 @@ import {
   formatOpportunityLevel,
 } from "@/lib/opportunity-engine";
 import type { MarketPulseItem } from "@/lib/market-pulse";
+import { listingOutboundPath } from "@/lib/listing-links";
 
 type BrandPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export const dynamic = "force-dynamic";
+// ISR: public data, no per-visitor content. Must stay a literal (static analysis);
+// keep equal to CACHE_SECONDS.publicPage in lib/cache-policy.ts.
+export const revalidate = 300;
+
+// No pages are built ahead of time, but exporting this lets each page be cached
+// (ISR) the first time it is requested.
+export function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata({
   params,
@@ -55,32 +71,16 @@ export async function generateMetadata({
     };
   }
 
-  const title = `${brandData.brandName} ikinci el marka analizi | 2ElBul`;
-  const description =
-    brandData.marketIntelligence.sampleSize > 0
-      ? `${brandData.brandName} için ${brandData.marketIntelligence.sampleSize} ilan, ${brandData.marketIntelligence.marketSummary.sourceCount} kaynak ve ${formatPrice(brandData.marketIntelligence.priceAnalysis.averagePrice)} ortalama fiyatla güncel marka analizi.`
-      : `${brandData.brandName} için henüz yeterli ilan verisi oluşmadı. Marka analizi ve fırsat sinyalleri veri geldikçe güncellenecek.`;
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: brandData.brandUrl,
-    },
-    openGraph: {
-      title,
-      description,
-      url: brandData.brandUrl,
-      siteName: "2ElBul",
-      locale: "tr_TR",
-      type: "website",
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-    },
-  };
+  const snapshot = snapshotFromMarketIntelligence(brandData.marketIntelligence);
+  const now = new Date();
+  return buildPageMetadata({
+    title: buildLandingTitle("brand", brandData.brandName, now),
+    description: buildLandingDescription("brand", brandData.brandName, snapshot),
+    path: new URL(brandData.brandUrl).pathname,
+    // Empty pages stay reachable for visitors but are kept out of the index.
+    noIndex: !isIndexableSnapshot(snapshot),
+    followLinks: true,
+  });
 }
 
 export default async function BrandPage({ params }: BrandPageProps) {
@@ -131,7 +131,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
         <section className="mt-4 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.04)] sm:p-8 lg:p-10">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:items-end">
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff6b00]">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#3B66E0]">
                 Marka analizi
               </p>
               <h1 className="mt-3 break-words text-4xl font-black tracking-[-0.055em] sm:text-6xl">
@@ -147,13 +147,13 @@ export default async function BrandPage({ params }: BrandPageProps) {
               </p>
             </div>
 
-            <div className="rounded-3xl border border-[#ff6b00]/18 bg-[#fff7f1] p-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#d95700]/75">
+            <div className="rounded-3xl border border-[#3B66E0]/18 bg-[#EEF3FF] p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#2A4FBF]/75">
                 Karar özeti
               </p>
               <div className="mt-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-2xl font-black tracking-[-0.04em] text-[#d95700]">
+                  <p className="text-2xl font-black tracking-[-0.04em] text-[#2A4FBF]">
                     {opportunityAnalysis.recommendation.label}
                   </p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-black/60">
@@ -164,7 +164,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
                   <span className="block text-[10px] uppercase tracking-[0.08em] text-black/35">
                     Fırsat skoru
                   </span>
-                  <span className="mt-1 block text-lg text-[#d95700]">
+                  <span className="mt-1 block text-lg text-[#2A4FBF]">
                     {opportunityAnalysis.opportunityScore}/100
                   </span>
                 </span>
@@ -209,7 +209,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
               label="Kaynak sayısı"
               value={marketIntelligence.marketSummary.sourceCount.toLocaleString("tr-TR")}
             />
-            <div className="min-w-0 rounded-2xl border border-[#ff6b00]/20 bg-[#fff7f1] p-4">
+            <div className="min-w-0 rounded-2xl border border-[#3B66E0]/20 bg-[#EEF3FF] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.08em] text-black/35">
                 Güven
               </p>
@@ -303,7 +303,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
             <a
               key={item.href}
               href={item.href}
-              className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#ff6b00]/35 hover:bg-[#fff7f1] hover:text-[#d95700]"
+              className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-black transition hover:border-[#3B66E0]/35 hover:bg-[#EEF3FF] hover:text-[#2A4FBF]"
             >
               {item.label}
             </a>
@@ -429,7 +429,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
 
 function OpportunityCard({ item }: { item: MarketPulseItem }) {
   return (
-    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#ff6b00]/35 hover:bg-white hover:shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
+    <article className="min-w-0 rounded-2xl border border-black/8 bg-[#fafaf8] p-5 transition hover:-translate-y-0.5 hover:border-[#3B66E0]/35 hover:bg-white hover:shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="break-words text-lg font-black leading-6">
@@ -479,7 +479,7 @@ function PopularProductCard({ item }: { item: MarketPulseItem }) {
             {item.listingCount} ilan · {item.searchCount} arama
           </p>
         </div>
-        <span className="rounded-full border border-[#ff6b00]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
+        <span className="rounded-full border border-[#3B66E0]/20 bg-white px-3 py-1.5 text-[11px] font-black text-[#2A4FBF]">
           {item.opportunityLabel}
         </span>
       </div>
@@ -519,7 +519,7 @@ function LatestListingCard({ listing }: { listing: BrandListingRecord }) {
           ) : null}
       </div>
 
-      <p className="mt-4 text-2xl font-black tracking-[-0.05em] text-[#ff6b00]">
+      <p className="mt-4 text-2xl font-black tracking-[-0.05em] text-[#3B66E0]">
         {formatPrice(listing.price)}
       </p>
 
@@ -536,9 +536,9 @@ function LatestListingCard({ listing }: { listing: BrandListingRecord }) {
       </div>
 
       <a
-        href={listing.url}
+        href={listingOutboundPath(listing.id)}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener noreferrer nofollow"
         className="orange-button mt-5 w-full justify-center py-3"
       >
         İlana Git
@@ -569,7 +569,7 @@ function SourceCard({
             {source.listingCount} ilan · %{Math.round(source.share * 100)} pay
           </p>
         </div>
-        <span className="rounded-full border border-white bg-white px-3 py-1.5 text-[11px] font-black text-[#d95700]">
+        <span className="rounded-full border border-white bg-white px-3 py-1.5 text-[11px] font-black text-[#2A4FBF]">
           {formatPrice(source.averagePrice)}
         </span>
       </div>
@@ -597,7 +597,7 @@ function StatCard({
       </p>
       <p
         className={`mt-2 break-words text-base font-black leading-6 ${
-          accent ? "text-[#d95700]" : ""
+          accent ? "text-[#2A4FBF]" : ""
         }`}
         title={value}
       >
@@ -623,7 +623,7 @@ function MiniMetric({
       </p>
       <p
         className={`mt-1 truncate text-sm font-black ${
-          accent ? "text-[#ff6b00]" : ""
+          accent ? "text-[#3B66E0]" : ""
         }`}
         title={value}
       >
@@ -644,11 +644,11 @@ function SectionTitle({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
         <Icon size={21} />
       </span>
       <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#ff6b00]">
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#3B66E0]">
           {eyebrow}
         </p>
         <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">{title}</h2>

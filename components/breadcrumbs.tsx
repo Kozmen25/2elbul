@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getAbsoluteUrl } from "@/lib/site-url";
 
 export type Crumb = {
   label: string;
@@ -9,13 +10,14 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
+    // Linked crumbs plus the current page; Google allows the last item without a URL.
     itemListElement: items
-      .filter((c) => c.href)
+      .filter((c, i) => c.href || i === items.length - 1)
       .map((c, i) => ({
         "@type": "ListItem",
         position: i + 1,
         name: c.label,
-        item: `${process.env.NEXT_PUBLIC_BASE_URL ?? ""}${c.href}`,
+        ...(c.href ? { item: getAbsoluteUrl(c.href) } : {}),
       })),
   };
 
@@ -28,7 +30,7 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
         }}
       />
       <nav aria-label="Breadcrumb" className="mb-6">
-        <ol className="flex flex-wrap items-center gap-1.5 text-xs text-black/50">
+        <ol className="flex flex-wrap items-center gap-1.5 text-xs text-black/60">
           {items.map((crumb, i) => {
             const isLast = i === items.length - 1;
             return (

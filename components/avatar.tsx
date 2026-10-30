@@ -58,7 +58,7 @@ export function AvatarImage({
   }
   return (
     <span
-      className={`relative grid place-items-center bg-[#fff1e7] font-black uppercase text-[#ff6b00] ${className}`}
+      className={`relative grid place-items-center bg-[#E4ECFF] font-black uppercase text-[#3B66E0] ${className}`}
     >
       {initialsOf(name, email)}
     </span>

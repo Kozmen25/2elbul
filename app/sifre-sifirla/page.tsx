@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { TriangleAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
@@ -12,7 +13,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function ForgotPasswordPage() {
+type ForgotPasswordPageProps = {
+  searchParams: Promise<{ error?: string }>;
+};
+
+export default async function ForgotPasswordPage({ searchParams }: ForgotPasswordPageProps) {
+  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
   const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
   if (data.user) redirect("/");
@@ -32,6 +38,15 @@ export default async function ForgotPasswordPage() {
               E-posta adresini gir, şifreni sıfırlama bağlantısını gönderelim.
             </p>
           </div>
+          {params.error === "link_expired" && (
+            <div className="mt-6 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <TriangleAlert size={18} className="mt-0.5 shrink-0" />
+              <p className="font-semibold">
+                Şifre sıfırlama bağlantısı geçersiz ya da süresi dolmuş. Aşağıdan yeni
+                bir bağlantı isteyebilirsin.
+              </p>
+            </div>
+          )}
           <ResetRequestForm />
         </div>
       </div>

@@ -90,7 +90,7 @@ export default async function AdminAnalyticsPage({
                   <span className="min-w-0 truncate font-bold text-black/80">
                     {row.name}
                   </span>
-                  <span className="shrink-0 rounded-full bg-[#fff1e7] px-2.5 py-1 text-xs font-black text-[#d95700]">
+                  <span className="shrink-0 rounded-full bg-[#E4ECFF] px-2.5 py-1 text-xs font-black text-[#2A4FBF]">
                     {row.count}
                   </span>
                 </li>
@@ -152,7 +152,7 @@ export default async function AdminAnalyticsPage({
         <section className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
           <div className="flex items-start justify-between gap-4">
             <h2 className="text-lg font-black">Sayfa görüntüleme</h2>
-            <span className="grid size-9 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+            <span className="grid size-9 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
               <MousePointerClick size={18} />
             </span>
           </div>
@@ -169,7 +169,7 @@ export default async function AdminAnalyticsPage({
         <section className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
           <div className="flex items-start justify-between gap-4">
             <h2 className="text-lg font-black">Coğrafi dağılım</h2>
-            <span className="grid size-9 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+            <span className="grid size-9 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
               <Globe size={18} />
             </span>
           </div>
@@ -184,7 +184,7 @@ export default async function AdminAnalyticsPage({
         <section className="rounded-2xl border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)]">
           <div className="flex items-start justify-between gap-4">
             <h2 className="text-lg font-black">En çok görüntülenen ürünler</h2>
-            <span className="grid size-9 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+            <span className="grid size-9 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
               <PackageSearch size={18} />
             </span>
           </div>
@@ -215,8 +215,8 @@ function RangeChips({ selected }: { selected: RangeKey }) {
           href={key === "7d" ? "/admin/analytics" : `/admin/analytics?d=${key}`}
           className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${
             selected === key
-              ? "bg-[#ff6b00] text-white"
-              : "text-black/50 hover:text-[#d95700]"
+              ? "bg-[#3B66E0] text-white"
+              : "text-black/50 hover:text-[#2A4FBF]"
           }`}
         >
           {label}
@@ -246,7 +246,7 @@ function BarRow({
       </div>
       <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-[#f3f1ec]">
         <div
-          className="h-full rounded-full bg-[#ff6b00]"
+          className="h-full rounded-full bg-[#3B66E0]"
           style={{ width: `${pct}%` }}
         />
       </div>

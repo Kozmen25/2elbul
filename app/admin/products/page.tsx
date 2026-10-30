@@ -4,13 +4,14 @@ import { AdminEmpty, AdminPageHeader } from "@/components/admin-ui";
 import { formatCurrencyTRY } from "@/lib/formatters";
 import { createProductSlug } from "@/lib/product-slug";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { CreateProductForm } from "./create-product-form";
 import { ProductActions } from "./product-actions";
 
 export default async function AdminProductsPage() {
   const supabase = createSupabaseAdminClient();
   const slugResult = await supabase
     ?.from("products")
-    .select("id, name, slug, created_at")
+    .select("id, name, slug, category_id, created_at")
     .order("name");
   let productsData = (slugResult?.data ?? []) as Record<string, unknown>[];
   let productsError = slugResult?.error ?? null;
@@ -20,11 +21,21 @@ export default async function AdminProductsPage() {
     slugAvailable = false;
     const fallbackResult = await supabase
       ?.from("products")
-      .select("id, name, created_at")
+      .select("id, name, category_id, created_at")
       .order("name");
     productsData = (fallbackResult?.data ?? []) as Record<string, unknown>[];
     productsError = fallbackResult?.error ?? null;
   }
+
+  const categoryRows = (await supabase?.from("categories").select("id, name, parent_id, display_order, is_active").order("display_order"))?.data ?? [];
+  const categoryName = new Map(categoryRows.map((row) => [row.id, row.name]));
+  const categoryOptions = categoryRows
+    .filter((row) => row.is_active)
+    .map((row) => ({
+      id: row.id,
+      label: row.parent_id ? `${categoryName.get(row.parent_id) ?? ""} › ${row.name}` : row.name,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "tr"));
 
   const listingsResult = await supabase
     ?.from("listings")
@@ -64,6 +75,8 @@ export default async function AdminProductsPage() {
         "slug" in product && product.slug
           ? String(product.slug)
           : createProductSlug(String(product.name)),
+      categoryId: Number(product.category_id),
+      categoryLabel: categoryOptions.find((option) => option.id === Number(product.category_id))?.label ?? "-",
       count: productStats?.count ?? 0,
       average: productStats
         ? Math.round(productStats.total / productStats.count)
@@ -86,12 +99,14 @@ export default async function AdminProductsPage() {
           `supabase/product-slugs.sql` dosyasını çalıştırın.
         </div>
       )}
+      <CreateProductForm categoryOptions={categoryOptions} />
       {products.length ? (
         <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-2xl border border-black/8 bg-white [-webkit-overflow-scrolling:touch]">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-[#fafaf8] text-xs uppercase tracking-wide text-black/45">
               <tr>
                 <th className="px-4 py-3">Ürün</th>
+                <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Slug</th>
                 <th className="px-4 py-3">İlan</th>
                 <th className="px-4 py-3">Ortalama</th>
@@ -104,6 +119,9 @@ export default async function AdminProductsPage() {
               {products.map((product) => (
                 <tr key={product.id} className="border-t border-black/7">
                   <td className="px-4 py-4 font-black">{product.name}</td>
+                  <td className="px-4 py-4 text-xs font-semibold text-black/60">
+                    {product.categoryLabel}
+                  </td>
                   <td className="px-4 py-4 font-mono text-xs text-black/50">
                     {product.slug}
                   </td>
@@ -121,7 +139,7 @@ export default async function AdminProductsPage() {
                       >
                         <ExternalLink size={16} />
                       </Link>
-                      {slugAvailable && <ProductActions product={product} />}
+                      {slugAvailable && <ProductActions product={product} categoryOptions={categoryOptions} />}
                     </div>
                   </td>
                 </tr>

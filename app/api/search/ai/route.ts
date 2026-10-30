@@ -9,12 +9,20 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { getProductDetail } from "@/lib/product-detail";
 import { buildSearchPlan } from "@/lib/search/ai/planner";
 import {
+  applyInterpretation,
+  getSearchInterpretation,
+  shouldInterpretWithAi,
+} from "@/lib/ai/features/interpret-search";
+import { getAiRuntimeSettings } from "@/lib/ai/settings";
+import {
   buildSearchExplanation,
   type GroundedProductSummary,
 } from "@/lib/search/ai/explanation";
 import type { ListingCondition, ListingSource } from "@/lib/listings";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { toBigintIds } from "@/lib/supabase-ids";
+import { containsPattern } from "@/lib/search/ilike-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +100,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { plan, expandedTerms } = buildSearchPlan(query);
+    const deterministic = buildSearchPlan(query);
+    let { plan } = deterministic;
+    let expandedTerms = deterministic.expandedTerms;
+
+    // Gemini fills in what the deterministic parser could not read (price band,
+    // sort, exclusions, extra keywords). Off, over budget or unsure => the
+    // deterministic plan is used untouched.
+    const aiRuntime = await getAiRuntimeSettings();
+    if (aiRuntime.enabled && aiRuntime.features.search && shouldInterpretWithAi(plan, query)) {
+      const interpretation = await getSearchInterpretation(query);
+      if (interpretation) {
+        const enhanced = applyInterpretation(plan, interpretation, aiRuntime.minConfidence);
+        if (enhanced.applied) {
+          plan = enhanced.plan;
+          expandedTerms = dedupe([...expandedTerms, ...enhanced.extraTerms]);
+        }
+      }
+    }
 
     // fast_search: the AI intent layer found nothing structured — hand back a
     // minimal envelope so the client keeps using the existing pipeline as-is
@@ -121,11 +146,11 @@ export async function GET(request: NextRequest) {
           supabase
             .from("products")
             .select("id, name, category, attributes")
-            .ilike("name", `%${term}%`),
+            .ilike("name", containsPattern(term)),
         ),
       ),
       Promise.all(
-        terms.map((term) => searchPublishedListingsByTitle(supabase, `%${term}%`)),
+        terms.map((term) => searchPublishedListingsByTitle(supabase, containsPattern(term))),
       ),
     ]);
 
@@ -173,13 +198,13 @@ export async function GET(request: NextRequest) {
       ? await supabase
           .from("products")
           .select("id, name, slug, category, attributes")
-          .in("id", productIds)
+          .in("id", toBigintIds(productIds))
           .then((result) => {
             if (!result.error || !isMissingAttributesColumn(result.error)) return result;
             return supabase
               .from("products")
               .select("id, name, slug, category")
-              .in("id", productIds);
+              .in("id", toBigintIds(productIds));
           })
       : { data: [], error: null };
 
@@ -362,13 +387,13 @@ async function searchPublishedListingsByProduct(
     .from("listings")
     .select(LISTING_COLUMNS)
     .in("status", ["published", "active"])
-    .in("product_id", productIds);
+    .in("product_id", toBigintIds(productIds));
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
 
   return supabase
     .from("listings")
     .select(LISTING_COLUMNS)
-    .in("product_id", productIds);
+    .in("product_id", toBigintIds(productIds));
 }
 
 /**
@@ -383,7 +408,7 @@ async function resolveReferenceMarketValue(
   const { data: rows } = await supabase
     .from("products")
     .select("id, name, slug")
-    .ilike("name", `%${referenceName}%`)
+    .ilike("name", containsPattern(referenceName))
     .limit(20);
   if (!rows || rows.length === 0) return null;
 

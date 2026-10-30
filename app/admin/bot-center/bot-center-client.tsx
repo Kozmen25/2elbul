@@ -395,7 +395,7 @@ export function BotCenterClient({
                       type="button"
                       onClick={() => runSourceHealthCheck(source.sourceId)}
                       disabled={pendingSourceId === source.sourceId || isPending}
-                      className="rounded-xl border border-[#ff6b00]/25 px-3 py-2 text-xs font-black text-[#d95700] disabled:opacity-50"
+                      className="rounded-xl border border-[#3B66E0]/25 px-3 py-2 text-xs font-black text-[#2A4FBF] disabled:opacity-50"
                     >
                       {pendingSourceId === source.sourceId
                         ? "Kontrol ediliyor"
@@ -499,7 +499,7 @@ function CountCell({
       : accent === "blue"
         ? "text-blue-700"
         : accent === "orange"
-          ? "text-[#ff6b00]"
+          ? "text-[#3B66E0]"
           : "";
   return (
     <td className={`px-4 py-4 text-center text-lg font-black ${className}`}>

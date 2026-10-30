@@ -16,7 +16,7 @@ import {
   calculateConfidence,
   toConfidenceMetadata,
 } from '../confidence-engine';
-import { getCanonicalSourceRegistry } from "@/lib/unified-source-engine/adapters";
+import { getCanonicalSourceRegistry } from "@/lib/unified-source-engine/canonical-registry";
 
 export function createDuplicateFingerprint(
   title: string,

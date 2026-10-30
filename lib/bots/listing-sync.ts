@@ -12,6 +12,7 @@ import {
   type DuplicateBatchSummary,
 } from "@/lib/product-matcher";
 import { recordListingPriceHistory } from "@/lib/price-history";
+import { regroupProducts } from "@/lib/duplicate-engine/group-repository";
 
 type SyncRpcResult = {
   inserted?: number;
@@ -167,6 +168,8 @@ export async function syncListingsForSource(
   reactivated = Number(result.reactivated ?? 0);
   skipped = Number(result.skipped ?? 0);
 
+  await regroupDuplicates(supabase, syncState);
+
   return {
     imported,
     updated,
@@ -242,6 +245,8 @@ export async function insertListingsLegacy(
     imported += 1;
   }
 
+  await regroupDuplicates(supabase, syncState);
+
   return {
     imported,
     updated: 0,
@@ -253,6 +258,19 @@ export async function insertListingsLegacy(
     errors,
     duplicateSummary: syncState.duplicateSummary,
   };
+}
+
+/**
+ * After a sync the same item may now sit on two platforms (or no longer).
+ * Best effort by design: a failed regroup never fails the sync; the daily
+ * /api/cron/regroup-duplicates pass repairs whatever this run missed.
+ */
+async function regroupDuplicates(supabase: SupabaseClient, syncState: PreparedListingSyncState) {
+  try {
+    await regroupProducts(supabase as Parameters<typeof regroupProducts>[0], [...new Set(syncState.productIds.values())]);
+  } catch (error) {
+    console.error("Duplicate regroup after sync failed:", error);
+  }
 }
 
 function isRpcSignatureError(error: unknown) {
@@ -400,6 +418,7 @@ async function resolveMatchedProductIds(
     category: listing.category,
     source: listing.source,
     attributes: productAttributes.get(listing.product_name) ?? undefined,
+    price: listing.price,
   }));
 
   const products = await batchFindOrCreateMatchedProducts(supabase, inputs);

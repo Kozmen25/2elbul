@@ -23,6 +23,8 @@ type AvatarPickerProps = {
    * selected character stays visible in the button itself.
    */
   disclosure?: boolean;
+  /** Grid column classes; the default fits a full-width page section. */
+  gridClassName?: string;
 };
 
 /**
@@ -36,6 +38,7 @@ export function AvatarPicker({
   onSelect,
   onChange,
   disclosure = false,
+  gridClassName = "grid-cols-5 sm:grid-cols-10",
 }: AvatarPickerProps) {
   const [selected, setSelected] = useState<string | null>(currentPresetId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -77,7 +80,7 @@ export function AvatarPicker({
           onClick={handleToggle}
           aria-expanded={open}
           aria-controls="avatar-collection"
-          className="flex w-full items-center gap-3 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-left transition hover:border-[#ff6b00]/40"
+          className="flex w-full items-center gap-3 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-left transition hover:border-[#3B66E0]/40"
         >
           {selectedAvatar ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -88,14 +91,14 @@ export function AvatarPicker({
               draggable={false}
             />
           ) : (
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#fff1e7] text-xs font-black text-[#ff6b00]">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#E4ECFF] text-xs font-black text-[#3B66E0]">
               ?
             </span>
           )}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1 text-xs font-bold text-black/45">
               Avatar koleksiyonu
-              <span className="rounded-full bg-[#fff1e7] px-1.5 py-0.5 text-[10px] font-bold text-[#d95700]">
+              <span className="rounded-full bg-[#E4ECFF] px-1.5 py-0.5 text-[10px] font-bold text-[#2A4FBF]">
                 {PRESET_AVATARS.length}
               </span>
             </span>
@@ -122,7 +125,7 @@ export function AvatarPicker({
                 {PRESET_AVATARS.length} özgün karakter
               </p>
               {selectedLabel ? (
-                <p className="text-sm font-bold text-[#ff6b00]">{selectedLabel}</p>
+                <p className="text-sm font-bold text-[#3B66E0]">{selectedLabel}</p>
               ) : null}
             </div>
           ) : null}
@@ -130,7 +133,7 @@ export function AvatarPicker({
             id="avatar-collection"
             role="radiogroup"
             aria-label="Avatar seç"
-            className="grid grid-cols-5 gap-2.5 sm:grid-cols-10"
+            className={`grid gap-2.5 ${gridClassName}`}
           >
             {PRESET_AVATARS.map((avatar) => {
               const active = selected === avatar.id;
@@ -145,8 +148,8 @@ export function AvatarPicker({
                   onClick={() => handleSelect(avatar.id)}
                   className={`relative aspect-square rounded-xl transition disabled:cursor-not-allowed disabled:opacity-60 ${
                     active
-                      ? "ring-2 ring-[#ff6b00] ring-offset-2"
-                      : "ring-1 ring-black/10 hover:ring-[#ff6b00]/40"
+                      ? "ring-2 ring-[#3B66E0] ring-offset-2"
+                      : "ring-1 ring-black/10 hover:ring-[#3B66E0]/40"
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -157,8 +160,8 @@ export function AvatarPicker({
                     loading="lazy"
                   />
                   {active ? (
-                    <span className="absolute inset-0 grid place-items-center rounded-xl bg-[#ff6b00]/25">
-                      <span className="grid size-6 place-items-center rounded-full bg-[#ff6b00] text-white">
+                    <span className="absolute inset-0 grid place-items-center rounded-xl bg-[#3B66E0]/25">
+                      <span className="grid size-6 place-items-center rounded-full bg-[#3B66E0] text-white">
                         {isBusy ? (
                           <Loader2 size={14} className="animate-spin" />
                         ) : (

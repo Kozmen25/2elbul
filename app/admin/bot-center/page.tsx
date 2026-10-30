@@ -27,7 +27,7 @@ export default async function AdminBotCenterPage() {
         title="Bot Merkezi"
         description="Cron URL'si yazmadan arama kuyruğunu, kaynak senkronizasyonunu, fiyat alarmlarını ve günlük cron akışını güvenli şekilde çalıştırın."
         action={
-          <span className="grid size-12 place-items-center rounded-2xl bg-[#fff1e7] text-[#ff6b00]">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[#E4ECFF] text-[#3B66E0]">
             <Bot size={24} />
           </span>
         }

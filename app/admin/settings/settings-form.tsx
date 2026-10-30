@@ -125,7 +125,7 @@ export function SettingsForm({
                 checked={maintenanceEnabled}
                 onChange={(event) => setMaintenanceEnabled(event.target.checked)}
                 disabled={!settingsAvailable || pending}
-                className="size-5 accent-[#ff6b00]"
+                className="size-5 accent-[#3B66E0]"
               />
             </label>
             <label className="mt-4 block text-sm font-bold">

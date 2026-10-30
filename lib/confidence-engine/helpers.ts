@@ -8,7 +8,7 @@ import type {
   ProductSignalsLike,
 } from "./types";
 import { clampScore } from "./scoring";
-import { getCanonicalSourceRegistry } from "@/lib/unified-source-engine/adapters";
+import { getCanonicalSourceRegistry } from "@/lib/unified-source-engine/canonical-registry";
 
 const FALLBACK_SOURCE_RELIABILITY_RULES: Array<{
   pattern: RegExp;

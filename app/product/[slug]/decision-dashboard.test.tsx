@@ -8,12 +8,16 @@ import type {
   ProductRecord,
 } from "@/lib/product-detail";
 import {
-  BestDealCard,
   DecisionDashboardHero,
+  ProductSummary,
 } from "./page";
 
 vi.mock("@/components/favorite-button", () => ({
   FavoriteButton: () => <button type="button">Favori</button>,
+}));
+
+vi.mock("@/components/follow-product-button", () => ({
+  FollowProductButton: () => <button type="button">Ürünü takip et</button>,
 }));
 
 vi.mock("@/components/compare-button", () => ({
@@ -31,6 +35,7 @@ const product: ProductRecord = {
   name: "iPhone 13",
   slug: "iphone-13",
   category: "Telefon",
+  categoryPath: [{ slug: "telefon", label: "Telefon" }],
 };
 
 const decisionInsight: ProductDecisionInsight = {
@@ -252,7 +257,6 @@ function renderHero(
 ) {
   return renderToStaticMarkup(
     <DecisionDashboardHero
-      product={product}
       marketIntelligence={intelligence}
       decisionInsight={decisionInsight}
       bestDealDiscount={12}
@@ -260,7 +264,7 @@ function renderHero(
   );
 }
 
-function renderBestDeal(listing: Listing | null = makeListing()) {
+function renderSummary(listing: Listing | null = makeListing()) {
   const priceStats =
     buildProductPriceStats([
       { productId: product.id, price: 23000 },
@@ -269,11 +273,15 @@ function renderBestDeal(listing: Listing | null = makeListing()) {
     ])[product.id] ?? null;
 
   return renderToStaticMarkup(
-    <BestDealCard
+    <ProductSummary
+      product={product}
       listing={listing}
       averagePrice={25000}
+      listingCount={3}
       discountPercent={12}
       priceStats={priceStats}
+      decisionLabel="Şimdi al"
+      isFollowing={false}
       isFavorite={false}
       isAuthenticated={false}
       loginNext="/product/iphone-13"
@@ -285,7 +293,6 @@ describe("DecisionDashboardHero", () => {
   it("renders the dashboard headline and opportunity score", () => {
     const html = renderHero();
 
-    expect(html).toContain("Karar paneli");
     expect(html).toContain("AI Kararı");
     expect(html).toContain("88");
     expect(html).toContain("Şimdi al");
@@ -297,7 +304,6 @@ describe("DecisionDashboardHero", () => {
     expect(html).toContain("Güçlü fırsat mı?");
     expect(html).toContain("Risk:");
     expect(html).toContain("Güven skoru");
-    expect(html).toContain("Güven seviyesi");
   });
 
   it("shows the key price metrics on the first screen", () => {
@@ -315,15 +321,16 @@ describe("DecisionDashboardHero", () => {
     expect(html).toContain("Örneklem");
     expect(html).toContain("Kaynak sayısı");
     expect(html).toContain("Son güncelleme");
-    expect(html).toContain("Bu analiz 52 ilan üzerinden oluşturuldu.");
   });
 
-  it("shows the source list and EEAT note", () => {
+  it("lists the sources once and drops the repeated technical blocks", () => {
     const html = renderHero();
 
     expect(html).toContain("Kullanılan kaynaklar");
     expect(html).toContain("EasyCep, Getmobil, Sahibinden");
-    expect(html).toContain("EEAT notu");
+    expect(html).not.toContain("EEAT notu");
+    expect(html).not.toContain("Kaynak sinyalleri");
+    expect(html).not.toContain("Duplicate yoğunluğu");
   });
 
   it("renders the responsive dashboard classes", () => {
@@ -342,40 +349,48 @@ describe("DecisionDashboardHero", () => {
   });
 });
 
-describe("BestDealCard", () => {
-  it("renders the featured best listing and CTA", () => {
-    const html = renderBestDeal();
+describe("ProductSummary", () => {
+  it("leads with the product name, price, location, condition and source", () => {
+    const html = renderSummary();
 
-    expect(html).toContain("En iyi ilan");
-    expect(html).toContain("En avantajlı ilan");
-    expect(html).toContain("iPhone 13 128 GB");
+    expect(html).toContain("<h1");
+    expect(html).toContain("iPhone 13");
+    expect(html).toContain("₺23.000");
+    expect(html).toContain("İstanbul");
+    expect(html).toContain("İkinci El");
+    expect(html).toContain("Sahibinden");
     expect(html).toContain("İlana git");
   });
 
-  it("shows the price advantage copy", () => {
-    const html = renderBestDeal();
+  it("keeps the price context to one short line", () => {
+    const html = renderSummary();
 
-    expect(html).toContain("Ortalama fiyata göre %12 daha ucuz.");
-    expect(html).toContain("₺23.000");
+    expect(html).toContain("3 ilan");
+    expect(html).toContain("ortalamanın %12 altında");
+    expect(html).not.toContain("Karar odaklı");
   });
 
-  it("renders the compact favorite control in the featured card", () => {
-    const html = renderBestDeal();
+  it("links to the market analysis below instead of showing it", () => {
+    const html = renderSummary();
+
+    expect(html).toContain('href="#piyasa-analizi"');
+    expect(html).toContain("Şimdi al");
+    expect(html).not.toContain("Fırsat skoru");
+  });
+
+  it("renders the favorite and compare controls", () => {
+    const html = renderSummary();
 
     expect(html).toContain("Favori");
+    expect(html).toContain("Karşılaştır");
+    expect(html).toContain("Ürünü takip et");
   });
 
-  it("renders a fallback when no featured listing exists", () => {
-    const html = renderBestDeal(null);
+  it("explains an empty product without a listing block", () => {
+    const html = renderSummary(null);
 
-    expect(html).toContain("Henüz ilan yok");
-    expect(html).toContain("en düşük fiyatlı seçenek burada görünecek");
-  });
-
-  it("keeps the featured card responsive classes", () => {
-    const html = renderBestDeal();
-
-    expect(html).toContain("rounded-3xl border border-[#ff6b00]/20 bg-[#fff7f1]");
-    expect(html).toContain("orange-button flex-1 py-3");
+    expect(html).toContain("<h1");
+    expect(html).toContain("yayında ilan yok");
+    expect(html).not.toContain("İlana git");
   });
 });

@@ -10,7 +10,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:status": "tsx --env-file=.env.local scripts/db/migrate.ts status",
+    "db:migrate": "tsx --env-file=.env.local scripts/db/migrate.ts up",
+    "db:types": "tsx --env-file=.env.local scripts/db/generate-types.ts",
+    "db:auth-config": "tsx --env-file=.env.local scripts/db/apply-auth-config.ts",
+    "email:keys": "tsx scripts/db/email-hook.ts generate",
+    "email:hook": "tsx --env-file=.env.local scripts/db/email-hook.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -19,6 +25,7 @@
     "cheerio": "^1.2.0",
     "lucide-react": "^1.18.0",
     "next": "^16.2.9",
+    "nodemailer": "^10.0.13",
     "papaparse": "^5.5.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -28,10 +35,12 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.2",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
     "server-only": "^0.0.1",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2",
     "vitest": "^4.1.9"
   }

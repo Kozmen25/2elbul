@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminUser } from "@/lib/admin";
+import type { AdminActionResult } from "@/lib/admin-action-result";
+import { manualStatusFields } from "@/lib/listing-status";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const statuses = new Set(["pending", "published", "active", "inactive", "rejected"]);
@@ -9,6 +11,7 @@ const statuses = new Set(["pending", "published", "active", "inactive", "rejecte
 export type BulkListingAction =
   | "publish"
   | "pending"
+  | "deactivate"
   | "reject"
   | "delete";
 
@@ -17,10 +20,12 @@ export type BulkListingResult = {
   message: string;
 };
 
-export async function updateListing(formData: FormData) {
+const NO_CLIENT: AdminActionResult = { ok: false, message: "Supabase bağlantısı yapılandırılmamış." };
+
+export async function updateListing(formData: FormData): Promise<AdminActionResult> {
   await requireAdminUser("/admin/listings");
   const supabase = createSupabaseAdminClient();
-  if (!supabase) return;
+  if (!supabase) return NO_CLIENT;
 
   const id = Number(formData.get("id"));
   const price = Number(formData.get("price"));
@@ -34,7 +39,7 @@ export async function updateListing(formData: FormData) {
     condition: String(formData.get("condition") ?? "").trim(),
     url: String(formData.get("url") ?? "").trim(),
     image_url: String(formData.get("image_url") ?? "").trim() || null,
-    ...(statuses.has(status) ? { status } : {}),
+    ...(statuses.has(status) ? manualStatusFields(status) : {}),
   };
 
   if (
@@ -48,42 +53,53 @@ export async function updateListing(formData: FormData) {
     !payload.condition ||
     !payload.url
   ) {
-    console.error("Admin listing update rejected: invalid payload", { id });
-    return;
+    return { ok: false, message: "Başlık, ürün, şehir, kaynak, durum, adres ve sıfırdan büyük bir fiyat zorunlu." };
   }
 
   const { error } = await supabase.from("listings").update(payload).eq("id", id);
-  if (error) console.error("Admin listing update failed:", error);
+  if (error) {
+    console.error("Admin listing update failed:", error);
+    return { ok: false, message: `İlan kaydedilemedi: ${error.message}` };
+  }
   revalidateAdminListings();
+  return { ok: true, message: "İlan güncellendi." };
 }
 
-export async function setListingStatus(formData: FormData) {
+export async function setListingStatus(formData: FormData): Promise<AdminActionResult> {
   await requireAdminUser("/admin/listings");
   const supabase = createSupabaseAdminClient();
-  if (!supabase) return;
+  if (!supabase) return NO_CLIENT;
 
   const id = Number(formData.get("id"));
   const status = String(formData.get("status") ?? "");
-  if (!Number.isInteger(id) || !statuses.has(status)) return;
+  if (!Number.isInteger(id) || !statuses.has(status)) return { ok: false, message: "Geçersiz ilan ya da durum." };
 
   const { error } = await supabase
     .from("listings")
-    .update({ status })
+    .update(manualStatusFields(status))
     .eq("id", id);
-  if (error) console.error("Admin listing status update failed:", error);
+  if (error) {
+    console.error("Admin listing status update failed:", error);
+    return { ok: false, message: `Durum değiştirilemedi: ${error.message}` };
+  }
   revalidateAdminListings();
+  return { ok: true, message: "İlan durumu güncellendi." };
 }
 
-export async function deleteListing(formData: FormData) {
+export async function deleteListing(formData: FormData): Promise<AdminActionResult> {
   await requireAdminUser("/admin/listings");
   const supabase = createSupabaseAdminClient();
-  if (!supabase) return;
+  if (!supabase) return NO_CLIENT;
   const id = Number(formData.get("id"));
-  if (!Number.isInteger(id)) return;
+  if (!Number.isInteger(id)) return { ok: false, message: "Geçersiz ilan." };
 
   const { error } = await supabase.from("listings").delete().eq("id", id);
-  if (error) console.error("Admin listing delete failed:", error);
+  if (error) {
+    console.error("Admin listing delete failed:", error);
+    return { ok: false, message: `İlan silinemedi: ${error.message}` };
+  }
   revalidateAdminListings();
+  return { ok: true, message: "İlan silindi." };
 }
 
 export async function bulkListingAction(
@@ -107,6 +123,7 @@ export async function bulkListingAction(
   const statusByAction = {
     publish: "published",
     pending: "pending",
+    deactivate: "inactive",
     reject: "rejected",
   } as const;
   const result =
@@ -115,10 +132,7 @@ export async function bulkListingAction(
       : action in statusByAction
         ? await supabase
             .from("listings")
-            .update({
-              status:
-                statusByAction[action as keyof typeof statusByAction],
-            })
+            .update(manualStatusFields(statusByAction[action as keyof typeof statusByAction]))
             .in("id", validIds)
         : null;
 
@@ -137,6 +151,7 @@ export async function bulkListingAction(
   const labels: Record<BulkListingAction, string> = {
     publish: "yayına alındı",
     pending: "beklemeye alındı",
+    deactivate: "pasife alındı",
     reject: "reddedildi",
     delete: "silindi",
   };
@@ -149,6 +164,8 @@ export async function bulkListingAction(
 function revalidateAdminListings() {
   revalidatePath("/admin");
   revalidatePath("/admin/listings");
+  revalidatePath("/admin/problem-listings");
+  revalidatePath("/admin/market-signals");
   revalidatePath("/");
   revalidatePath("/search");
 }

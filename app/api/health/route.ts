@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { verifyAdmin } from "@/lib/auth/admin-auth";
+import { hasValidSecret } from "@/lib/auth/cron-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { CircuitBreakerRegistry } from "@/lib/recovery/circuit-breaker";
 import { DeadLetterQueue } from "@/lib/recovery/dead-letter-queue";
@@ -6,7 +8,18 @@ import { DeadLetterQueue } from "@/lib/recovery/dead-letter-queue";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+/**
+ * Uptime monitors only need ok/status. The breakdown (runtime version, source
+ * failures, queue depth, cron timestamps) helps an attacker map the system, so
+ * it is returned only with the cron secret or to a signed-in admin.
+ */
+async function canSeeDetails(request: NextRequest): Promise<boolean> {
+  const secret = process.env.CRON_SECRET;
+  if (secret && hasValidSecret(request, secret)) return true;
+  return (await verifyAdmin()) === null;
+}
+
+export async function GET(request: NextRequest) {
   const startedAt = Date.now();
 
   // ─── Supabase connectivity probe ──────────────────────────────────────────
@@ -15,6 +28,15 @@ export async function GET() {
   if (supabase) {
     const { error } = await supabase.from("products").select("id").limit(1);
     supabaseOk = !error;
+  }
+
+  const timestamp = new Date().toISOString();
+  if (!(await canSeeDetails(request))) {
+    return NextResponse.json({
+      ok: supabaseOk,
+      status: supabaseOk ? "healthy" : "degraded",
+      timestamp,
+    });
   }
 
   // ─── Circuit breaker states ───────────────────────────────────────────────
@@ -73,7 +95,7 @@ export async function GET() {
   return NextResponse.json({
     ok: healthy,
     status: healthy ? "healthy" : "degraded",
-    timestamp: new Date().toISOString(),
+    timestamp,
     uptime: process.uptime(),
     node: process.version,
     environment: process.env.NODE_ENV ?? "unknown",

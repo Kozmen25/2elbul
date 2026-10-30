@@ -5,20 +5,9 @@ import type {
   RawImportListing,
 } from "@/lib/import/types";
 import type { ListingCondition } from "@/lib/listings";
+import { normalizeConditionText } from "@/lib/listing-condition";
 import { normalizeImageUrls } from "@/lib/bots/image-urls";
 import type { ICategoryResolver } from "@/lib/taxonomy/integration";
-
-const conditionAliases: Record<string, ListingCondition> = {
-  sıfır: "Sıfır",
-  yeni: "Sıfır",
-  "yeni gibi": "Yeni gibi",
-  "çok iyi": "Çok iyi",
-  iyi: "İyi",
-  "ikinci el": "İkinci El",
-  kullanılmış: "Kullanılmış",
-  yenilenmiş: "Yenilenmiş",
-  refurbished: "Yenilenmiş",
-};
 
 function readString(
   payload: RawImportListing,
@@ -102,12 +91,8 @@ function readUrl(payload: RawImportListing, source: ImportSource): string {
 }
 
 function normalizeCondition(payload: RawImportListing): ListingCondition {
-  const rawCondition =
-    readOptionalString(payload, ["condition", "durum", "item_condition"]) ??
-    "İkinci El";
-  return (
-    conditionAliases[rawCondition.toLocaleLowerCase("tr-TR")] ?? "İkinci El"
-  );
+  const rawCondition = readOptionalString(payload, ["condition", "durum", "item_condition"]);
+  return normalizeConditionText(rawCondition);
 }
 
 function normalizeCommon(

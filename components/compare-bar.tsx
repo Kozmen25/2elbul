@@ -17,11 +17,11 @@ export function CompareBar() {
   }
 
   return (
-    <div className="sticky bottom-0 z-40 border-t border-black/10 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+    <div className="sticky bottom-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom))] z-40 md:bottom-0 border-t border-black/10 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="container-shell min-w-0 py-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#fff1e7] text-[#ff6b00]">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#E4ECFF] text-[#3B66E0]">
               <Scale size={18} />
             </span>
             <div className="min-w-0">
@@ -40,7 +40,7 @@ export function CompareBar() {
                 key={entry.listingId}
                 className="flex min-w-0 items-center gap-2 rounded-full border border-black/10 bg-[#fafaf8] px-3 py-1.5 text-xs font-bold text-black/70"
               >
-                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#ff6b00] text-white">
+                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#3B66E0] text-white">
                   <Check size={12} />
                 </span>
                 <span className="max-w-[12rem] truncate" title={entry.productName}>

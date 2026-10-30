@@ -4,6 +4,7 @@ import {
   EASYCEP_CATEGORY_URLS,
 } from "@/lib/bots/adapters/easycep";
 import { isBotAdapterListing } from "@/lib/bots/types";
+import { withRecoveryPolicy } from "@/lib/recovery";
 import type {
   NormalizedListing,
   UnifiedSourceAdapter,
@@ -24,6 +25,15 @@ import {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { expiresAt: number; listings: NormalizedListing[] }>();
 
+// Routes fetches through the shared circuit breaker + dead-letter queue
+// (lib/recovery), same as the legacy SCRAPE_FETCHERS path in connectors.ts.
+// Without this, a failing category call was silently swallowed below and
+// never reached the CB/DLQ, so this source's outages stayed invisible.
+const fetchEasyCepListingsWithRecovery = withRecoveryPolicy(
+  fetchEasyCepListings,
+  "easycep",
+);
+
 export function createEasyCepUnifiedAdapter(
   options: SourceAdapterOptions,
   _supabase: SupabaseClient,
@@ -34,28 +44,30 @@ export function createEasyCepUnifiedAdapter(
     sourceSlug: options.sourceSlug,
 
     async fetch({ limit = 80, query } = {}) {
-      try {
-        const allListings: import("@/lib/bots/types").BotAdapterListing[] = [];
-        const perCategoryLimit = Math.max(Math.ceil(limit / Object.keys(EASYCEP_CATEGORY_URLS).length), 1);
+      const allListings: import("@/lib/bots/types").BotAdapterListing[] = [];
+      const perCategoryLimit = Math.max(Math.ceil(limit / Object.keys(EASYCEP_CATEGORY_URLS).length), 1);
 
-        for (const [categoryUrl] of Object.entries(EASYCEP_CATEGORY_URLS)) {
-          const listings = await fetchEasyCepListings(categoryUrl, perCategoryLimit);
+      // Each category is isolated: one category failing (and tripping the
+      // circuit breaker) no longer discards results already fetched from
+      // the others.
+      for (const [categoryUrl] of Object.entries(EASYCEP_CATEGORY_URLS)) {
+        try {
+          const listings = await fetchEasyCepListingsWithRecovery(categoryUrl, perCategoryLimit);
           allListings.push(...listings);
+        } catch (error) {
+          console.error(`EasyCep fetch error (${categoryUrl}):`, error);
         }
-
-        if (query) {
-          const normalized = normalizeSearchText(query);
-          return allListings.filter((listing) =>
-            normalizeSearchText(`${listing.product_name} ${listing.title}`).includes(
-              normalized,
-            ),
-          );
-        }
-        return allListings.slice(0, limit);
-      } catch (error) {
-        console.error("EasyCep fetch error:", error);
-        return [];
       }
+
+      if (query) {
+        const normalized = normalizeSearchText(query);
+        return allListings.filter((listing) =>
+          normalizeSearchText(`${listing.product_name} ${listing.title}`).includes(
+            normalized,
+          ),
+        );
+      }
+      return allListings.slice(0, limit);
     },
 
     normalize(raw): NormalizedListing | null {

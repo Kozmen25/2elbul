@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { hasValidSecret } from "@/lib/auth/cron-auth";
 import { detectQueryIntent } from "@/lib/search/query-intent-detector";
+import { containsPattern } from "@/lib/search/ilike-filter";
+import { createNotificationMailer } from "@/lib/email/notify";
+import { createNotificationDeliverer } from "@/lib/notifications/deliver";
+import { getSiteUrl } from "@/lib/site-url";
 import { extractProductTypeFromAttributes } from "@/lib/market-intelligence/helpers";
 import { isMissingAttributesColumn } from "@/lib/listing-status";
+import { toBigintIds } from "@/lib/supabase-ids";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -60,6 +65,9 @@ export async function GET(request: NextRequest) {
   let matched = 0;
   let failed = 0;
   let notificationsCreated = 0;
+  let emailsSent = 0;
+  const origin = getSiteUrl();
+  const deliver = createNotificationDeliverer(supabase, createNotificationMailer(supabase, origin));
 
   for (const search of searches) {
     try {
@@ -76,7 +84,7 @@ export async function GET(request: NextRequest) {
         .from("listings")
         .select("id, product_id")
         .in("status", ["published", "active"])
-        .ilike("title", `%${search.query.trim()}%`);
+        .ilike("title", containsPattern(search.query.trim()));
 
       // Only check listings created since last notification
       if (search.last_notified_at) {
@@ -117,7 +125,7 @@ export async function GET(request: NextRequest) {
           const productsResult = await supabase
             .from("products")
             .select("id, attributes")
-            .in("id", productIds);
+            .in("id", toBigintIds(productIds));
           const products =
             !productsResult.error || !isMissingAttributesColumn(productsResult.error)
               ? (productsResult.data ?? [])
@@ -125,7 +133,7 @@ export async function GET(request: NextRequest) {
                   const fallback = await supabase
                     .from("products")
                     .select("id")
-                    .in("id", productIds);
+                    .in("id", toBigintIds(productIds));
                   return fallback.data ?? [];
                 })();
 
@@ -151,42 +159,40 @@ export async function GET(request: NextRequest) {
       const count = filteredListings.length;
 
       if (count > 0) {
-        // Create notification for the user
+        // In-app notification and e-mail copy, according to the user's choices.
         const listingId = String(filteredListings[0].id);
         const body =
           count === 1
             ? `"${search.query}" için 1 yeni ilan bulundu.`
             : `"${search.query}" için ${count} yeni ilan bulundu.`;
 
-        const { error: notifError } = await supabase
-          .from("user_notifications")
-          .insert({
-            user_id: search.user_id,
-            type: "new_listing",
+        const delivery = await deliver({
+          userId: search.user_id,
+          kind: "saved_search",
+          notification: {
             title: "Yeni İlan Bulundu",
             body,
             metadata: {
-              saved_search_id: search.id,
+              saved_search_id: String(search.id),
               query: search.query,
               match_count: count,
               listing_id: listingId,
             },
-          });
+          },
+          email: {
+            query: search.query,
+            matchCount: count,
+            searchUrl: `${origin}/search?q=${encodeURIComponent(search.query)}`,
+          },
+        });
+        if (delivery.inApp) notificationsCreated += 1;
+        if (delivery.email === "sent") emailsSent += 1;
 
-        if (notifError) {
-          console.error("Saved search notification insert failed:", notifError);
-          failed += 1;
-          checked += 1;
-          continue;
-        }
-
-        notificationsCreated += 1;
-
-        // Update last_notified_at
+        // Only after delivery: a failed delivery throws above and the search is retried next run.
         await supabase
           .from("saved_searches")
           .update({ last_notified_at: now })
-          .eq("id", search.id);
+          .eq("id", String(search.id));
 
         matched += 1;
       }
@@ -204,5 +210,6 @@ export async function GET(request: NextRequest) {
     matched,
     failed,
     notificationsCreated,
+    emailsSent,
   });
 }

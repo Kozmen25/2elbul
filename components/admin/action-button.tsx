@@ -41,7 +41,7 @@ export function ActionButton({
 
   const tones = {
     primary:
-      "bg-[#ff6b00] text-white hover:bg-[#e85f00]",
+      "bg-[#3B66E0] text-white hover:bg-[#2C4FB8]",
     danger: "bg-red-600 text-white hover:bg-red-700",
     ghost:
       "border border-black/10 bg-white font-bold text-black/70 hover:bg-[#fafaf8]",

@@ -47,7 +47,7 @@ export function PriceHistoryBackfillButton() {
   }
 
   return (
-    <div className="rounded-2xl border border-[#ff6b00]/15 bg-[#fff7ef] p-5">
+    <div className="rounded-2xl border border-[#3B66E0]/15 bg-[#EEF3FF] p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-black tracking-[-0.025em]">

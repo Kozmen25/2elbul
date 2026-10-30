@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AdminNav } from "@/components/admin-nav";
+import { AdminToaster } from "@/components/admin-toast";
 import { requireAdminUser } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function AdminLayout({
           {children}
         </div>
       </main>
+      <AdminToaster />
     </div>
   );
 }

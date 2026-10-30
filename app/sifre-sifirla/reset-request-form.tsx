@@ -54,6 +54,7 @@ export function ResetRequestForm() {
                   name="email"
                   autoComplete="email"
                   required
+                  defaultValue={state.email ?? ""}
                   className="field h-13 pl-11 pr-4"
                   placeholder="ornek@email.com"
                 />

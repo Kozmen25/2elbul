@@ -5,6 +5,7 @@ import { LockKeyhole, TriangleAlert } from "lucide-react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { updatePassword } from "@/app/auth/actions";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/auth/password-policy";
 
 export function NewPasswordForm() {
   const initialState: Awaited<ReturnType<typeof updatePassword>> = {
@@ -44,9 +45,9 @@ export function NewPasswordForm() {
               name="password"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               className="field h-13 pl-11 pr-4"
-              placeholder="En az 6 karakter"
+              placeholder={PASSWORD_HINT}
             />
           </span>
         </label>
@@ -63,7 +64,7 @@ export function NewPasswordForm() {
               name="confirmPassword"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               className="field h-13 pl-11 pr-4"
               placeholder="Şifrenizi tekrar girin"
             />
@@ -74,10 +75,10 @@ export function NewPasswordForm() {
       <SubmitButton />
 
       <p className="mt-5 text-center text-sm text-black/50">
-        Hesabını beklenmedik şekilde hatırladın mı?{" "}
+        Şifreni hatırladın mı?{" "}
         <Link
           href="/giris"
-          className="font-bold text-[#ff6b00] hover:underline"
+          className="font-bold text-[#3B66E0] hover:underline"
         >
           Giriş yap
         </Link>

@@ -3,8 +3,10 @@ import { getSourceRegistry, initializeSourceRegistry } from "../registry";
 import { createGetmobilUnifiedAdapter } from "./getmobil-unified";
 import { createEasyCepUnifiedAdapter } from "./easycep-unified";
 import { SourceRegistryImpl } from "@/lib/source-registry";
-import type { SourceRegistry } from "@/lib/source-registry";
 import type { SourceAdapterOptions, UnifiedSourceAdapter } from "../types";
+import { setCanonicalSourceRegistry } from "../canonical-registry";
+
+export { getCanonicalSourceRegistry } from "../canonical-registry";
 
 type UnifiedAdapterFactory = (
   options: SourceAdapterOptions,
@@ -18,13 +20,12 @@ const ADAPTER_FACTORIES: Record<string, UnifiedAdapterFactory> = {
     createEasyCepUnifiedAdapter(options, supabase),
 };
 
-let canonicalSourceRegistry: SourceRegistry | null = null;
-
 export async function initializeSourceAdapters(supabase: SupabaseClient) {
   const registry = initializeSourceRegistry();
 
-  canonicalSourceRegistry = new SourceRegistryImpl();
+  const canonicalSourceRegistry = new SourceRegistryImpl();
   await canonicalSourceRegistry.initialize(supabase);
+  setCanonicalSourceRegistry(canonicalSourceRegistry);
 
   for (const source of canonicalSourceRegistry.getAllActive()) {
     const factory = ADAPTER_FACTORIES[source.sourceSlug];
@@ -40,10 +41,6 @@ export async function initializeSourceAdapters(supabase: SupabaseClient) {
     );
     registry.register(adapter);
   }
-}
-
-export function getCanonicalSourceRegistry(): SourceRegistry | null {
-  return canonicalSourceRegistry;
 }
 
 export function getUnifiedSourceRegistry() {

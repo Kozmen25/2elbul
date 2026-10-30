@@ -44,7 +44,7 @@ export function MonitoringClient({ summary }: { summary: MonitoringSummary }) {
       {/* Health Score */}
       <div className="rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] sm:p-6">
         <div className="flex items-center gap-3">
-          <HeartPulse size={28} className="text-[#ff6b00]" />
+          <HeartPulse size={28} className="text-[#3B66E0]" />
           <div>
             <p className="text-sm font-bold text-black/45">Genel Sağlık Puanı</p>
             <div className="flex items-baseline gap-3">
@@ -131,7 +131,7 @@ export function MonitoringClient({ summary }: { summary: MonitoringSummary }) {
       {/* Alerts Section */}
       <div className="rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-black tracking-[-0.03em]">
-          <AlertTriangle size={20} className="text-[#ff6b00]" />
+          <AlertTriangle size={20} className="text-[#3B66E0]" />
           Alarmlar
         </h2>
 
@@ -182,7 +182,7 @@ export function MonitoringClient({ summary }: { summary: MonitoringSummary }) {
               <button
                 type="button"
                 onClick={() => setShowAllAlerts(true)}
-                className="mt-2 rounded-xl border border-dashed border-black/15 py-2 text-sm font-bold text-[#ff6b00] hover:bg-[#fff1e7]"
+                className="mt-2 rounded-xl border border-dashed border-black/15 py-2 text-sm font-bold text-[#3B66E0] hover:bg-[#E4ECFF]"
               >
                 Tümünü Göster ({summary.activeAlertCount})
               </button>
@@ -199,7 +199,7 @@ export function MonitoringClient({ summary }: { summary: MonitoringSummary }) {
       {/* Health Details */}
       <div className="rounded-2xl border border-black/7 bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.035)] sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-black tracking-[-0.03em]">
-          <ListChecks size={20} className="text-[#ff6b00]" />
+          <ListChecks size={20} className="text-[#3B66E0]" />
           Bileşen Detayları
         </h2>
 

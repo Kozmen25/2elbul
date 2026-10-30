@@ -148,7 +148,7 @@ export function AdminImportForm() {
         className="min-w-0 rounded-3xl border border-black/8 bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:p-8"
       >
         <label htmlFor="import-json" className="flex items-center gap-2 font-black">
-          <FileJson2 size={20} className="text-[#ff6b00]" />
+          <FileJson2 size={20} className="text-[#3B66E0]" />
           İlan JSON verisi
         </label>
         <p className="mt-2 text-sm leading-6 text-black/45">
@@ -157,8 +157,8 @@ export function AdminImportForm() {
         </p>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-black/10 bg-[#fafaf8] px-4 py-3.5 text-sm font-bold transition hover:border-[#ff6b00]/35">
-            <FileText size={18} className="text-[#ff6b00]" />
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-black/10 bg-[#fafaf8] px-4 py-3.5 text-sm font-bold transition hover:border-[#3B66E0]/35">
+            <FileText size={18} className="text-[#3B66E0]" />
             CSV yükle
             <input
               type="file"
@@ -167,8 +167,8 @@ export function AdminImportForm() {
               className="sr-only"
             />
           </label>
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-black/10 bg-[#fafaf8] px-4 py-3.5 text-sm font-bold transition hover:border-[#ff6b00]/35">
-            <FileSpreadsheet size={18} className="text-[#ff6b00]" />
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-black/10 bg-[#fafaf8] px-4 py-3.5 text-sm font-bold transition hover:border-[#3B66E0]/35">
+            <FileSpreadsheet size={18} className="text-[#3B66E0]" />
             Excel yükle
             <input
               type="file"
@@ -282,7 +282,7 @@ function PreviewTable({
     <div className="mt-6 min-w-0">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-black">Önizleme</h2>
-        <span className="rounded-full bg-[#fff1e7] px-3 py-1.5 text-xs font-bold text-[#d95700]">
+        <span className="rounded-full bg-[#E4ECFF] px-3 py-1.5 text-xs font-bold text-[#2A4FBF]">
           Toplam {preview.total} kayıt
         </span>
       </div>

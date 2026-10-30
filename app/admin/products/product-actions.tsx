@@ -1,12 +1,15 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
+import { AdminActionForm } from "@/components/admin-action-form";
 import { deleteProduct, updateProduct } from "./actions";
 
 export function ProductActions({
   product,
+  categoryOptions,
 }: {
-  product: { id: number; name: string; slug: string };
+  product: { id: number; name: string; slug: string; categoryId: number };
+  categoryOptions: { id: number; label: string }[];
 }) {
   return (
     <div className="flex justify-end gap-2">
@@ -15,8 +18,9 @@ export function ProductActions({
           <Pencil size={16} />
         </summary>
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/45 p-4">
-          <form
+          <AdminActionForm
             action={updateProduct}
+            closeDetailsOnSuccess
             className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"
           >
             <h2 className="text-xl font-black">Ürünü düzenle</h2>
@@ -38,6 +42,20 @@ export function ProductActions({
                 className="field mt-2 px-3 py-2.5"
               />
             </label>
+            <label className="mt-4 block text-sm font-bold">
+              Kategori
+              <select
+                name="categoryId"
+                defaultValue={product.categoryId}
+                className="field mt-2 px-3 py-2.5"
+              >
+                {categoryOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
@@ -51,20 +69,12 @@ export function ProductActions({
               </button>
               <button className="orange-button px-5 py-3">Kaydet</button>
             </div>
-          </form>
+          </AdminActionForm>
         </div>
       </details>
-      <form
+      <AdminActionForm
         action={deleteProduct}
-        onSubmit={(event) => {
-          if (
-            !window.confirm(
-              "Bu ürün silinsin mi? Ürüne bağlı ilan varsa işlem reddedilir.",
-            )
-          ) {
-            event.preventDefault();
-          }
-        }}
+        confirm="Bu ürün silinsin mi? Ürüne bağlı ilan varsa işlem reddedilir."
       >
         <input type="hidden" name="id" value={product.id} />
         <button
@@ -73,7 +83,7 @@ export function ProductActions({
         >
           <Trash2 size={16} />
         </button>
-      </form>
+      </AdminActionForm>
     </div>
   );
 }

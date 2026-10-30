@@ -13,16 +13,22 @@ export function Footer() {
         </div>
 
         <nav className="flex flex-wrap gap-x-6 gap-y-3 font-semibold text-black/55">
-          <Link href="/gizlilik" className="transition-colors hover:text-[#ff6b00]">
+          <Link href="/categories" className="transition-colors hover:text-[#3B66E0]">
+            Kategoriler
+          </Link>
+          <Link href="/ikinci-el-fiyatlari" className="transition-colors hover:text-[#3B66E0]">
+            Fiyat Listesi
+          </Link>
+          <Link href="/gizlilik" className="transition-colors hover:text-[#3B66E0]">
             Gizlilik
           </Link>
           <Link
             href="/kullanim-sartlari"
-            className="transition-colors hover:text-[#ff6b00]"
+            className="transition-colors hover:text-[#3B66E0]"
           >
             Kullanım Şartları
           </Link>
-          <Link href="/iletisim" className="transition-colors hover:text-[#ff6b00]">
+          <Link href="/iletisim" className="transition-colors hover:text-[#3B66E0]">
             İletişim
           </Link>
         </nav>

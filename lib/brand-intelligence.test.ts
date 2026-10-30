@@ -58,20 +58,17 @@ describe("brand intelligence helpers", () => {
   it("builds dynamic FAQ items from brand metrics", () => {
     const faqItems = buildBrandFaqItems({
       brandName: "MSI",
-      listingCount: 12,
-      productCount: 4,
-      sourceCount: 3,
       marketIntelligence: {
-        sampleSize: 12,
-      } as never,
-      opportunityAnalysis: {
-        dataFreshness: "fresh",
+        priceAnalysis: { minPrice: 18000, maxPrice: 42000, averagePrice: 27500 },
+        marketSummary: { totalListingCount: 12, sourceCount: 3 },
       } as never,
     });
 
-    expect(faqItems).toHaveLength(5);
-    expect(faqItems[0]?.question).toContain("MSI");
-    expect(faqItems[2]?.answer).toContain("12 ilan");
+    expect(faqItems).toHaveLength(4);
+    expect(faqItems[0]?.question).toBe("İkinci el MSI fiyatları ne kadar?");
+    expect(faqItems[0]?.answer).toContain("12 ilan");
+    expect(faqItems[1]?.question).toBe("En ucuz ikinci el MSI kaç TL?");
+    expect(faqItems[1]?.answer).toContain("18.000");
   });
 
   it("builds brand JSON-LD with breadcrumb, FAQ and item list", () => {

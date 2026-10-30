@@ -3,8 +3,19 @@ import { createProductSlug } from "@/lib/product-slug";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
 import { detectQueryIntent } from "@/lib/search/query-intent-detector";
+import { getSuggestionSearchTerms } from "@/lib/search/query-expansion";
+import { buildIlikeOrFilter } from "@/lib/search/ilike-filter";
 import { isMissingStatusColumn } from "@/lib/listing-status";
 import { cacheGet, cacheSet, cacheKeyFrom } from "@/lib/cache";
+import { toBigintIds } from "@/lib/supabase-ids";
+import { getBrandCatalog } from "@/lib/brand-intelligence";
+import { getAllCategories } from "@/lib/categories";
+import {
+  matchBrandSuggestions,
+  matchCategorySuggestions,
+  type BrandSuggestion,
+  type CategorySuggestion,
+} from "@/lib/search/suggestion-items";
 
 type ProductRow = {
   id: string | number;
@@ -27,11 +38,15 @@ type Suggestion = {
 };
 
 const MAX_SUGGESTIONS = 8;
+const MAX_SHORTCUT_SUGGESTIONS = 3;
+/** The brand catalog scans every product, so it is reused between requests. */
+const BRAND_CATALOG_TTL_MS = 5 * 60_000;
+const MIN_SHORTCUT_QUERY_LENGTH = 2;
 
 export async function GET(request: Request) {
   const supabase = createSupabaseClient();
   if (!supabase) {
-    return NextResponse.json({ suggestions: [] satisfies Suggestion[] });
+    return NextResponse.json(emptyResponse());
   }
 
   const { searchParams } = new URL(request.url);
@@ -44,11 +59,39 @@ export async function GET(request: Request) {
         ? matchingSuggestions
         : await getPopularSuggestions();
 
-    return NextResponse.json({ suggestions });
+    const shortcuts =
+      query.length >= MIN_SHORTCUT_QUERY_LENGTH ? await getShortcutSuggestions(query) : emptyShortcuts();
+
+    return NextResponse.json({ suggestions, ...shortcuts });
   } catch (error) {
     console.error("Search suggestions failed:", error);
-    return NextResponse.json({ suggestions: [] satisfies Suggestion[] });
+    return NextResponse.json(emptyResponse());
   }
+}
+
+type ShortcutSuggestions = { brands: BrandSuggestion[]; categories: CategorySuggestion[] };
+
+function emptyShortcuts(): ShortcutSuggestions {
+  return { brands: [], categories: [] };
+}
+
+function emptyResponse() {
+  return { suggestions: [] satisfies Suggestion[], ...emptyShortcuts() };
+}
+
+/** Brand and category pages that match what is being typed. */
+async function getShortcutSuggestions(query: string): Promise<ShortcutSuggestions> {
+  const catalogKey = cacheKeyFrom({ type: "brand-catalog" });
+  let catalog = cacheGet<Awaited<ReturnType<typeof getBrandCatalog>>>(catalogKey);
+  if (!catalog) {
+    catalog = await getBrandCatalog();
+    cacheSet(catalogKey, catalog, BRAND_CATALOG_TTL_MS);
+  }
+
+  return {
+    brands: matchBrandSuggestions(catalog, query, MAX_SHORTCUT_SUGGESTIONS),
+    categories: matchCategorySuggestions(await getAllCategories(), query, MAX_SHORTCUT_SUGGESTIONS),
+  };
 }
 
 async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
@@ -59,14 +102,17 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
   const supabase = createSupabaseClient();
   if (!supabase) return [];
 
-  const pattern = `%${query}%`;
+  const searchTerms = getSuggestionSearchTerms(query);
+  const productOrFilter = buildIlikeOrFilter("name", searchTerms);
+  const titleOrFilter = buildIlikeOrFilter("title", searchTerms);
+
   const [productsResult, listingsResult] = await Promise.all([
     supabase
       .from("products")
       .select("id, name, attributes")
-      .ilike("name", pattern)
+      .or(productOrFilter)
       .limit(12),
-    searchListingsByTitle(pattern),
+    searchListingsByTitleOr(titleOrFilter),
   ]);
 
   if (productsResult.error) {
@@ -98,7 +144,7 @@ async function getMatchingSuggestions(query: string): Promise<Suggestion[]> {
   const { data, error } = await supabase
     .from("products")
     .select("id, name, attributes")
-    .in("id", [...productIds])
+    .in("id", toBigintIds(productIds))
     .limit(50);
 
   if (error) {
@@ -156,7 +202,7 @@ async function getPopularSuggestions(): Promise<Suggestion[]> {
   const { data, error } = await supabase
     .from("products")
     .select("id, name, attributes")
-    .in("id", [...counts.keys()])
+    .in("id", toBigintIds(counts.keys()))
     .limit(50);
 
   if (error) {
@@ -167,7 +213,7 @@ async function getPopularSuggestions(): Promise<Suggestion[]> {
   return toSuggestions((data ?? []) as ProductRow[], counts);
 }
 
-async function searchListingsByTitle(pattern: string) {
+async function searchListingsByTitleOr(titleOrFilter: string) {
   const supabase = createSupabaseClient();
   if (!supabase) return { data: [], error: null };
 
@@ -175,7 +221,7 @@ async function searchListingsByTitle(pattern: string) {
     .from("listings")
     .select("product_id, title, source, url")
     .in("status", ["published", "active"])
-    .ilike("title", pattern)
+    .or(titleOrFilter)
     .limit(80);
 
   if (!result.error || !isMissingStatusColumn(result.error)) return result;
@@ -183,7 +229,7 @@ async function searchListingsByTitle(pattern: string) {
   return supabase
     .from("listings")
     .select("product_id, title, source, url")
-    .ilike("title", pattern)
+    .or(titleOrFilter)
     .limit(80);
 }
 

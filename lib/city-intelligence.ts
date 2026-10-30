@@ -18,6 +18,10 @@ import {
 import { buildMarketPulse, type MarketPulse, type MarketPulseItem } from "@/lib/market-pulse";
 import { formatBrandDisplayName, extractBrand } from "@/lib/normalization";
 import { createProductSlug } from "@/lib/product-slug";
+import {
+  buildLandingFaqItems,
+  snapshotFromMarketIntelligence,
+} from "@/lib/seo/landing-content";
 import { getAbsoluteUrl } from "@/lib/site-url";
 import { isPublicDemoListing, isPublicDemoProductName } from "@/lib/public-data-cleanup";
 import { createSupabaseClient } from "@/lib/supabase";
@@ -30,6 +34,7 @@ import {
   type OpportunityAnalysis,
 } from "@/lib/opportunity-engine";
 import type { DuplicateBatchSummary } from "@/lib/product-matcher";
+import { toBigintIds } from "@/lib/supabase-ids";
 
 export type CityCatalogEntry = {
   slug: string;
@@ -466,11 +471,7 @@ function buildCityPageDataFromRecords({
   const brandDistribution = buildCityBrandDistribution(products, listings);
   const faqItems = buildCityFaqItems({
     cityName,
-    listingCount: marketIntelligence.marketSummary.totalListingCount,
-    productCount: products.length,
-    sourceCount: marketIntelligence.marketSummary.sourceCount,
     marketIntelligence,
-    opportunityAnalysis,
   });
   const jsonLd = buildCityJsonLd({
     cityName,
@@ -545,52 +546,15 @@ export function buildCityBrandDistribution(
     .slice(0, 8);
 }
 
+/** User-facing FAQ, answered from live market numbers (shared with every landing page). */
 export function buildCityFaqItems({
   cityName,
-  listingCount,
-  productCount,
-  sourceCount,
   marketIntelligence,
-  opportunityAnalysis,
 }: {
   cityName: string;
-  listingCount: number;
-  productCount: number;
-  sourceCount: number;
-  marketIntelligence: MarketIntelligence;
-  opportunityAnalysis: OpportunityAnalysis;
+  marketIntelligence: Pick<MarketIntelligence, "priceAnalysis" | "marketSummary">;
 }): CityFaqItem[] {
-  const listingText =
-    listingCount > 0
-      ? `${listingCount.toLocaleString("tr-TR")} ilan`
-      : "henüz yeterli ilan";
-  const sourceText =
-    sourceCount > 0
-      ? `${sourceCount.toLocaleString("tr-TR")} kaynak`
-      : "kaynak çeşitliliği oluşmadan";
-
-  return [
-    {
-      question: `${cityName} şehir sayfası nasıl hazırlanıyor?`,
-      answer: `2ElBul, ${cityName} ilanlarını ve bu ilanlara bağlı ürünleri tek yerde toplar. Market Intelligence, Opportunity Engine ve Product Matcher çıktıları birlikte kullanılarak ${cityName} ikinci el piyasa resmi çıkarılır.`,
-    },
-    {
-      question: `${cityName} ilanlarında en iyi fırsatlar nasıl seçiliyor?`,
-      answer: `Fırsat skoru, risk seviyesi, confidence ve duplicate yoğunluğu birlikte değerlendirilir. Bu sayfada ${cityName} için en güçlü sinyaller öne çıkarılır.`,
-    },
-    {
-      question: "Yetersiz veri ne zaman gösterilir?",
-      answer: `${cityName} için ${listingText} oluştuğunda ve yeterli karşılaştırma kurulamadığında güvenli fallback gösterilir; karar notu veri çoğaldıkça otomatik güçlenir.`,
-    },
-    {
-      question: "Kaynak sayısı neden önemli?",
-      answer: `${sourceText} analiz yapmak fiyat bandını daha güvenilir hale getirir. ${marketIntelligence.sampleSize.toLocaleString("tr-TR")} ilan üzerinden üretilen kararlar daha dengeli olur.`,
-    },
-    {
-      question: "Bu sayfa SEO için neden uygun?",
-      answer: `${cityName} sayfası şehir bazlı, kanonik ve tekrar üretilebilir bir analiz katmanı sunar. Bu yapı programmatic SEO için ölçeklenebilir bir temel oluşturur.`,
-    },
-  ];
+  return buildLandingFaqItems("city", cityName, snapshotFromMarketIntelligence(marketIntelligence));
 }
 
 export function buildCityJsonLd({
@@ -838,7 +802,7 @@ async function fetchCityProducts(
     const result = await supabase
       .from("products")
       .select(columns)
-      .in("id", productIds);
+      .in("id", toBigintIds(productIds));
 
     if (result.error) {
       if (includeCategory && isMissingProductCategoryColumn(result.error)) {

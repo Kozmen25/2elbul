@@ -60,14 +60,42 @@ export function checkRateLimit(
   };
 }
 
-/** Extract a client IP from request headers (works with Vercel, Cloudflare, nginx). */
+/**
+ * Number of reverse proxies in front of the app that append to
+ * X-Forwarded-For (Vercel's edge, or nginx on the VDS). Each one adds the
+ * address it received the request from, so the client is that many entries
+ * from the right; anything further left was written by the client and can be
+ * forged. Override with TRUSTED_PROXY_COUNT when the chain is longer.
+ */
+const DEFAULT_TRUSTED_PROXY_COUNT = 1;
+
+function getTrustedProxyCount(): number {
+  const configured = Number(process.env.TRUSTED_PROXY_COUNT);
+  return Number.isInteger(configured) && configured >= 1 ? configured : DEFAULT_TRUSTED_PROXY_COUNT;
+}
+
+const LOCAL_FALLBACK_IP = "127.0.0.1";
+
+/**
+ * Client IP for rate limiting. Uses the X-Forwarded-For entry added by our
+ * own proxy (counted from the right) so a client cannot reset its limit by
+ * sending a made-up X-Forwarded-For value.
+ */
 export function getClientIp(request: {
   headers: { get(name: string): string | null };
 }): string {
+  const forwarded = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (forwarded?.length) {
+    const index = Math.max(0, forwarded.length - getTrustedProxyCount());
+    return forwarded[index];
+  }
   return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request.headers.get("x-real-ip") ??
-    request.headers.get("cf-connecting-ip") ??
-    "127.0.0.1"
+    request.headers.get("x-real-ip")?.trim() ||
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    LOCAL_FALLBACK_IP
   );
 }

@@ -72,8 +72,8 @@ export function PriceHistoryChart({
             onClick={() => setRange(item.key)}
             className={`rounded-full border px-3 py-2 text-xs font-black transition ${
               range === item.key
-                ? "border-[#ff6b00] bg-[#ff6b00] text-white"
-                : "border-black/10 bg-white text-black/55 hover:border-[#ff6b00]/40"
+                ? "border-[#3B66E0] bg-[#3B66E0] text-white"
+                : "border-black/10 bg-white text-black/55 hover:border-[#3B66E0]/40"
             }`}
           >
             {item.label}
@@ -130,7 +130,7 @@ export function PriceHistoryChart({
               type="monotone"
               name="Ortalama"
               dataKey="average"
-              stroke="#ff6b00"
+              stroke="#3B66E0"
               strokeWidth={3}
               dot={false}
             />
@@ -187,7 +187,7 @@ function HistoryCard({
   return (
     <div
       className={`min-w-0 rounded-2xl border p-4 ${
-        accent ? "border-[#ff6b00]/20 bg-[#fff7f1]" : "border-black/8 bg-white"
+        accent ? "border-[#3B66E0]/20 bg-[#EEF3FF]" : "border-black/8 bg-white"
       }`}
     >
       <p className="text-[11px] font-black uppercase tracking-[0.07em] text-black/40">

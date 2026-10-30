@@ -2,22 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth/admin-auth";
 import { getPublicDemoListingReasons } from "@/lib/public-data-cleanup";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { isMissingColumnStrict } from "@/lib/listing-status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type ListingDeactivateRow = {
-  id: string | number;
-  product_id: string | number | null;
+  id: number;
+  product_id: number | null;
   title: string | null;
   source: string | null;
   url: string | null;
-  status?: string | null;
-  is_active?: boolean | null;
+  status: string | null;
 };
-
-type ListingColumnMode = "status" | "is_active" | "none";
 
 export async function POST(request: NextRequest) {
   const authResult = await verifyAdmin();
@@ -81,25 +77,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const mode = listingResult.mode;
-  if (mode === "none") {
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          "listings tablosunda pasife alma için status veya is_active kolonu bulunamadı.",
-        sql:
-          "alter table public.listings add column if not exists status text default 'published';",
-      },
-      { status: 409 },
-    );
-  }
-
-  const payload =
-    mode === "status" ? { status: "inactive" } : { is_active: false };
   const { error: updateError } = await supabase
     .from("listings")
-    .update(payload)
+    .update({ status: "inactive" })
     .eq("id", listingId);
 
   if (updateError) {
@@ -117,73 +97,29 @@ export async function POST(request: NextRequest) {
     ok: true,
     message: "İlan silinmeden pasife alındı.",
     listingId,
-    column: mode,
+    column: "status",
     reasons,
   });
 }
 
 async function fetchListingCandidate(
   supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
-  listingId: string,
-): Promise<{
-  listing: ListingDeactivateRow | null;
-  mode: ListingColumnMode;
-  error: unknown;
-}> {
-  const statusSelect = await supabase
+  listingId: number,
+): Promise<{ listing: ListingDeactivateRow | null; error: unknown }> {
+  const { data, error } = await supabase
     .from("listings")
     .select("id, product_id, title, source, url, status")
     .eq("id", listingId)
     .maybeSingle();
 
-  if (!statusSelect.error) {
-    return {
-      listing: statusSelect.data as ListingDeactivateRow | null,
-      mode: "status",
-      error: null,
-    };
-  }
-
-  if (!isMissingColumnStrict(statusSelect.error, "status")) {
-    return { listing: null, mode: "none", error: statusSelect.error };
-  }
-
-  const activeSelect = await supabase
-    .from("listings")
-    .select("id, product_id, title, source, url, is_active")
-    .eq("id", listingId)
-    .maybeSingle();
-
-  if (!activeSelect.error) {
-    return {
-      listing: activeSelect.data as ListingDeactivateRow | null,
-      mode: "is_active",
-      error: null,
-    };
-  }
-
-  if (!isMissingColumnStrict(activeSelect.error, "is_active")) {
-    return { listing: null, mode: "none", error: activeSelect.error };
-  }
-
-  const baseSelect = await supabase
-    .from("listings")
-    .select("id, product_id, title, source, url")
-    .eq("id", listingId)
-    .maybeSingle();
-
-  return {
-    listing: (baseSelect.data as ListingDeactivateRow | null) ?? null,
-    mode: "none",
-    error: baseSelect.error,
-  };
+  return { listing: data, error };
 }
 
 async function fetchProductName(
   supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
-  productId: string | number | null,
+  productId: number | null,
 ) {
-  if (productId === null || productId === undefined) return "";
+  if (productId === null) return "";
   const { data, error } = await supabase
     .from("products")
     .select("name")
@@ -198,9 +134,8 @@ async function fetchProductName(
   return typeof data?.name === "string" ? data.name : "";
 }
 
-function normalizeListingId(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  return /^[0-9a-fA-F-]+$/.test(trimmed) ? trimmed : "";
+// listings.id is a bigint; anything else is rejected with 400.
+function normalizeListingId(value: unknown): number | null {
+  const id = typeof value === "string" ? Number(value.trim()) : value;
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : null;
 }
